@@ -1,0 +1,21 @@
+<svg 
+  xmlns="http://www.w3.org/2000/svg" 
+  viewBox="0 0 24 24" 
+  width="24" 
+  height="24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <!-- Cloud with upward arrow -->
+  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+  <!-- Upload arrow with motion lines -->
+  <path d="M12 14v-6" stroke-width="2" />
+  <path d="M9 11l3-3 3 3" stroke-width="2" />
+  <!-- Motion lines -->
+  <path d="M10 16h4" stroke-width="1" opacity="0.5" />
+  <path d="M11 18h2" stroke-width="1" opacity="0.3" />
+</svg>

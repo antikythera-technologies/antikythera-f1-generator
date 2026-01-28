@@ -1,0 +1,23 @@
+<svg 
+  xmlns="http://www.w3.org/2000/svg" 
+  viewBox="0 0 24 24" 
+  width="24" 
+  height="24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <!-- Video camera with tech accents -->
+  <rect x="2" y="6" width="13" height="12" rx="2" />
+  <!-- Camera lens -->
+  <path d="M22 8l-5 3v2l5 3V8z" />
+  <!-- Tech accent - recording indicator -->
+  <circle cx="6" cy="10" r="1.5" fill="currentColor" />
+  <!-- Circuit lines on camera body -->
+  <path d="M10 9h3" stroke-width="1" />
+  <path d="M10 12h3" stroke-width="1" />
+  <path d="M10 15h3" stroke-width="1" />
+</svg>

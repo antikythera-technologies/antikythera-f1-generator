@@ -1,0 +1,28 @@
+<svg 
+  xmlns="http://www.w3.org/2000/svg" 
+  viewBox="0 0 24 24" 
+  width="24" 
+  height="24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <!-- Gear with circuit traces -->
+  <circle cx="12" cy="12" r="3" />
+  <path d="M12 2v2" />
+  <path d="M12 20v2" />
+  <path d="M4.93 4.93l1.41 1.41" />
+  <path d="M17.66 17.66l1.41 1.41" />
+  <path d="M2 12h2" />
+  <path d="M20 12h2" />
+  <path d="M4.93 19.07l1.41-1.41" />
+  <path d="M17.66 6.34l1.41-1.41" />
+  <!-- Circuit trace accents -->
+  <path d="M12 6V5" stroke-width="2" />
+  <path d="M12 19v-1" stroke-width="2" />
+  <path d="M6 12H5" stroke-width="2" />
+  <path d="M19 12h-1" stroke-width="2" />
+</svg>

@@ -1,0 +1,20 @@
+<svg 
+  xmlns="http://www.w3.org/2000/svg" 
+  viewBox="0 0 24 24" 
+  width="24" 
+  height="24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <!-- Waveform with racing pulse -->
+  <rect x="2" y="4" width="20" height="16" rx="2" />
+  <!-- Racing pulse waveform -->
+  <path d="M5 12h2l1-4 2 8 2-6 2 4 1-2h2l1 3 1-3h1" stroke-width="2" />
+  <!-- Sound indicators -->
+  <circle cx="5" cy="12" r="0.5" fill="currentColor" />
+  <circle cx="19" cy="12" r="0.5" fill="currentColor" />
+</svg>

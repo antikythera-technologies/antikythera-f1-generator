@@ -129,7 +129,6 @@ dist
 
 # Gatsby
 .cache/
-public
 
 # Vercel
 .vercel

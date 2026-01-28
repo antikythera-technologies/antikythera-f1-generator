@@ -1,0 +1,29 @@
+<svg 
+  xmlns="http://www.w3.org/2000/svg" 
+  viewBox="0 0 24 24" 
+  width="24" 
+  height="24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <!-- Winner's podium -->
+  <!-- First place (center, tallest) -->
+  <rect x="8" y="8" width="8" height="13" rx="1" />
+  <text x="12" y="14" text-anchor="middle" font-size="6" fill="currentColor" font-weight="bold">1</text>
+  
+  <!-- Second place (left) -->
+  <rect x="2" y="12" width="6" height="9" rx="1" />
+  <text x="5" y="17" text-anchor="middle" font-size="5" fill="currentColor" font-weight="bold">2</text>
+  
+  <!-- Third place (right) -->
+  <rect x="16" y="14" width="6" height="7" rx="1" />
+  <text x="19" y="18" text-anchor="middle" font-size="5" fill="currentColor" font-weight="bold">3</text>
+  
+  <!-- Trophy/crown on 1st -->
+  <path d="M10 6l2-3 2 3" stroke-width="2" />
+  <circle cx="12" cy="3" r="1" fill="currentColor" />
+</svg>
