@@ -32,6 +32,29 @@ services:
       timeout: 10s
       retries: 3
 
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: f1-generator-dashboard
+    restart: unless-stopped
+    ports:
+      - "3001:3000"  # Different port from Grafana (3000)
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://f1.antikythera.co.za/api/v1
+      - NEXT_PUBLIC_MINIO_URL=https://minio.antikythera.co.za
+    networks:
+      - f1-network
+      - n8n-docker-caddy_default
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   redis:
     image: redis:7-alpine
     container_name: f1-generator-redis
