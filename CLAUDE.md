@@ -5,15 +5,32 @@
 Automated video generation system for satirical F1 commentary videos.
 
 **PRD Location:** `/home/wkoch/clawd/projects/antikythera-f1/PRD.md`
+**Skill:** `/home/wkoch/clawd/skills/antikythera-f1/SKILL.md`
+
+## Infrastructure
+
+| Component | Value |
+|-----------|-------|
+| **Domain** | f1.antikythera.co.za |
+| **VPS** | 209.38.111.59 (antikythera-n8n) |
+| **Database** | postgres.antikythera.co.za / antikythera-f1-generator |
+| **MinIO** | minio.antikythera.co.za:9000 |
+| **Ports** | Backend: 8001, Dashboard: 3001 |
+
+### MinIO Buckets
+- `f1-characters` - 3D character images
+- `f1-scene-images` - Generated scene images
+- `f1-video-clips` - 5-second Ovi clips
+- `f1-final-videos` - Stitched final videos
 
 ## Tech Stack
 
 ### Backend
 - **Framework:** FastAPI
-- **Database:** PostgreSQL (postgres.antikythera.co.za / AntikytheraF1Series)
+- **Database:** PostgreSQL (antikythera-f1-generator)
 - **ORM:** SQLAlchemy 2.0 with async support
 - **Storage:** MinIO (minio.antikythera.co.za:9000)
-- **Task Queue:** Redis (optional, for job queueing)
+- **Task Queue:** Redis
 
 ### Frontend (Dashboard)
 - **Framework:** Next.js 16
@@ -25,22 +42,41 @@ Automated video generation system for satirical F1 commentary videos.
 - **Ovi (Gradio):** Image-to-video generation
 - **YouTube Data API v3:** Video upload
 
-## Key Commands
+## Slash Commands
+
+```bash
+# Install dependencies
+./scripts/install.sh
+
+# Start development
+./scripts/startup.sh           # All services with docker-compose
+./scripts/startup.sh backend   # Backend only
+./scripts/startup.sh dashboard # Dashboard only
+
+# Prime/seed database
+./scripts/prime.sh             # Run migrations + seed data
+./scripts/prime.sh --reset     # Drop and recreate everything
+
+# Deploy to production
+./scripts/deploy.sh
+```
+
+## Development Commands
 
 ```bash
 # Backend
 cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-
-# Run tests
-pytest
+uv sync  # or pip install -r requirements.txt
+uv run uvicorn app.main:app --reload
 
 # Database migrations
-alembic upgrade head
-alembic revision --autogenerate -m "description"
+uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "description"
 
-# Docker
+# Run tests
+uv run pytest --cov=app
+
+# Docker (local dev)
 docker-compose up -d
 docker-compose logs -f backend
 ```
