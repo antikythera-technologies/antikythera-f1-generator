@@ -34,7 +34,12 @@ class VideoGenerator:
         """Lazy initialization of Gradio client."""
         if self._client is None:
             logger.info(f"Connecting to Ovi space: {self.space}")
-            self._client = Client(self.space)
+            # Use HuggingFace token if available for authenticated access
+            hf_token = getattr(settings, 'HUGGINGFACE_TOKEN', None)
+            if hf_token:
+                self._client = Client(self.space, hf_token=hf_token)
+            else:
+                self._client = Client(self.space)
         return self._client
 
     async def generate_clip(
@@ -68,11 +73,12 @@ class VideoGenerator:
         start_time = time.time()
 
         try:
-            # Call Ovi API
+            # Call Ovi API (alexnasa/Ovi-ZEROGPU endpoint)
             video_path = self.client.predict(
                 image=image_path,
-                prompt=prompt,
-                api_name="/predict",
+                text_prompt=prompt,
+                sample_steps=30,  # Higher = better quality, slower
+                api_name="/generate_scene",
             )
 
             elapsed_ms = int((time.time() - start_time) * 1000)

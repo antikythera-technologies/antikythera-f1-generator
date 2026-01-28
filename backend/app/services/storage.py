@@ -162,6 +162,43 @@ class StorageService:
             content_type,
         )
 
+    async def download_character_image(self, storage_path: str) -> str:
+        """
+        Download a character reference image to local temp.
+        
+        Args:
+            storage_path: Full path like "f1-characters/max_verstappen.png" or just object name
+            
+        Returns:
+            Local file path to downloaded image
+        """
+        import tempfile
+        from pathlib import Path
+        
+        # Parse bucket and object name from path
+        if "/" in storage_path:
+            parts = storage_path.split("/", 1)
+            if parts[0] == settings.MINIO_BUCKET_CHARACTERS:
+                object_name = parts[1]
+            else:
+                object_name = storage_path
+        else:
+            object_name = storage_path
+        
+        # Create temp file with correct extension
+        ext = Path(object_name).suffix or ".png"
+        temp_dir = Path(tempfile.gettempdir()) / "f1-characters"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        local_path = str(temp_dir / f"{Path(object_name).stem}{ext}")
+        
+        await self.download_file(
+            settings.MINIO_BUCKET_CHARACTERS,
+            object_name,
+            local_path,
+        )
+        
+        return local_path
+
     async def upload_scene_image(
         self,
         race_id: int,

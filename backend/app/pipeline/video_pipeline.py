@@ -18,6 +18,7 @@ from app.models.logs import APIProvider, APIUsage, GenerationLog, LogComponent, 
 from app.models.race import Race
 from app.models.scene import Scene, SceneStatus
 from app.services.script_generator import ScriptGenerator
+from app.services.image_generator import ImageGenerator
 from app.services.video_generator import VideoGenerator
 from app.services.stitcher import VideoStitcher
 from app.services.youtube_uploader import YouTubeUploader
@@ -35,6 +36,7 @@ class VideoPipeline:
 
         # Services
         self.script_generator = ScriptGenerator()
+        self.image_generator = ImageGenerator()
         self.video_generator = VideoGenerator()
         self.stitcher = VideoStitcher()
         self.uploader = YouTubeUploader()
@@ -216,8 +218,8 @@ Season: {self.race.season} Round {self.race.round_number}
                 scene.generation_started_at = datetime.utcnow()
                 await db.flush()
 
-                # Get character image
-                source_image = await self._get_scene_image(scene)
+                # Generate scene image with Nano Banana Pro (character consistent)
+                source_image = await self._get_scene_image(db, scene)
 
                 # Generate video clip
                 clip = await self.video_generator.generate_clip(
@@ -261,15 +263,63 @@ Season: {self.race.season} Round {self.race.round_number}
                         f"Failed after {self.MAX_SCENE_RETRIES} retries",
                     )
 
-    async def _get_scene_image(self, scene: Scene) -> str:
-        """Get or generate source image for a scene."""
-        # For now, use character's primary image
-        # TODO: Implement image selection/generation logic
+    async def _get_scene_image(self, db: AsyncSession, scene: Scene) -> str:
+        """
+        Generate scene image using Nano Banana Pro with character consistency.
+        
+        Character consistency is maintained through:
+        1. Detailed visual style guides baked into prompts
+        2. Character-specific appearance templates
+        3. Reference images (if available) for edit mode
+        """
+        # Get character info
+        character_name = "generic_commentator"
+        reference_image_path = None
+        
         if scene.character_id:
             stmt = select(Character).where(Character.id == scene.character_id)
-            # This is placeholder - would need to download from MinIO
-            return "/tmp/placeholder.png"
-        return "/tmp/placeholder.png"
+            result = await db.execute(stmt)
+            character = result.scalar_one_or_none()
+            
+            if character:
+                character_name = character.name
+                
+                # Check for reference image in MinIO
+                if character.primary_image_path:
+                    try:
+                        reference_image_path = await self.storage.download_character_image(
+                            character.primary_image_path
+                        )
+                        self.logger.debug(f"Using reference image: {reference_image_path}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not load reference image: {e}")
+        
+        # Generate scene image with Nano Banana Pro
+        generated = await self.image_generator.generate_scene_image(
+            scene_number=scene.scene_number,
+            episode_id=self.episode_id,
+            character_name=character_name,
+            action_description=scene.action_description or "Character speaking to camera",
+            reference_image_path=reference_image_path,
+            resolution=settings.GEMINI_IMAGE_RESOLUTION,
+        )
+        
+        # Upload generated image to MinIO for archival
+        image_storage_path = await self.storage.upload_scene_image(
+            race_id=self.race.id if self.race else 0,
+            episode_id=self.episode_id,
+            scene_number=scene.scene_number,
+            file_path=generated.image_path,
+        )
+        
+        # Update scene record with image path
+        scene.source_image_path = image_storage_path
+        
+        self.logger.info(
+            f"Scene {scene.scene_number}: Generated image in {generated.generation_time_ms}ms"
+        )
+        
+        return generated.image_path
 
     async def _stitch_video(self, db: AsyncSession) -> str:
         """Stitch all scene clips into final video."""

@@ -61,9 +61,15 @@ class Settings(BaseSettings):
     HAIKU_INPUT_COST_PER_1K: float = 0.00025
     HAIKU_OUTPUT_COST_PER_1K: float = 0.00125
 
+    # Gemini / Nano Banana Pro (Image Generation)
+    GEMINI_API_KEY: str = ""
+    GEMINI_IMAGE_MODEL: str = "gemini-3-pro-image-preview"
+    GEMINI_IMAGE_RESOLUTION: str = "1K"  # 1K, 2K, or 4K
+
     # Ovi (HuggingFace Gradio)
-    OVI_SPACE: str = "akhaliq/Ovi"
+    OVI_SPACE: str = "alexnasa/Ovi-ZEROGPU"  # Working space with API params
     OVI_TIMEOUT_SECONDS: int = 300
+    HUGGINGFACE_TOKEN: str = ""  # HF token for private spaces
 
     # YouTube API
     YOUTUBE_CLIENT_ID: str = ""
