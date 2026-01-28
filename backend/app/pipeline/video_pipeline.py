@@ -37,7 +37,7 @@ class VideoPipeline:
         # Services
         self.script_generator = ScriptGenerator()
         self.image_generator = ImageGenerator()
-        self.video_generator = VideoGenerator()
+        self.video_generator = VideoGenerator(quality=settings.OVI_QUALITY)
         self.stitcher = VideoStitcher()
         self.uploader = YouTubeUploader()
         self.storage = StorageService()

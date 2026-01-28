@@ -1,5 +1,6 @@
 """Video generation service using Ovi (HuggingFace Gradio)."""
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -24,9 +25,18 @@ class VideoClip:
 class VideoGenerator:
     """Service for generating video clips using Ovi."""
 
-    def __init__(self):
+    # Quality presets (sample_steps: higher = better quality, slower)
+    QUALITY_PRESETS = {
+        "draft": 15,      # Fast preview
+        "standard": 30,   # Good balance
+        "high": 50,       # High quality
+        "ultra": 75,      # Maximum quality (slow)
+    }
+
+    def __init__(self, quality: str = "standard"):
         self.space = settings.OVI_SPACE
         self.timeout = settings.OVI_TIMEOUT_SECONDS
+        self.sample_steps = self.QUALITY_PRESETS.get(quality, 30)
         self._client: Optional[Client] = None
 
     @property
@@ -36,11 +46,24 @@ class VideoGenerator:
             logger.info(f"Connecting to Ovi space: {self.space}")
             # Use HuggingFace token if available for authenticated access
             hf_token = getattr(settings, 'HUGGINGFACE_TOKEN', None)
-            if hf_token:
+            if hf_token and hf_token.strip():
                 self._client = Client(self.space, hf_token=hf_token)
             else:
                 self._client = Client(self.space)
         return self._client
+
+    def _generate_clip_sync(
+        self,
+        image_path: str,
+        prompt: str,
+    ) -> str:
+        """Synchronous video generation (called from executor)."""
+        return self.client.predict(
+            image=image_path,
+            text_prompt=prompt,
+            sample_steps=self.sample_steps,
+            api_name="/generate_scene",
+        )
 
     async def generate_clip(
         self,
@@ -63,7 +86,7 @@ class VideoGenerator:
         Returns:
             VideoClip with path to generated video
         """
-        logger.info(f"Scene {scene_number}: Starting video generation")
+        logger.info(f"Scene {scene_number}: Starting video generation (steps={self.sample_steps})")
         logger.debug(f"Scene {scene_number}: Image: {image_path}")
 
         # Build prompt with Ovi special tokens
@@ -73,12 +96,12 @@ class VideoGenerator:
         start_time = time.time()
 
         try:
-            # Call Ovi API (alexnasa/Ovi-ZEROGPU endpoint)
-            video_path = self.client.predict(
-                image=image_path,
-                text_prompt=prompt,
-                sample_steps=30,  # Higher = better quality, slower
-                api_name="/generate_scene",
+            # Run sync Gradio call in executor to avoid blocking
+            video_path = await asyncio.get_event_loop().run_in_executor(
+                None,
+                self._generate_clip_sync,
+                image_path,
+                prompt,
             )
 
             elapsed_ms = int((time.time() - start_time) * 1000)

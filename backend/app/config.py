@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     # Ovi (HuggingFace Gradio)
     OVI_SPACE: str = "alexnasa/Ovi-ZEROGPU"  # Working space with API params
     OVI_TIMEOUT_SECONDS: int = 300
+    OVI_QUALITY: str = "standard"  # draft, standard, high, ultra
     HUGGINGFACE_TOKEN: str = ""  # HF token for private spaces
 
     # YouTube API
