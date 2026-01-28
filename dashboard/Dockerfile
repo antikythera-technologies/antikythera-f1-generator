@@ -13,7 +13,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Production environment variables (baked at build time for NEXT_PUBLIC_*)
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_API_URL=https://f1.antikythera.co.za/api/v1
+ENV NEXT_PUBLIC_MINIO_URL=https://minio.antikythera.co.za
 
 RUN npm run build
 
