@@ -1,24 +1,7 @@
 # Caddy configuration snippet for Antikythera F1 Generator
-# Add this to /opt/caddy/Caddyfile on the VPS
+# Add this to /root/n8n-docker-caddy/caddy_config/Caddyfile on the VPS
 
 f1.antikythera.co.za {
-    # Dashboard (Next.js)
-    handle {
-        reverse_proxy f1-generator-dashboard:3000
-    }
-    
-    # API routes
-    handle /api/* {
-        reverse_proxy f1-generator-backend:8000
-    }
-    
-    # Health check
-    handle /health {
-        reverse_proxy f1-generator-backend:8000
-    }
-    
-    # WebSocket support for hot reload (dev only)
-    handle /_next/webpack-hmr {
-        reverse_proxy f1-generator-dashboard:3000
-    }
+    # API routes (backend only for now)
+    reverse_proxy f1-generator-backend:8000
 }

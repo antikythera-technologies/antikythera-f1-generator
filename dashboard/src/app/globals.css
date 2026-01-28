@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --deep-space: #0a1628;
+    --midnight: #0f1f3a;
+    --twilight: #162a4a;
+    --racing-red: #e31937;
+    --neon-cyan: #00f0d4;
+    --electric-blue: #0066ff;
+    --cyber-purple: #9933ff;
+    --warning-orange: #ff6b00;
+    --success-green: #00ff88;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 240, 212, 0.3) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 240, 212, 0.3);
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 240, 212, 0.5);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--deep-space);
+    color: white;
+  }
+}
+
+@theme {
+  /* Cyberpunk F1 Theme Colors */
+  --color-deep-space: #0a1628;
+  --color-midnight: #0f1f3a;
+  --color-twilight: #162a4a;
+  --color-racing-red: #e31937;
+  --color-neon-cyan: #00f0d4;
+  --color-electric-blue: #0066ff;
+  --color-cyber-purple: #9933ff;
+  --color-warning-orange: #ff6b00;
+  --color-success-green: #00ff88;
+
+  /* Fonts */
+  --font-family-display: var(--font-display), system-ui, sans-serif;
+  --font-family-mono: var(--font-mono), monospace;
+
+  /* Shadows */
+  --shadow-glow-cyan: 0 0 20px rgba(0, 240, 212, 0.3);
+  --shadow-glow-red: 0 0 20px rgba(227, 25, 55, 0.3);
+  --shadow-glow-blue: 0 0 20px rgba(0, 102, 255, 0.3);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+  /* Custom animations */
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-glow: glow 2s ease-in-out infinite alternate;
+  --animate-scan: scan 2s linear infinite;
+}
+
+@keyframes glow {
+  0% { box-shadow: 0 0 5px rgba(0, 240, 212, 0.2); }
+  100% { box-shadow: 0 0 20px rgba(0, 240, 212, 0.4); }
+}
+
+@keyframes scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@layer components {
+  .glass {
+    background-color: rgba(15, 31, 58, 0.5);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px currentColor;
+  }
+
+  .glow-border {
+    box-shadow: 0 0 10px currentColor, inset 0 0 10px rgba(255, 255, 255, 0.05);
+  }
+
+  .racing-stripe {
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 10px,
+      rgba(227, 25, 55, 0.1) 10px,
+      rgba(227, 25, 55, 0.1) 20px
+    );
+  }
+}
+
+@layer utilities {
+  .text-gradient-cyan {
+    background: linear-gradient(to right, var(--color-neon-cyan), var(--color-electric-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-red {
+    background: linear-gradient(to right, var(--color-racing-red), var(--color-warning-orange));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .bg-cyber-gradient {
+    background: linear-gradient(135deg, #0a1628 0%, #162a4a 50%, #0a1628 100%);
+  }
+}
+
+/* Selection styling */
+::selection {
+  background-color: rgba(0, 240, 212, 0.3);
+  color: white;
+}
+
+/* Focus styling */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 240, 212, 0.5), 0 0 0 4px var(--deep-space);
+}
