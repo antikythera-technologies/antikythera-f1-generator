@@ -172,7 +172,7 @@ export default function SchedulerPage() {
                           </span>
                           <StatusBadge status={job.status} color={statusColors[job.status]} />
                           {job.is_sprint_weekend && (
-                            <span className="rounded bg-warning-yellow/20 px-2 py-0.5 text-xs text-warning-yellow">
+                            <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400">
                               Sprint Weekend
                             </span>
                           )}
