@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
+from app.database import get_db
 from app.models import NewsSource, NewsArticle, ArticleContext
 from app.models.scheduler import JobTriggerType
 from app.services import NewsScraperService
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/news", tags=["News"])
 @router.get("/sources", response_model=List[NewsSourceResponse])
 async def list_sources(
     active_only: bool = Query(default=True),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """List all news sources."""
     query = select(NewsSource).order_by(desc(NewsSource.priority))
@@ -43,7 +43,7 @@ async def list_sources(
 @router.post("/sources", response_model=NewsSourceResponse)
 async def create_source(
     source_data: NewsSourceCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Add a new news source."""
     source = NewsSource(**source_data.model_dump())
@@ -58,7 +58,7 @@ async def update_source(
     source_id: int,
     is_active: Optional[bool] = None,
     priority: Optional[int] = None,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Update a news source."""
     result = await session.execute(
@@ -82,7 +82,7 @@ async def update_source(
 @router.delete("/sources/{source_id}")
 async def delete_source(
     source_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Delete a news source."""
     result = await session.execute(
@@ -108,7 +108,7 @@ async def list_articles(
     source_id: Optional[int] = None,
     used: Optional[bool] = None,
     limit: int = Query(default=50, le=200),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """List news articles with filters."""
     query = select(NewsArticle).order_by(desc(NewsArticle.scraped_at))
@@ -131,7 +131,7 @@ async def list_articles(
 @router.get("/articles/{article_id}", response_model=NewsArticleWithSource)
 async def get_article(
     article_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get a specific article with source details."""
     result = await session.execute(
@@ -152,7 +152,7 @@ async def get_article(
 @router.post("/articles/{article_id}/fetch-content")
 async def fetch_article_content(
     article_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Fetch full content for an article."""
     result = await session.execute(
@@ -181,7 +181,7 @@ async def fetch_article_content(
 @router.post("/scrape", response_model=ScrapeResponse)
 async def scrape_news(
     request: ScrapeRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """
     Trigger a news scrape with specific context.
@@ -242,7 +242,7 @@ async def get_articles_for_episode(
     trigger_type: JobTriggerType,
     race_id: Optional[int] = None,
     limit: int = Query(default=10, le=50),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get relevant articles for generating a specific episode type."""
     scraper = NewsScraperService(session)

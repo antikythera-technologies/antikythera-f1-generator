@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
+from app.database import get_db
 from app.models import ScheduledJob, JobStatus
 from app.services import SchedulerService
 from app.schemas.scheduler import (
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/scheduler", tags=["Scheduler"])
 @router.post("/sync", response_model=CalendarSyncResponse)
 async def sync_calendar(
     season: int = Query(default=None, description="Season year (defaults to current)"),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """
     Sync F1 calendar and create/update scheduled jobs.
@@ -44,7 +44,7 @@ async def sync_calendar(
 async def list_jobs(
     status: Optional[JobStatus] = Query(default=None),
     limit: int = Query(default=50, le=100),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """List scheduled jobs with optional status filter."""
     from sqlalchemy import select, desc
@@ -61,7 +61,7 @@ async def list_jobs(
 @router.get("/jobs/upcoming", response_model=UpcomingJobsResponse)
 async def get_upcoming_jobs(
     days: int = Query(default=7, le=30),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get jobs scheduled for the next N days."""
     service = SchedulerService(session)
@@ -83,7 +83,7 @@ async def get_upcoming_jobs(
 @router.get("/jobs/pending", response_model=List[ScheduledJobResponse])
 async def get_pending_jobs(
     limit: int = Query(default=10, le=50),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get jobs that are ready to run (scheduled time has passed)."""
     service = SchedulerService(session)
@@ -94,7 +94,7 @@ async def get_pending_jobs(
 @router.get("/jobs/{job_id}", response_model=ScheduledJobWithRace)
 async def get_job(
     job_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get a specific scheduled job."""
     from sqlalchemy import select
@@ -119,7 +119,7 @@ async def get_job(
 @router.post("/jobs", response_model=ScheduledJobResponse)
 async def create_job(
     job_data: ScheduledJobCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Manually create a scheduled job."""
     job = ScheduledJob(**job_data.model_dump())
@@ -133,7 +133,7 @@ async def create_job(
 async def update_job(
     job_id: int,
     job_update: ScheduledJobUpdate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Update a scheduled job."""
     from sqlalchemy import select
@@ -158,7 +158,7 @@ async def update_job(
 @router.post("/jobs/{job_id}/cancel", response_model=ScheduledJobResponse)
 async def cancel_job(
     job_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Cancel a scheduled job."""
     service = SchedulerService(session)
@@ -181,7 +181,7 @@ async def cancel_job(
 @router.post("/jobs/{job_id}/run")
 async def trigger_job(
     job_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """
     Manually trigger a scheduled job to run now.
