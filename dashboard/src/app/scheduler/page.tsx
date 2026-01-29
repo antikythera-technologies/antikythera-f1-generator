@@ -262,7 +262,7 @@ export default function SchedulerPage() {
                     {formatDateTime(job.scheduled_for)}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={job.status} color={statusColors[job.status]} />
+                    <StatusBadge status={job.status} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
