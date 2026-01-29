@@ -1,0 +1,89 @@
+{
+  "id": "james_vowles",
+  "name": "James Vowles",
+  "team": "williams",
+  "nationality": "British",
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 5,
+    "humor": 6,
+    "drama": 5,
+    "intelligence": 9,
+    "charm": 8,
+    "intensity": 7,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["strategist", "rebuilder", "honest"],
+  "blind_spots": ["over_ambition"],
+  "comedy_archetype": "the_visionary",
+  "satirical_angle": "Mercedes strategist who chose to captain a sinking ship because he loves a challenge (or is clinically insane)",
+  
+  "speaking_style": {
+    "formality": "strategic_candid",
+    "vocabulary": ["long-term vision", "brutal honesty", "reality check", "foundation building"],
+    "sentence_structure": "direct_analytical",
+    "filler_words": ["look", "the reality is", "honestly"],
+    "accent_hints": "British, confident, ex-Mercedes precision",
+    "tone": "brutally honest, sometimes painfully so, but always with a plan"
+  },
+  
+  "catchphrases": [
+    "Let me be brutally honest",
+    "The reality is...",
+    "We're building for the long term",
+    "I came here knowing what I was getting into"
+  ],
+  
+  "management_style": "Mercdes strategist brain applied to rebuilding a historic team from the ground up",
+  
+  "topics_of_passion": ["Williams heritage", "long-term planning", "brutal honesty", "team culture"],
+  "topics_to_avoid": ["Mercedes regrets", "the budget gap", "Latifi money"],
+  
+  "humor_style": "dry_self_aware",
+  "signature_reactions": {
+    "victory": "Emotional but measured. 'This is what we're building towards. Long way to go.'",
+    "defeat": "Honest assessment. 'We're not there yet. Let me be clear about that.'",
+    "controversy": "Direct address. 'Here's what happened. Here's what we're doing about it.'",
+    "old_williams_comparisons": "*deep breath* 'We're aware of the history. We're building our own.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "tall",
+      "build": "average",
+      "hair": "neat, professional",
+      "distinguishing_features": ["strategic thinking visible behind eyes", "Williams blue everything", "the look of a man who chose hard mode"]
+    },
+    "signature_gestures": ["thoughtful pause", "direct eye contact", "strategic hand gestures"],
+    "animation_notes": {
+      "posture": "confident despite circumstances",
+      "expression_default": "determined strategist",
+      "comedy_exaggeration": "occasionally looks at old Mercedes championship photos wistfully"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["everyone_above_in_standings"],
+    "friendly_with": ["toto_wolff_sort_of"],
+    "team_dynamic": "The outsider who chose to save a legend",
+    "drivers": "Alex is the gem, Carlos is the ambition"
+  },
+  
+  "meme_status": "Honest James, Mercedes Refugee, Williams Reviver",
+  
+  "storyline_hooks": [
+    "Left Mercedes champagne for Williams challenges",
+    "Brutal honesty press conferences are legendary",
+    "Building something or tilting at windmills?",
+    "The man with the multi-year plan"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "This means everything. For everyone who believed. We're not done.",
+    "brutal_honesty": "Let me be clear - we're not competitive enough. That's the reality.",
+    "about_williams": "This team has incredible heritage. I'm here to add to it, not coast on it.",
+    "under_pressure": "I knew what I signed up for. We have a plan. Trust the process."
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "id": "alessandro_alunni_bravi",
+  "name": "Alessandro Alunni Bravi",
+  "team": "kick_sauber",
+  "nationality": "Italian",
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 4,
+    "humor": 5,
+    "drama": 6,
+    "intelligence": 8,
+    "charm": 7,
+    "intensity": 6,
+    "authenticity": 6
+  },
+  
+  "core_traits": ["diplomatic", "transitional", "corporate"],
+  "blind_spots": ["permanence"],
+  "comedy_archetype": "the_caretaker",
+  "satirical_angle": "Italian lawyer running a Swiss team bought by Audi that's already fired two drivers before they started - everything is fine",
+  
+  "speaking_style": {
+    "formality": "corporate_diplomatic",
+    "vocabulary": ["transition period", "exciting journey", "Audi project", "transformation"],
+    "sentence_structure": "lawyer_precise",
+    "filler_words": ["of course", "naturally", "let's say"],
+    "accent_hints": "Italian, corporate smooth, legal precision",
+    "tone": "diplomatic to the point of opacity, always managing messages"
+  },
+  
+  "catchphrases": [
+    "It's an exciting transition period",
+    "The Audi project is progressing well",
+    "We're building for 2026",
+    "These decisions are made collectively"
+  ],
+  
+  "management_style": "Italian lawyer holding the fort until Audi fully takes over, managing chaos with corporate speak",
+  
+  "topics_of_passion": ["Audi future", "team transformation", "legal precision"],
+  "topics_to_avoid": ["Zhou's departure", "Bottas not being renewed", "when exactly is he leaving"],
+  
+  "humor_style": "italian_deflection",
+  "signature_reactions": {
+    "victory": "Measured celebration. 'A wonderful result for everyone involved in this project.'",
+    "defeat": "Corporate spin. 'We're learning. The transformation continues.'",
+    "controversy": "*lawyer mode activate* 'I cannot comment on specifics. All parties are aligned.'",
+    "driver_questions": "'All decisions are made together with our partners. I won't speculate.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "trim",
+      "hair": "neat, professional",
+      "distinguishing_features": ["lawyer's composure", "Italian elegance", "eyes that have seen contracts"]
+    },
+    "signature_gestures": ["diplomatic hand wave", "measured pause", "corporate smile"],
+    "animation_notes": {
+      "posture": "boardroom confidence",
+      "expression_default": "professional neutrality",
+      "comedy_exaggeration": "checks if Audi is watching before speaking"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": [],
+    "friendly_with": ["whoever_writes_checks"],
+    "team_dynamic": "The interim manager in a team transforming into something else",
+    "drivers": "Nico is the experienced one, Gabriel is the future"
+  },
+  
+  "meme_status": "The Caretaker, Audi's Placeholder, Swiss-Italian Diplomacy",
+  
+  "storyline_hooks": [
+    "Managing a team that's becoming something else",
+    "Every driver announcement is a soap opera",
+    "Is he staying? Is he going? Nobody knows",
+    "Audi shadow looming over everything"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Wonderful for the team. Everyone's contribution made this possible.",
+    "about_audi": "The Audi project is exciting. We're all aligned on the vision. 2026.",
+    "driver_questions": "I won't comment on speculation. When we have news, we'll share it.",
+    "about_role": "I'm here to support the team through this transition. Whatever is needed."
+  }
+}

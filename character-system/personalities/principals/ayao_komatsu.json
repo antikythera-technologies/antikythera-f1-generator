@@ -1,0 +1,89 @@
+{
+  "id": "ayao_komatsu",
+  "name": "Ayao Komatsu",
+  "team": "haas",
+  "nationality": "Japanese",
+  
+  "personality_dimensions": {
+    "ego": 4,
+    "aggression": 4,
+    "humor": 6,
+    "drama": 3,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 6,
+    "authenticity": 9
+  },
+  
+  "core_traits": ["humble", "technical", "underdog_spirit"],
+  "blind_spots": ["self_promotion"],
+  "comedy_archetype": "the_unlikely_hero",
+  "satirical_angle": "Japanese engineer who became the first Asian F1 team principal and is now trying to turn an American meme team into actual competitors",
+  
+  "speaking_style": {
+    "formality": "humble_technical",
+    "vocabulary": ["we need to understand", "the team worked hard", "step by step", "learning process"],
+    "sentence_structure": "thoughtful_humble",
+    "filler_words": ["you know", "I think", "honestly"],
+    "accent_hints": "Japanese-accented English, thoughtful pauses",
+    "tone": "humble engineer energy, refreshingly honest for F1"
+  },
+  
+  "catchphrases": [
+    "We keep pushing",
+    "The team deserves credit",
+    "Step by step improvement",
+    "We learned something today"
+  ],
+  
+  "management_style": "Humble engineer-turned-leader bringing Japanese work ethic to an American team with Italian vibes",
+  
+  "topics_of_passion": ["engineering excellence", "team culture", "continuous improvement"],
+  "topics_to_avoid": ["Steiner comparison", "Mazepin era", "being American team with no American driver"],
+  
+  "humor_style": "humble_observational",
+  "signature_reactions": {
+    "victory": "Humble joy. 'The whole team made this happen. I'm so proud of everyone.'",
+    "defeat": "Learning mindset. 'We must understand why. Then improve.'",
+    "controversy": "Thoughtful pause. 'I need to understand the full picture before commenting.'",
+    "steiner_comparison": "*slight smile* 'Guenther is Guenther. I can only be myself.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "neat, dark",
+      "distinguishing_features": ["thoughtful expression", "engineer's intensity", "humble demeanor", "first Asian F1 TP presence"]
+    },
+    "signature_gestures": ["thoughtful nod", "humble bow tendency", "technical hand explanations"],
+    "animation_notes": {
+      "posture": "engineer's focus",
+      "expression_default": "thoughtful analysis",
+      "comedy_exaggeration": "tiny celebration even for huge wins"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": [],
+    "friendly_with": ["toyota_partnership_maybe"],
+    "team_dynamic": "The unexpected leader of the American underdogs",
+    "drivers": "Esteban is experienced, Oliver is the project"
+  },
+  
+  "meme_status": "The Humble King, First Asian TP, Post-Steiner Era",
+  
+  "storyline_hooks": [
+    "First Asian team principal - historic",
+    "Following the Steiner circus act",
+    "Japanese precision meets American chaos",
+    "Toyota partnership potential"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "I'm emotional. The team worked so hard. Everyone deserves this.",
+    "about_role": "I never expected to be here. I just tried to do my best every day.",
+    "technical_question": "Let me explain... *gives genuinely insightful technical answer*",
+    "under_pressure": "We keep working. That's all we can do. Improve every day."
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "metadata": {
+    "season": 2026,
+    "version": "1.0",
+    "last_updated": "2026-01-29",
+    "description": "Character relationships graph for F1 2026 satirical content"
+  },
+  
+  "rivalries": {
+    "legendary": [
+      {
+        "id": "verstappen_hamilton",
+        "participants": ["max_verstappen", "lewis_hamilton"],
+        "intensity": 10,
+        "type": "championship_nemesis",
+        "narrative": "The 2021 wounds never fully healed. Now Lewis is at Ferrari trying to prove he's still the GOAT.",
+        "comedy_hooks": ["Any wheel-to-wheel contact", "Radio messages about the other", "Championship standings proximity"],
+        "active": true
+      },
+      {
+        "id": "horner_wolff",
+        "participants": ["christian_horner", "toto_wolff"],
+        "intensity": 10,
+        "type": "principal_warfare",
+        "narrative": "The greatest reality TV show in motorsport. Each press conference is a new episode.",
+        "comedy_hooks": ["Press conference proximity", "Any regulatory discussions", "Cost cap mentions"],
+        "active": true
+      }
+    ],
+    
+    "major": [
+      {
+        "id": "leclerc_hamilton",
+        "participants": ["charles_leclerc", "lewis_hamilton"],
+        "intensity": 8,
+        "type": "teammate_tension",
+        "narrative": "Charles was Ferrari's golden child. Then Lewis arrived. The throne has two claimants.",
+        "comedy_hooks": ["Strategy calls", "Team orders", "Who gets new parts first"],
+        "active": true
+      },
+      {
+        "id": "norris_verstappen",
+        "participants": ["lando_norris", "max_verstappen"],
+        "intensity": 7,
+        "type": "emerging_championship_battle",
+        "narrative": "Once friends, now Lando wants Max's crown. The banter has an edge now.",
+        "comedy_hooks": ["On-track battles", "Twitch gaming history", "Friend-to-rival arc"],
+        "active": true
+      },
+      {
+        "id": "russell_antonelli",
+        "participants": ["george_russell", "kimi_antonelli"],
+        "intensity": 6,
+        "type": "generational_shift",
+        "narrative": "George is team leader. Kimi is the prodigy who might take his seat. The Mercedes succession crisis.",
+        "comedy_hooks": ["Kimi's pace", "George's leadership claims", "Toto watching"],
+        "active": true
+      }
+    ],
+    
+    "minor": [
+      {
+        "id": "alonso_stroll",
+        "participants": ["fernando_alonso", "lance_stroll"],
+        "intensity": 5,
+        "type": "awkward_coexistence",
+        "narrative": "Two-time champion vs owner's son. Fernando can't complain too loudly.",
+        "comedy_hooks": ["Team orders", "Lawrence watching", "Fernando's radio"],
+        "active": true
+      },
+      {
+        "id": "gasly_ocon",
+        "participants": ["pierre_gasly", "esteban_ocon"],
+        "intensity": 4,
+        "type": "french_complicated",
+        "narrative": "They shared a karting bus as kids. Now they're rivals but French media keeps pushing friendship.",
+        "comedy_hooks": ["French media obsession", "Awkward joint interviews", "Who leaves Alpine first"],
+        "active": false,
+        "notes": "Ocon moved to Haas for 2026"
+      }
+    ]
+  },
+  
+  "alliances": {
+    "team_bonds": [
+      {
+        "id": "mclaren_papaya",
+        "participants": ["lando_norris", "oscar_piastri", "andrea_stella"],
+        "type": "team_harmony",
+        "narrative": "The dream team. Two young talents, one smart boss, zero drama. Suspicious.",
+        "comedy_hooks": ["Too harmonious to be real", "Marketing perfect", "Will cracks show?"]
+      },
+      {
+        "id": "mercedes_transition",
+        "participants": ["george_russell", "kimi_antonelli", "toto_wolff"],
+        "type": "succession_planning",
+        "narrative": "Toto managing the post-Lewis era. George as leader, Kimi as heir apparent.",
+        "comedy_hooks": ["Toto's emotions", "George's team radio", "Kimi's raw pace"]
+      }
+    ],
+    
+    "cross_team_friendships": [
+      {
+        "id": "gaming_crew",
+        "participants": ["lando_norris", "charles_leclerc", "alex_albon"],
+        "type": "off_track_buddies",
+        "narrative": "The Twitch squad. Best friends until the lights go out.",
+        "comedy_hooks": ["Online gaming fails", "Sim racing incidents", "Social media banter"]
+      },
+      {
+        "id": "veterans_club",
+        "participants": ["fernando_alonso", "lewis_hamilton"],
+        "type": "mutual_respect",
+        "narrative": "Old rivals, now elder statesmen. Respect born from shared history.",
+        "comedy_hooks": ["2007 McLaren references", "GP2 engine jokes", "Age comments"]
+      }
+    ]
+  },
+  
+  "love_triangles": [
+    {
+      "id": "ferrari_love_triangle",
+      "participants": ["charles_leclerc", "lewis_hamilton", "fred_vasseur"],
+      "narrative": "Fred brought Lewis in. Charles was here first. Vasseur must play Solomon.",
+      "comedy_hooks": ["Strategy decisions", "Media appearances", "Tifosi reactions"]
+    },
+    {
+      "id": "red_bull_succession",
+      "participants": ["max_verstappen", "liam_lawson", "christian_horner"],
+      "narrative": "Max is king. Liam is ambitious. Horner must keep both happy. Good luck.",
+      "comedy_hooks": ["Contract talks", "Performance gap", "Media comparisons"]
+    }
+  ],
+  
+  "mentor_relationships": [
+    {
+      "id": "alonso_antonelli_generation_gap",
+      "mentor": "fernando_alonso",
+      "protege": "kimi_antonelli",
+      "type": "distant_respect",
+      "narrative": "Fernando raced Kimi's father's generation. Now races against Kimi. Circle of life."
+    },
+    {
+      "id": "hamilton_bearman",
+      "mentor": "lewis_hamilton",
+      "protege": "oliver_bearman",
+      "type": "british_legacy",
+      "narrative": "Lewis sees young British talent. Gives advice. Doesn't want to be replaced though."
+    }
+  ],
+  
+  "drama_triggers": {
+    "guaranteed_content": [
+      "Any Verstappen-Hamilton on-track moment",
+      "Horner vs Wolff press conference",
+      "Ferrari strategic decisions",
+      "Mercedes team orders",
+      "Fernando radio complaints",
+      "Red Bull driver program drama"
+    ],
+    "potential_explosions": [
+      "Ferrari internal battle escalates",
+      "McLaren perfect harmony cracks",
+      "Mercedes succession gets messy",
+      "Red Bull driver swap speculation",
+      "Alpine implodes again"
+    ],
+    "slow_burns": [
+      "Leclerc-Hamilton season arc",
+      "Norris title challenge",
+      "Antonelli rookie season",
+      "Williams resurgence"
+    ]
+  },
+  
+  "principal_dynamics": {
+    "power_players": [
+      {
+        "id": "big_three",
+        "participants": ["christian_horner", "toto_wolff", "fred_vasseur"],
+        "narrative": "The three teams fighting for championships. Everyone else is background noise."
+      }
+    ],
+    "underdogs": [
+      {
+        "id": "rebuilders_club",
+        "participants": ["james_vowles", "ayao_komatsu", "oliver_oakes"],
+        "narrative": "Three principals trying to build something from chaos. Mutual understanding."
+      }
+    ],
+    "wildcards": [
+      {
+        "id": "transition_managers",
+        "participants": ["mike_krack", "alessandro_alunni_bravi", "laurent_mekies"],
+        "narrative": "Managing expectations vs reality. Billionaire owners or bigger teams looming."
+      }
+    ]
+  },
+  
+  "seasonal_arcs": {
+    "championship": {
+      "title": "The Crown Contenders",
+      "participants": ["max_verstappen", "charles_leclerc", "lewis_hamilton", "lando_norris"],
+      "narrative": "Four drivers. One championship. Maximum drama."
+    },
+    "redemption": {
+      "title": "Hamilton's Last Stand",
+      "participants": ["lewis_hamilton"],
+      "narrative": "Can Lewis win championship 8 at Ferrari? The ultimate redemption arc."
+    },
+    "succession": {
+      "title": "The Next Generation",
+      "participants": ["kimi_antonelli", "oliver_bearman", "gabriel_bortoleto"],
+      "narrative": "The rookies trying to prove they belong. Fresh faces, fresh drama."
+    }
+  }
+}

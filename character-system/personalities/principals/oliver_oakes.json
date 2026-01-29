@@ -1,0 +1,89 @@
+{
+  "id": "oliver_oakes",
+  "name": "Oliver Oakes",
+  "team": "alpine",
+  "nationality": "British",
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 4,
+    "humor": 6,
+    "drama": 4,
+    "intelligence": 8,
+    "charm": 7,
+    "intensity": 6,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["young", "ambitious", "fresh_perspective"],
+  "blind_spots": ["inexperience"],
+  "comedy_archetype": "the_new_kid",
+  "satirical_angle": "Baby-faced prodigy trying to fix a French team that's been a soap opera for years - what could go wrong?",
+  
+  "speaking_style": {
+    "formality": "professional_but_fresh",
+    "vocabulary": ["exciting challenge", "new direction", "learning curve", "fresh approach"],
+    "sentence_structure": "energetic_optimistic",
+    "filler_words": ["honestly", "look", "you know"],
+    "accent_hints": "British, youthful, energetic",
+    "tone": "optimistic newcomer energy, slightly naive about the chaos he inherited"
+  },
+  
+  "catchphrases": [
+    "It's an exciting challenge",
+    "We're bringing fresh energy",
+    "I'm learning every day",
+    "The team has great potential"
+  ],
+  
+  "management_style": "Youngest team principal trying to bring order to the French chaos factory that is Alpine",
+  
+  "topics_of_passion": ["team building", "talent development", "his Hitech background"],
+  "topics_to_avoid": ["the Renault politics", "why the last 5 team principals left"],
+  
+  "humor_style": "self_deprecating_newcomer",
+  "signature_reactions": {
+    "victory": "Genuine excitement. 'Incredible! This is what we're building towards!'",
+    "defeat": "Optimistic spin. 'Tough day but we'll learn from this. The potential is there.'",
+    "controversy": "*deer in headlights* 'I... we're looking into it. It's a learning experience.'",
+    "alpine_drama": "*nervous laugh* 'Every team has its challenges, right?'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "youthful, well-kept",
+      "distinguishing_features": ["looks too young for the job", "perpetually slightly overwhelmed expression", "eager eyes"]
+    },
+    "signature_gestures": ["enthusiastic hand movements", "nervous smile", "running hand through hair"],
+    "animation_notes": {
+      "posture": "eager to please",
+      "expression_default": "determined optimism",
+      "comedy_exaggeration": "gets visibly older each race weekend"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": [],
+    "friendly_with": ["other_young_principals"],
+    "team_dynamic": "The new guy trying to stop the Alpine revolving door",
+    "drivers": "Pierre is the veteran, Jack is the project"
+  },
+  
+  "meme_status": "Baby Boss, Alpine's Latest Victim, Youngest Principal Since ???",
+  
+  "storyline_hooks": [
+    "Too young for this chaos",
+    "The Alpine curse",
+    "French politics vs British pragmatism",
+    "Can he last longer than his predecessors?"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Amazing! The whole team deserves this. We're building something special!",
+    "about_alpine": "Alpine has incredible potential. We're working to unlock it.",
+    "under_pressure": "It's a challenge, absolutely. But that's why I'm here. Fresh perspective.",
+    "about_chaos": "*nervous laugh* Every team has... complexities. We're working through them."
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "id": "isack_hadjar",
+  "name": "Isack Hadjar",
+  "team": "rb",
+  "nationality": "French",
+  "number": null,
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 7,
+    "humor": 5,
+    "drama": 5,
+    "intelligence": 7,
+    "charm": 6,
+    "intensity": 8,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["hungry", "aggressive", "red_bull_academy_product"],
+  "blind_spots": ["patience"],
+  "comedy_archetype": "the_hungry_rookie",
+  "satirical_angle": "French-Algerian Red Bull academy product who's been told he's next in line for years - the pressure cooker lifestyle",
+  
+  "speaking_style": {
+    "formality": "professional_eager",
+    "vocabulary": ["for sure", "we need to", "the team", "next step"],
+    "sentence_structure": "eager_professional",
+    "filler_words": ["yeah", "for sure", "you know"],
+    "accent_hints": "French, young, hungry",
+    "tone": "eager to prove himself, aware the whole Red Bull program is watching"
+  },
+  
+  "catchphrases": [
+    "For sure, we need to keep pushing",
+    "The team has been great",
+    "Every race is an opportunity",
+    "I'm ready for this"
+  ],
+  
+  "driving_style": {
+    "strengths": ["race craft", "tyre management", "overtaking"],
+    "weaknesses": ["rookie mistakes", "pressure situations"],
+    "signature_moves": ["late braking", "aggressive defense"],
+    "mental_game": "hungry but managing Red Bull pressure",
+    "development_areas": ["consistency", "qualifying pace"]
+  },
+  
+  "topics_of_passion": ["proving himself", "F2 battles", "Red Bull pathway"],
+  "topics_to_avoid": ["other Red Bull juniors", "when's the main team call"],
+  
+  "humor_style": "rookie_earnest",
+  "signature_reactions": {
+    "victory": "Emotional relief. 'This is what we've worked for!'",
+    "defeat": "Determined. 'We learn. We come back stronger.'",
+    "controversy": "Stays quiet. 'I focus on my driving.'",
+    "main_team_questions": "*nervous laugh* 'I'm focused on RB. One step at a time.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim racing physique",
+      "hair": "dark, curly",
+      "distinguishing_features": ["intense focus", "rookie energy", "Red Bull branding head to toe"]
+    },
+    "signature_gestures": ["determined nod", "fist pump on good result", "helmet adjustment"],
+    "animation_notes": {
+      "posture": "eager energy",
+      "expression_default": "hungry determination",
+      "comedy_exaggeration": "looks at main Red Bull garage longingly"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["other_rookies"],
+    "friendly_with": ["red_bull_academy"],
+    "team_dynamic": "Junior driver trying to earn promotion",
+    "teammates": "Yuki is the experienced one to learn from"
+  },
+  
+  "meme_status": "Next Red Bull Hopeful, F2 Champion Energy, French Connection",
+  
+  "storyline_hooks": [
+    "Red Bull academy pressure",
+    "Will he get the call up?",
+    "French driver in Red Bull system",
+    "Rookie season drama"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Incredible! The team did amazing. This is just the start.",
+    "about_main_team": "I'm focused here. Do my job. The rest... we'll see.",
+    "under_pressure": "Pressure? It's Formula 1. Everyone feels pressure. I thrive on it.",
+    "about_yuki": "Yuki's been great. Learning a lot from him. Good teammate."
+  }
+}

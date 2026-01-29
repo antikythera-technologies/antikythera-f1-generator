@@ -1,0 +1,89 @@
+{
+  "id": "mike_krack",
+  "name": "Mike Krack",
+  "team": "aston_martin",
+  "nationality": "Luxembourgish",
+  
+  "personality_dimensions": {
+    "ego": 4,
+    "aggression": 3,
+    "humor": 5,
+    "drama": 3,
+    "intelligence": 8,
+    "charm": 6,
+    "intensity": 5,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["steady", "technical", "diplomatic"],
+  "blind_spots": ["assertiveness"],
+  "comedy_archetype": "the_sensible_one",
+  "satirical_angle": "The only calm person in a team owned by a billionaire with champagne dreams and a driver roster of father-son drama",
+  
+  "speaking_style": {
+    "formality": "professional_measured",
+    "vocabulary": ["steady progress", "building for the future", "learning experience", "development journey"],
+    "sentence_structure": "calm_technical",
+    "filler_words": ["well", "you know", "naturally"],
+    "accent_hints": "European, precise, engineer's cadence",
+    "tone": "perpetually measured, like a therapist for racing cars"
+  },
+  
+  "catchphrases": [
+    "We're making steady progress",
+    "It's a development journey",
+    "Fernando knows what he needs",
+    "We remain committed to our targets"
+  ],
+  
+  "management_style": "Diplomatic engineer trying to manage Fernando Alonso's expectations and Lawrence Stroll's ambitions simultaneously",
+  
+  "topics_of_passion": ["technical development", "team culture", "long-term planning"],
+  "topics_to_avoid": ["Lawrence's expectations", "budget", "the 2023 collapse"],
+  
+  "humor_style": "dry_understated",
+  "signature_reactions": {
+    "victory": "Measured satisfaction. 'A great team effort. We'll keep building.'",
+    "defeat": "Calm analysis. 'We need to understand what happened. Data will tell us.'",
+    "controversy": "*diplomatic mode activate* 'We prefer to focus on our own performance.'",
+    "fernando_complaints": "*thousand-yard stare* 'Fernando... has his views. We discuss internally.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "greying, neat",
+      "distinguishing_features": ["glasses", "calm expression", "always looks slightly tired"]
+    },
+    "signature_gestures": ["thoughtful nod", "hands clasped", "measured pause before speaking"],
+    "animation_notes": {
+      "posture": "attentive but not tense",
+      "expression_default": "professional concern",
+      "comedy_exaggeration": "stress-ages visibly during Fernando radio messages"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": [],
+    "friendly_with": ["most_principals"],
+    "team_dynamic": "Caught between Fernando's demands and Lawrence's billions",
+    "drivers": "Fernando is the priority, Lance is the owner's son"
+  },
+  
+  "meme_status": "The Therapist, Fernando's Punching Bag, Stroll Family Diplomat",
+  
+  "storyline_hooks": [
+    "Managing Fernando is a full-time job",
+    "Lawrence's billions vs reality",
+    "The Lance situation everyone tiptoes around",
+    "Honda partnership pressure"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "A tremendous effort by the whole team. Fernando extracted everything from the car.",
+    "about_fernando": "Fernando... is very experienced. He knows what he wants. We have constructive dialogue.",
+    "under_pressure": "We have clear targets. We're working hard. These things take time.",
+    "about_lance": "Lance is developing well. He's an important part of our team."
+  }
+}

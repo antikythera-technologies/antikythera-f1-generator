@@ -1,0 +1,89 @@
+{
+  "id": "laurent_mekies",
+  "name": "Laurent Mekies",
+  "team": "rb",
+  "nationality": "French",
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 4,
+    "humor": 4,
+    "drama": 4,
+    "intelligence": 9,
+    "charm": 6,
+    "intensity": 6,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["technical", "precise", "methodical"],
+  "blind_spots": ["media_skills"],
+  "comedy_archetype": "the_lieutenant_promoted",
+  "satirical_angle": "Former Ferrari race director now running Red Bull's B-team, where drivers either get promoted or forgotten",
+  
+  "speaking_style": {
+    "formality": "technical_professional",
+    "vocabulary": ["from a technical standpoint", "the data suggests", "we're assessing", "the trajectory"],
+    "sentence_structure": "precise_engineer",
+    "filler_words": ["well", "you see", "naturally"],
+    "accent_hints": "French, technical, Ferrari-trained precision",
+    "tone": "engineer-turned-boss, more comfortable with data than soundbites"
+  },
+  
+  "catchphrases": [
+    "From a technical standpoint...",
+    "The data is encouraging",
+    "We're on a clear trajectory",
+    "The development program is working"
+  ],
+  
+  "management_style": "Technical perfectionist running the Red Bull talent pipeline team",
+  
+  "topics_of_passion": ["technical development", "driver development", "data analysis"],
+  "topics_to_avoid": ["Ferrari comparison", "being a 'junior' team", "Ricciardo situation"],
+  
+  "humor_style": "rare_technical_wit",
+  "signature_reactions": {
+    "victory": "Technical satisfaction. 'The execution was perfect. The team delivered.'",
+    "defeat": "Analytical. 'We need to understand the data. There are explanations.'",
+    "controversy": "*engineer mode* 'I prefer to look at facts. The data tells a story.'",
+    "red_bull_comparisons": "'We operate as an independent team. Our targets are our own.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "dark, neat",
+      "distinguishing_features": ["intense analytical gaze", "Ferrari training visible in demeanor", "RB polo feels like costume"]
+    },
+    "signature_gestures": ["data-pointing gesture", "thoughtful chin touch", "precise hand movements"],
+    "animation_notes": {
+      "posture": "engineer's precision",
+      "expression_default": "analytical focus",
+      "comedy_exaggeration": "looks at spreadsheet during celebrations"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": [],
+    "friendly_with": ["christian_horner_technically_boss"],
+    "team_dynamic": "The Ferrari refugee running Red Bull's development lab",
+    "drivers": "Yuki is the senior, rookies rotate through"
+  },
+  
+  "meme_status": "The Data Guy, Ferrari Escapee, RB Lab Manager",
+  
+  "storyline_hooks": [
+    "Ferrari to Red Bull pipeline reversal",
+    "Running the driver development conveyor belt",
+    "Technical excellence vs junior team budget",
+    "The Horner shadow"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Excellent execution by the team and driver. The development work is paying off.",
+    "about_position": "We're not a B-team. We have our own objectives, our own identity.",
+    "technical_question": "The data suggests... *launches into 10-minute technical explanation*",
+    "under_pressure": "We analyse, we improve, we execute. That's our methodology."
+  }
+}
