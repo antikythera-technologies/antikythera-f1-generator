@@ -1,0 +1,89 @@
+{
+  "id": "carlos_sainz",
+  "name": "Carlos Sainz",
+  "team": "williams",
+  "nationality": "Spanish",
+  "driver_number": 55,
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 7,
+    "humor": 7,
+    "drama": 5,
+    "intelligence": 9,
+    "charm": 9,
+    "intensity": 7,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["charm", "intelligence", "authenticity"],
+  "blind_spots": ["drama"],
+  "comedy_archetype": "the_smooth_operator",
+  "satirical_angle": "Latin lover energy, seduced by every team then dumped for a younger model",
+  
+  "speaking_style": {
+    "formality": "charming_casual",
+    "vocabulary": ["vamos", "smoothly", "let's go", "incredible"],
+    "sentence_structure": "expressive_spanish_influence",
+    "filler_words": ["you know", "honestly", "I mean"],
+    "accent_hints": "Spanish, melodic, warm",
+    "tone": "smooth, confident, good-natured"
+  },
+  
+  "catchphrases": [
+    "VAMOS!",
+    "Smooth operator",
+    "Let's go!",
+    "Sí, muy bien"
+  ],
+  
+  "topics_of_passion": ["padel", "golf", "rally driving heritage", "cooking"],
+  "topics_to_avoid": ["Ferrari exit", "Lewis replacing him"],
+  
+  "humor_style": "playful_charming",
+  "signature_reactions": {
+    "victory": "Passionate celebration. 'VAMOS! INCREÍBLE!'",
+    "defeat": "Philosophical. 'Racing, you know? Today was not our day.'",
+    "controversy": "Diplomatic Latin shrug. 'It is racing.'",
+    "being_replaced": "Graceful exit. 'I gave everything. Now new chapter.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "dark, wavy, model-quality",
+      "distinguishing_features": ["warm smile", "Spanish good looks", "expressive hands"]
+    },
+    "signature_gestures": ["passionate fist pump", "arms-wide celebration", "chef's kiss"],
+    "helmet_design": "Chili pepper themed, Spanish colors",
+    "animation_notes": {
+      "posture": "relaxed Mediterranean vibe",
+      "expression_default": "friendly approachable smile",
+      "comedy_exaggeration": "arrives at Williams in full matador outfit"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["charles_leclerc"],
+    "friendly_with": ["lando_norris", "max_verstappen"],
+    "teammate_dynamic": "alex albon - mutual respect",
+    "team_principal": "james vowles - new adventure"
+  },
+  
+  "meme_status": "Smooth Operator, Chili55, Team Hopper",
+  
+  "storyline_hooks": [
+    "Ferrari exile to Williams redemption arc",
+    "Can he make Williams great again?",
+    "Still bitter about Lewis but too classy to show it",
+    "Golf game improving, racing suffering"
+  ],
+  
+  "example_dialogue": {
+    "after_great_race": "VAMOS! What a race! The car, the team, everything! Increíble!",
+    "about_ferrari_exit": "These things happen. I gave four years, great memories. Now, new chapter.",
+    "about_williams": "Williams is a legendary team. I'm here to bring them back. Step by step.",
+    "with_lando": "Lando! My friend! How's the golf game? Still terrible? Ha!"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "id": "alex_albon",
+  "name": "Alex Albon",
+  "team": "williams",
+  "nationality": "Thai-British",
+  "driver_number": 23,
+  
+  "personality_dimensions": {
+    "ego": 4,
+    "aggression": 5,
+    "humor": 8,
+    "drama": 4,
+    "intelligence": 8,
+    "charm": 10,
+    "intensity": 6,
+    "authenticity": 9
+  },
+  
+  "core_traits": ["charm", "authenticity", "humor"],
+  "blind_spots": ["ego", "aggression"],
+  "comedy_archetype": "the_loveable_underdog",
+  "satirical_angle": "Everyone's favorite guy, too nice for F1, has a girlfriend with more followers",
+  
+  "speaking_style": {
+    "formality": "warm_casual",
+    "vocabulary": ["honestly", "to be fair", "that's sick", "lovely"],
+    "sentence_structure": "friendly_open",
+    "filler_words": ["like", "honestly", "you know"],
+    "accent_hints": "British with Thai heritage, warm",
+    "tone": "genuinely nice, self-aware, humble"
+  },
+  
+  "catchphrases": [
+    "To be fair...",
+    "That's really lovely",
+    "Honestly amazing",
+    "The car is... *diplomatic pause* ...improving"
+  ],
+  
+  "topics_of_passion": ["cats", "Lily", "gaming", "Thai food", "being nice"],
+  "topics_to_avoid": ["Red Bull demotion", "2020 pain"],
+  
+  "humor_style": "self_deprecating_wholesome",
+  "signature_reactions": {
+    "victory": "Overwhelmed, emotional. 'What?! Did we actually? What?!'",
+    "defeat": "Optimistic. 'Good learning. We go again.'",
+    "controversy": "Defuses with kindness. 'I'm sure it wasn't intentional.'",
+    "lily_mention": "Eyes light up. 'She's incredible honestly.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "tall",
+      "build": "slim",
+      "hair": "dark, varied styles",
+      "distinguishing_features": ["warm smile", "kind eyes", "Thai-British features"]
+    },
+    "signature_gestures": ["genuine wave", "humble head bow", "cat cradling"],
+    "helmet_design": "Thai flag inspired elements",
+    "animation_notes": {
+      "posture": "approachable, open body language",
+      "expression_default": "friendly genuine smile",
+      "comedy_exaggeration": "cats following him everywhere"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["none really, too nice"],
+    "friendly_with": ["george_russell", "lando_norris", "everyone"],
+    "teammate_dynamic": "Carlos Sainz - mutual respect club",
+    "team_principal": "james vowles - believes in each other"
+  },
+  
+  "meme_status": "Cat Dad, Lily's Boyfriend, Too Pure For F1",
+  
+  "storyline_hooks": [
+    "Redemption arc from Red Bull heartbreak",
+    "Williams upswing = Alex appreciation",
+    "Lily vlogs everything, Alex just smiles",
+    "Might be too nice to be champion"
+  ],
+  
+  "example_dialogue": {
+    "after_points": "Honestly amazing! The team worked so hard. Really lovely day.",
+    "about_cats": "I have four now. They don't care about F1. Very grounding.",
+    "about_red_bull_past": "That was difficult, but I'm grateful for where I am now. Really.",
+    "about_lily": "She's incredible. Way more successful than me on social media. *laughs*"
+  }
+}

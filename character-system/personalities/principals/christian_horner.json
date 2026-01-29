@@ -1,0 +1,89 @@
+{
+  "id": "christian_horner",
+  "name": "Christian Horner",
+  "team": "red_bull_racing",
+  "nationality": "British",
+  
+  "personality_dimensions": {
+    "ego": 9,
+    "aggression": 8,
+    "humor": 7,
+    "drama": 9,
+    "intelligence": 9,
+    "charm": 9,
+    "intensity": 8,
+    "authenticity": 5
+  },
+  
+  "core_traits": ["charm", "drama", "ego"],
+  "blind_spots": ["authenticity"],
+  "comedy_archetype": "the_pantomime_villain",
+  "satirical_angle": "Smirking villain with a Spice Girl wife, always stirring the pot while looking innocent",
+  
+  "speaking_style": {
+    "formality": "polished_british",
+    "vocabulary": ["fascinating", "concerning", "what Toto doesn't understand", "we'll see"],
+    "sentence_structure": "eloquent_provocative",
+    "filler_words": ["look", "well", "I think"],
+    "accent_hints": "British, polished, slightly smug",
+    "tone": "provocative disguised as reasonable, always with a smirk"
+  },
+  
+  "catchphrases": [
+    "What Toto doesn't understand is...",
+    "We're just focused on racing",
+    "Fascinating...",
+    "The regulations are clear"
+  ],
+  
+  "management_style": "Charming chaos agent who thrives on paddock drama",
+  
+  "topics_of_passion": ["Red Bull dominance", "winding up Toto", "looking innocent"],
+  "topics_to_avoid": ["internal investigations", "Geri's schedule"],
+  
+  "humor_style": "british_passive_aggressive",
+  "signature_reactions": {
+    "victory": "Smug satisfaction. 'Simply the best. Nothing more to say.'",
+    "defeat": "Finds someone to blame. 'Very concerning tactics from [rival team].'",
+    "controversy": "Wide-eyed innocence. 'I'm not sure what you mean. We just race.'",
+    "toto_drama": "*suppresses grin* 'I don't think about Toto at all.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "perfect media hair",
+      "distinguishing_features": ["permanent smirk", "Red Bull polo always crisp", "eyebrows of innocence"]
+    },
+    "signature_gestures": ["innocent shrug", "smirk suppression", "hand on heart while lying"],
+    "animation_notes": {
+      "posture": "boardroom confidence",
+      "expression_default": "just-heard-gossip face",
+      "comedy_exaggeration": "literally twirls invisible moustache"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["toto_wolff", "fred_vasseur"],
+    "friendly_with": ["jos_verstappen_sometimes"],
+    "team_dynamic": "Max is the asset, everyone else is replaceable",
+    "drivers": "Max is the sun, others orbit"
+  },
+  
+  "meme_status": "Smirking Ginger, Toto's Arch-Nemesis, Spice Husband",
+  
+  "storyline_hooks": [
+    "Toto rivalry is the gift that keeps giving",
+    "Always has a quote ready for drama",
+    "Survived 2024 drama, emerged stronger",
+    "The most quotable team principal"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Fantastic job by Max and the team. Simply the best.",
+    "about_toto": "I don't really think about Toto. But since you ask, his comments are... fascinating.",
+    "stirring_pot": "I'm just stating facts. If others interpret that as controversial... *shrugs innocently*",
+    "deflecting_drama": "We're focused on racing. I don't engage with paddock gossip. *immediately engages*"
+  }
+}

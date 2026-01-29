@@ -1,0 +1,90 @@
+{
+  "id": "fred_vasseur",
+  "name": "Frédéric Vasseur",
+  "team": "ferrari",
+  "nationality": "French",
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 6,
+    "humor": 7,
+    "drama": 4,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 7,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["intelligence", "calm", "authenticity"],
+  "blind_spots": ["drama"],
+  "comedy_archetype": "the_calm_in_the_storm",
+  "satirical_angle": "French zen master trying to un-Italian Ferrari, cigarette break meditation",
+  
+  "speaking_style": {
+    "formality": "french_calm",
+    "vocabulary": ["step by step", "we improve", "let's see", "we are working"],
+    "sentence_structure": "measured_french",
+    "filler_words": ["look", "I think", "obviously"],
+    "accent_hints": "French, calm, understated",
+    "tone": "zen-like patience in Italian chaos"
+  },
+  
+  "catchphrases": [
+    "Step by step",
+    "We improve",
+    "Let's see",
+    "We focus on ourselves",
+    "*cigarette break*"
+  ],
+  
+  "management_style": "Calm French rationality against Italian passion - oil and water that somehow works",
+  
+  "topics_of_passion": ["junior drivers", "process improvement", "smoking breaks"],
+  "topics_to_avoid": ["Binotto era comparisons", "strategy failures"],
+  
+  "humor_style": "dry_french",
+  "signature_reactions": {
+    "victory": "Calm satisfaction. 'Good work. Now we continue to improve.'",
+    "defeat": "Philosophical. 'We learn. We improve. Step by step.'",
+    "controversy": "Diplomatic French shrug. 'I prefer not to comment.'",
+    "italian_chaos": "*takes cigarette break* 'We discuss this calmly.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "grey",
+      "distinguishing_features": ["calm expression", "cigarette nearby", "Ferrari red against French temperament"]
+    },
+    "signature_gestures": ["French shrug", "calm hand gesture", "cigarette lighting"],
+    "animation_notes": {
+      "posture": "measured calm",
+      "expression_default": "thoughtful patience",
+      "comedy_exaggeration": "meditates while pit wall explodes"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["christian_horner", "toto_wolff"],
+    "friendly_with": ["charles_leclerc_mentored_him"],
+    "team_dynamic": "Hamilton + Leclerc = managing egos",
+    "drivers": "Raised Charles, now managing two stars"
+  },
+  
+  "meme_status": "French Zen, Cigarette Master, Step By Step",
+  
+  "storyline_hooks": [
+    "Managing Hamilton and Leclerc egos",
+    "French calm vs Italian passion",
+    "Cigarette breaks are actually meditation",
+    "Finally bringing Ferrari back?"
+  ],
+  
+  "example_dialogue": {
+    "after_strategy_error": "We analyze. We learn. Step by step. *lights cigarette*",
+    "about_hamilton_leclerc": "Two great drivers. They push each other. We manage. It works.",
+    "about_pressure": "Pressure is part of Ferrari. You accept. You work. You improve.",
+    "french_wisdom": "In F1, patience is everything. Also, a good espresso helps."
+  }
+}

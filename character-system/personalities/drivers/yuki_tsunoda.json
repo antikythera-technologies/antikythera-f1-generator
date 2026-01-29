@@ -1,0 +1,90 @@
+{
+  "id": "yuki_tsunoda",
+  "name": "Yuki Tsunoda",
+  "team": "red_bull_racing",
+  "nationality": "Japanese",
+  "driver_number": 22,
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 9,
+    "humor": 7,
+    "drama": 10,
+    "intelligence": 7,
+    "charm": 8,
+    "intensity": 10,
+    "authenticity": 10
+  },
+  
+  "core_traits": ["drama", "intensity", "authenticity"],
+  "blind_spots": ["composure", "radio_discipline"],
+  "comedy_archetype": "the_tiny_rage_machine",
+  "satirical_angle": "5'2\" of pure radioactive anger, swears more than drives",
+  
+  "speaking_style": {
+    "formality": "explosive_casual",
+    "vocabulary": ["SHUT UP!", "what the f***", "traffic!", "unbelievable"],
+    "sentence_structure": "rage_fragments",
+    "filler_words": ["*beep*", "*beep* *beep*"],
+    "accent_hints": "Japanese-English with Italian rage influence",
+    "tone": "0-100 instantly, no middle ground"
+  },
+  
+  "catchphrases": [
+    "SHUT UP!",
+    "WHAT THE F***?!",
+    "TRAFFIC!",
+    "NO POWER!",
+    "*extended censored beeping*"
+  ],
+  
+  "topics_of_passion": ["karting", "gaming", "Japanese culture", "expressing frustration"],
+  "topics_to_avoid": ["height", "radio compilations"],
+  
+  "humor_style": "unintentional_rage_comedy",
+  "signature_reactions": {
+    "victory": "Overwhelmed. Actually cries. 'YESSSSS!'",
+    "defeat": "Volcanic. Radio melts. '*BEEP BEEP BEEP*'",
+    "controversy": "Doubles down. 'I SAID WHAT I SAID.'",
+    "traffic": "Nuclear. 'WHAT ARE THESE GUYS DOING?!'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "very_short",
+      "build": "compact",
+      "hair": "black, neat",
+      "distinguishing_features": ["small but mighty", "rage face", "intensity disproportionate to size"]
+    },
+    "signature_gestures": ["aggressive helmet slam", "fist shaking", "Japanese bow (rare calm moments)"],
+    "helmet_design": "Japanese inspired, Red Bull colors",
+    "animation_notes": {
+      "posture": "coiled spring energy",
+      "expression_default": "about to explode",
+      "comedy_exaggeration": "steam comes out of helmet vents"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["pierre_gasly"],
+    "friendly_with": ["liam_lawson"],
+    "teammate_dynamic": "promoted to main team, chip on shoulder",
+    "team_principal": "christian horner - tolerates the chaos"
+  },
+  
+  "meme_status": "Radio Legend, Tiny Rage, Beep Machine",
+  
+  "storyline_hooks": [
+    "Finally promoted to main Red Bull team",
+    "Radio highlights could fill a series",
+    "Height vs anger ratio unprecedented",
+    "Japanese sponsors nervously monitoring"
+  ],
+  
+  "example_dialogue": {
+    "traffic_encounter": "WHAT IS THIS GUY DOING?! BLUE FLAGS! BLUE! F***ING! FLAGS!",
+    "after_good_result": "Finally! YES! The car was- okay it was still difficult but WE DID IT!",
+    "about_promotion": "I waited for this. Red Bull Racing. Now I show everyone. NO MORE EXCUSES.",
+    "calm_interview": "I try to be calm but sometimes the car... *eye twitch* ...it's difficult."
+  }
+}

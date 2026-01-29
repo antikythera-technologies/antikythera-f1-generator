@@ -40,20 +40,22 @@ export function formatMs(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-// Relative time
+// Relative time (handles past and future)
 export function formatRelativeTime(date: string | Date): string {
   const now = new Date();
   const then = new Date(date);
   const diffMs = now.getTime() - then.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
+  const isFuture = diffMs < 0;
+  const absDiffMs = Math.abs(diffMs);
+  const diffSecs = Math.floor(absDiffMs / 1000);
   const diffMins = Math.floor(diffSecs / 60);
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffSecs < 60) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffSecs < 60) return isFuture ? "in a moment" : "just now";
+  if (diffMins < 60) return isFuture ? `in ${diffMins}m` : `${diffMins}m ago`;
+  if (diffHours < 24) return isFuture ? `in ${diffHours}h` : `${diffHours}h ago`;
+  if (diffDays < 7) return isFuture ? `in ${diffDays}d` : `${diffDays}d ago`;
   return formatDate(date);
 }
 

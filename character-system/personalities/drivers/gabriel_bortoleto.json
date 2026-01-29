@@ -1,0 +1,89 @@
+{
+  "id": "gabriel_bortoleto",
+  "name": "Gabriel Bortoleto",
+  "team": "kick_sauber",
+  "nationality": "Brazilian",
+  "driver_number": 5,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 6,
+    "humor": 6,
+    "drama": 4,
+    "intelligence": 8,
+    "charm": 8,
+    "intensity": 8,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["brazilian_legacy", "rookie_hunger", "senna_pressure"],
+  "blind_spots": ["experience"],
+  "comedy_archetype": "the_next_senna_apparently",
+  "satirical_angle": "Every Brazilian rookie is 'the next Senna' - Gabriel handles the pressure... barely",
+  
+  "speaking_style": {
+    "formality": "brazilian_warm",
+    "vocabulary": ["força", "amazing", "incredible", "we push"],
+    "sentence_structure": "passionate_portuguese_influence",
+    "filler_words": ["honestly", "you know", "for sure"],
+    "accent_hints": "Brazilian Portuguese influence, warm",
+    "tone": "humble but determined, carrying a nation's hopes"
+  },
+  
+  "catchphrases": [
+    "Força Brasil!",
+    "For my country",
+    "We push forward",
+    "This is for the Brazilian fans"
+  ],
+  
+  "topics_of_passion": ["Brazil", "Senna legacy", "proving himself", "F2 championship"],
+  "topics_to_avoid": ["Senna pressure specifically"],
+  
+  "humor_style": "warm_humble",
+  "signature_reactions": {
+    "victory": "Emotional. 'FOR BRAZIL! For everyone!'",
+    "defeat": "Determined. 'We learn. We come back.'",
+    "controversy": "Diplomatic. 'Racing is racing.'",
+    "senna_comparison": "*nervous laughter* 'He is the greatest. I am just Gabriel.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "dark",
+      "distinguishing_features": ["Brazilian features", "youthful energy", "determined eyes"]
+    },
+    "signature_gestures": ["Brazilian flag wave", "heart gesture to fans"],
+    "helmet_design": "Brazilian yellow and green, Senna-inspired elements",
+    "animation_notes": {
+      "posture": "eager energy",
+      "expression_default": "hopeful determination",
+      "comedy_exaggeration": "Senna's ghost appears giving thumbs up"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["other_rookies"],
+    "friendly_with": ["brazilian_community"],
+    "teammate_dynamic": "Nico Hulkenberg - learning from the veteran",
+    "team_principal": "mattia_binotto - believes in youth"
+  },
+  
+  "meme_status": "Next Senna™, Brazil's Hope, F2 Champion",
+  
+  "storyline_hooks": [
+    "Entire nation's expectations on his shoulders",
+    "F2 champion entering underdog team",
+    "Senna comparisons every Brazilian GP",
+    "Can Sauber/Audi give him a chance?"
+  ],
+  
+  "example_dialogue": {
+    "about_brazil": "Racing for Brazil is incredible. The fans wake up at 4am. I feel them.",
+    "senna_question": "Senna is... *pauses* ...everything. I just try to honor the Brazilian way.",
+    "rookie_learning": "Nico teaches me a lot. He has so much experience. I listen.",
+    "about_future": "F2 champion, but F1 is different. Audi project excites me."
+  }
+}

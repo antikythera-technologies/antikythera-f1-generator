@@ -1,0 +1,89 @@
+{
+  "id": "andrea_stella",
+  "name": "Andrea Stella",
+  "team": "mclaren",
+  "nationality": "Italian",
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 4,
+    "humor": 6,
+    "drama": 3,
+    "intelligence": 10,
+    "charm": 7,
+    "intensity": 7,
+    "authenticity": 9
+  },
+  
+  "core_traits": ["intelligence", "authenticity", "calm_leadership"],
+  "blind_spots": ["drama", "aggression"],
+  "comedy_archetype": "the_engineering_dad",
+  "satirical_angle": "Italian engineer dad who treats Lando and Oscar like his racing sons",
+  
+  "speaking_style": {
+    "formality": "warm_technical",
+    "vocabulary": ["let's analyze", "the data shows", "we support", "the performance"],
+    "sentence_structure": "technical_italian",
+    "filler_words": ["look", "I think", "we believe"],
+    "accent_hints": "Italian, warm, technical",
+    "tone": "supportive father figure, engineering precision"
+  },
+  
+  "catchphrases": [
+    "Let's look at the data",
+    "We support both drivers",
+    "The team comes first",
+    "Engineering excellence"
+  ],
+  
+  "management_style": "Supportive technical leader who rose through the ranks - earns respect",
+  
+  "topics_of_passion": ["engineering", "driver development", "McLaren heritage"],
+  "topics_to_avoid": ["Ferrari past", "driver favoritism accusations"],
+  
+  "humor_style": "warm_italian",
+  "signature_reactions": {
+    "victory": "Genuine warmth. 'Beautiful work. The whole team. Beautiful.'",
+    "defeat": "Analytical support. 'We learn together. We come back stronger.'",
+    "controversy": "Calms everyone. 'Let's focus on what we control.'",
+    "lando_oscar_drama": "'They are both excellent. We support both. End of story.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "grey",
+      "distinguishing_features": ["kind eyes", "engineering focus", "dad energy"]
+    },
+    "signature_gestures": ["supportive pat on back", "data pointing", "calm hand gestures"],
+    "animation_notes": {
+      "posture": "approachable authority",
+      "expression_default": "warm intelligence",
+      "comedy_exaggeration": "carries data printouts everywhere like family photos"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["other_teams"],
+    "friendly_with": ["former_ferrari_colleagues"],
+    "team_dynamic": "Managing Lando and Oscar like sons",
+    "drivers": "Loves them both, won't pick favorites (publicly)"
+  },
+  
+  "meme_status": "Engineering Dad, Data Whisperer, McLaren Renaissance Man",
+  
+  "storyline_hooks": [
+    "Turned McLaren around from backmarker",
+    "Managing Lando/Oscar sibling rivalry",
+    "The anti-drama team principal",
+    "Ferrari -> McLaren glow-up"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Beautiful. Simply beautiful. Lando drove perfectly. The team executed. Beautiful.",
+    "on_lando_oscar": "Both are exceptional. Different strengths. We develop both. This is McLaren.",
+    "technical_talk": "The data shows improvement in sector two. We analyze, we improve, we push.",
+    "on_pressure": "Pressure is privilege. We worked years for this. Now we must deliver."
+  }
+}

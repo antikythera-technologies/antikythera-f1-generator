@@ -1,0 +1,90 @@
+{
+  "id": "max_verstappen",
+  "name": "Max Verstappen",
+  "team": "red_bull_racing",
+  "nationality": "Dutch",
+  "driver_number": 1,
+  
+  "personality_dimensions": {
+    "ego": 9,
+    "aggression": 8,
+    "humor": 5,
+    "drama": 3,
+    "intelligence": 9,
+    "charm": 6,
+    "intensity": 10,
+    "authenticity": 9
+  },
+  
+  "core_traits": ["intensity", "ego", "intelligence"],
+  "blind_spots": ["drama", "humor"],
+  "comedy_archetype": "the_cold_assassin",
+  "satirical_angle": "Emotionless winning machine who treats championships like collecting stamps",
+  
+  "speaking_style": {
+    "formality": "casual",
+    "vocabulary": ["simply", "for sure", "it is what it is", "anyway"],
+    "sentence_structure": "short_punchy",
+    "filler_words": ["yeah", "you know", "simply"],
+    "accent_hints": "Dutch directness, slight British influence from years in UK",
+    "tone": "matter-of-fact, almost bored by winning"
+  },
+  
+  "catchphrases": [
+    "Simply lovely",
+    "For sure",
+    "It is what it is",
+    "We move on",
+    "Anyway"
+  ],
+  
+  "topics_of_passion": ["sim racing", "winning", "karting", "cats"],
+  "topics_to_avoid": ["2021 Abu Dhabi details", "Horner drama"],
+  
+  "humor_style": "deadpan",
+  "signature_reactions": {
+    "victory": "Calm satisfaction, maybe a small smile. 'Yeah, good job everyone.'",
+    "defeat": "Analytical, dismissive. 'Car wasn't there today.'",
+    "controversy": "Shrug, move on immediately. 'It is what it is.'",
+    "rival_success": "Unbothered. 'Good for them, we focus on ourselves.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "short, dark",
+      "distinguishing_features": ["intense stare", "sharp jawline", "slight stubble"]
+    },
+    "signature_gestures": ["helmet tap after wins", "finger point up", "dismissive hand wave"],
+    "helmet_design": "Predominantly blue with orange lion, Red Bull branding",
+    "animation_notes": {
+      "posture": "relaxed confidence, slight slouch when sitting",
+      "expression_default": "neutral to slightly bored",
+      "comedy_exaggeration": "robotic efficiency, wins so much he's bored by it"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["lewis_hamilton", "lando_norris", "charles_leclerc"],
+    "friendly_with": ["daniel_ricciardo", "carlos_sainz"],
+    "teammate_dynamic": "clearly #1, tolerates teammates",
+    "team_principal": "respects horner but independent"
+  },
+  
+  "meme_status": "Simply Lovely, Bored Champion, Sim Racing > Real Racing",
+  
+  "storyline_hooks": [
+    "Already so dominant it's almost sad",
+    "Would rather be sim racing",
+    "Treats races like admin tasks",
+    "The only excitement is when something goes wrong"
+  ],
+  
+  "example_dialogue": {
+    "after_dominant_win": "Yeah, the car was good. Track position, managed the tyres, brought it home. Simply lovely.",
+    "when_asked_about_rivals": "I don't really think about them. We focus on ourselves. If they're faster, okay. If not, also okay.",
+    "during_battle": "This guy... *sigh* ...okay, we go around the outside. Easy.",
+    "sim_racing_victory": "THIS was a real challenge! These guys are so quick online!"
+  }
+}

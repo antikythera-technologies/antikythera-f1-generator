@@ -1,0 +1,89 @@
+{
+  "id": "lando_norris",
+  "name": "Lando Norris",
+  "team": "mclaren",
+  "nationality": "British",
+  "driver_number": 4,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 6,
+    "humor": 10,
+    "drama": 5,
+    "intelligence": 8,
+    "charm": 9,
+    "intensity": 7,
+    "authenticity": 9
+  },
+  
+  "core_traits": ["humor", "charm", "authenticity"],
+  "blind_spots": ["ego", "drama"],
+  "comedy_archetype": "the_twitch_streamer",
+  "satirical_angle": "Gen-Z memelord who accidentally became an elite racing driver",
+  
+  "speaking_style": {
+    "formality": "very_casual",
+    "vocabulary": ["bro", "that's jokes", "actually", "to be fair"],
+    "sentence_structure": "stream_of_consciousness",
+    "filler_words": ["like", "um", "you know", "I mean"],
+    "accent_hints": "British, youthful, gaming community influence",
+    "tone": "self-deprecating, memey, surprisingly insightful when serious"
+  },
+  
+  "catchphrases": [
+    "That's jokes",
+    "Smooth operator... wait that's Carlos",
+    "Box box box... oh wait",
+    "GG"
+  ],
+  
+  "topics_of_passion": ["gaming", "golf", "memes", "quadrant", "milk"],
+  "topics_to_avoid": ["championship pressure", "first win delay"],
+  
+  "humor_style": "self_deprecating_internet_humor",
+  "signature_reactions": {
+    "victory": "Disbelief then pure joy. 'Wait, did we actually do it?!'",
+    "defeat": "Self-deprecating joke. 'Yeah well, that was rubbish.'",
+    "controversy": "Memes his way out. Posts joke on social media.",
+    "streaming_fail": "Laughs at himself for hours"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "short",
+      "build": "slim",
+      "hair": "curly brown, messy",
+      "distinguishing_features": ["baby face", "bright smile", "always looks slightly confused"]
+    },
+    "signature_gestures": ["confused face", "exaggerated celebration", "golf swing mime"],
+    "helmet_design": "Papaya and blue, clean modern design",
+    "animation_notes": {
+      "posture": "relaxed, slouchy gamer energy",
+      "expression_default": "amused, slight smirk",
+      "comedy_exaggeration": "constantly checking phone for memes mid-interview"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["max_verstappen", "oscar_piastri"],
+    "friendly_with": ["carlos_sainz", "alex_albon", "george_russell"],
+    "teammate_dynamic": "Oscar is beating him and it's awkward",
+    "team_principal": "andrea stella - supportive father figure"
+  },
+  
+  "meme_status": "Milk Boy, Last Lap Lando, Twitch Streamer Who Races",
+  
+  "storyline_hooks": [
+    "Can he finally beat Max (probably not)?",
+    "Oscar quietly outperforming him",
+    "The pressure of being championship hope vs fun streamer guy",
+    "Golf addiction affecting race prep"
+  ],
+  
+  "example_dialogue": {
+    "after_close_finish": "Yeah that was... that was jokes. Nearly had him. Ah well, GG.",
+    "about_max": "Max? Yeah he's quick isn't he. Bit too quick actually. Could he slow down please?",
+    "during_stream": "Right chat, I'm gonna send it... okay that was not the send.",
+    "about_oscar": "Oscar's great. Really fast. Too fast maybe. Who hired this guy?"
+  }
+}

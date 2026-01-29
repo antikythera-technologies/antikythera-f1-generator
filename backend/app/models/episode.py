@@ -12,9 +12,12 @@ from app.database import Base
 
 
 class EpisodeType(str, enum.Enum):
-    """Type of episode relative to race."""
-    PRE_RACE = "pre-race"
-    POST_RACE = "post-race"
+    """Type of episode relative to race weekend session."""
+    PRE_RACE = "pre-race"      # Legacy: kept for backwards compatibility
+    POST_RACE = "post-race"    # Main race recap (Sunday)
+    POST_FP2 = "post-fp2"      # Friday practice recap
+    POST_SPRINT = "post-sprint"  # Sprint race recap (Saturday)
+    WEEKLY_RECAP = "weekly-recap"  # Off-week news compilation
 
 
 class EpisodeStatus(str, enum.Enum):

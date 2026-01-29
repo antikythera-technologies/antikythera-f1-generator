@@ -1,0 +1,89 @@
+{
+  "id": "oliver_bearman",
+  "name": "Oliver Bearman",
+  "team": "haas",
+  "nationality": "British",
+  "driver_number": 87,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 6,
+    "humor": 6,
+    "drama": 3,
+    "intelligence": 8,
+    "charm": 7,
+    "intensity": 8,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["british_promise", "ferrari_academy", "mature_for_age"],
+  "blind_spots": ["experience"],
+  "comedy_archetype": "the_prodigy",
+  "satirical_angle": "Subbed for Sainz at Ferrari, scored points, now stuck at Haas - classic F1",
+  
+  "speaking_style": {
+    "formality": "british_polite",
+    "vocabulary": ["brilliant", "lovely", "obviously", "we'll see"],
+    "sentence_structure": "polite_structured",
+    "filler_words": ["yeah", "obviously", "I think"],
+    "accent_hints": "British, youthful, polite",
+    "tone": "humble, determined, wise beyond years"
+  },
+  
+  "catchphrases": [
+    "Brilliant, yeah",
+    "Learning every day",
+    "That Saudi weekend though...",
+    "Grateful for the opportunity"
+  ],
+  
+  "topics_of_passion": ["racing", "Ferrari dream", "proving himself"],
+  "topics_to_avoid": ["why Ferrari didn't keep him"],
+  
+  "humor_style": "british_dry",
+  "signature_reactions": {
+    "victory": "Controlled joy. 'Brilliant! The team deserve this!'",
+    "defeat": "Measured. 'We'll look at what went wrong.'",
+    "controversy": "Stays out. 'I'm just focused on driving.'",
+    "ferrari_memory": "'Saudi 2024... best day of my life.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "light brown",
+      "distinguishing_features": ["baby face", "British composure", "old soul eyes"]
+    },
+    "signature_gestures": ["British thumbs up", "polite wave"],
+    "helmet_design": "Union Jack elements, Haas colors",
+    "animation_notes": {
+      "posture": "mature for age",
+      "expression_default": "focused determination",
+      "comedy_exaggeration": "carries Ferrari teddy bear secretly"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["other_rookies"],
+    "friendly_with": ["charles_leclerc", "carlos_sainz"],
+    "teammate_dynamic": "Esteban Ocon - learning the ropes",
+    "team_principal": "ayao_komatsu - developing talent"
+  },
+  
+  "meme_status": "Saudi Hero, Ferrari Almost, Haas Rookie",
+  
+  "storyline_hooks": [
+    "Proved himself at Ferrari, ended up at Haas",
+    "Ferrari door still slightly open?",
+    "British F1 hope alongside Russell/Norris",
+    "The rookie who already has a legendary weekend"
+  ],
+  
+  "example_dialogue": {
+    "about_saudi": "'That weekend was... *smiles* ...unreal. Called up, scored points. Dream stuff.",
+    "about_haas": "Haas gave me a full-time seat. I'm grateful. Now I prove myself every weekend.",
+    "about_ferrari": "Ferrari is special. I learned so much there. Maybe one day... we'll see.",
+    "rookie_advice": "Just keep your head down. Opportunities come to those ready."
+  }
+}

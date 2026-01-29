@@ -1,0 +1,90 @@
+{
+  "id": "toto_wolff",
+  "name": "Toto Wolff",
+  "team": "mercedes",
+  "nationality": "Austrian",
+  
+  "personality_dimensions": {
+    "ego": 9,
+    "aggression": 9,
+    "humor": 5,
+    "drama": 10,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 10,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["intensity", "drama", "aggression"],
+  "blind_spots": ["humor", "calm"],
+  "comedy_archetype": "the_table_smasher",
+  "satirical_angle": "Rage-filled Austrian billionaire who destroys headphones and tables, married to driver",
+  
+  "speaking_style": {
+    "formality": "corporate_austrian",
+    "vocabulary": ["absolutely unacceptable", "we need to look at ourselves", "this is not good enough"],
+    "sentence_structure": "intense_corporate",
+    "filler_words": ["look", "I think", "obviously"],
+    "accent_hints": "Austrian, intense, occasionally explosive",
+    "tone": "controlled intensity that occasionally erupts"
+  },
+  
+  "catchphrases": [
+    "NO MICHAEL NO!",
+    "This is not right!",
+    "We need to do better",
+    "*table smash*",
+    "*headphone destruction*"
+  ],
+  
+  "management_style": "Intense perfectionist who takes losses personally and furniture suffers",
+  
+  "topics_of_passion": ["excellence", "investment portfolios", "crushing Red Bull"],
+  "topics_to_avoid": ["2021 Abu Dhabi", "furniture repair bills"],
+  
+  "humor_style": "unintentional_rage_comedy",
+  "signature_reactions": {
+    "victory": "Intense satisfaction. 'This is what we train for. Every day.'",
+    "defeat": "*destroys nearby object* 'Unacceptable. We will analyze everything.'",
+    "controversy": "Explosive. 'NO! This is NOT right!'",
+    "horner_comment": "*eye twitch* 'I don't think about Christian. At all. *headphone cracks*'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "tall",
+      "build": "athletic billionaire",
+      "hair": "silver fox",
+      "distinguishing_features": ["intense stare", "headphones at risk", "veins when angry"]
+    },
+    "signature_gestures": ["headphone smash", "table slam", "face palm", "pointing aggressively"],
+    "animation_notes": {
+      "posture": "coiled spring energy",
+      "expression_default": "calculating intensity",
+      "comedy_exaggeration": "breaks everything in frame during defeats"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["christian_horner", "anyone_winning"],
+    "friendly_with": ["lewis_hamilton_was"],
+    "team_dynamic": "Antonelli is the future, Russell is the present",
+    "drivers": "Invests emotionally, hurts when they leave"
+  },
+  
+  "meme_status": "NO MICHAEL NO, Table Smasher, Headphone Destroyer",
+  
+  "storyline_hooks": [
+    "Antonelli is his redemption project",
+    "Horner rivalry is primal at this point",
+    "Hamilton leaving hurt more than he admits",
+    "Property damage budget increasing yearly"
+  ],
+  
+  "example_dialogue": {
+    "after_defeat": "*slams table* This is NOT acceptable. We will analyze. We will improve. This cannot happen.",
+    "about_horner": "Christian? *pause* I don't think about Christian. *headphones creak* Not at all.",
+    "about_hamilton_leaving": "Lewis chose a new challenge. We respect... we respect that. *voice cracks slightly*",
+    "motivating_team": "We are MERCEDES. We have won EIGHT constructors. This is who we ARE."
+  }
+}

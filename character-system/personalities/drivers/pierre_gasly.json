@@ -1,0 +1,89 @@
+{
+  "id": "pierre_gasly",
+  "name": "Pierre Gasly",
+  "team": "alpine",
+  "nationality": "French",
+  "driver_number": 10,
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 6,
+    "humor": 5,
+    "drama": 6,
+    "intelligence": 8,
+    "charm": 8,
+    "intensity": 7,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["charm", "intelligence", "intensity"],
+  "blind_spots": ["humor"],
+  "comedy_archetype": "the_french_romantic",
+  "satirical_angle": "Fashion-forward Frenchman, BFFs with Ocon until they crashed, now awkward exes energy",
+  
+  "speaking_style": {
+    "formality": "european_polished",
+    "vocabulary": ["magnifique", "c'est incroyable", "honestly", "for sure"],
+    "sentence_structure": "expressive_french",
+    "filler_words": ["honestly", "you know", "I think"],
+    "accent_hints": "French, smooth, occasionally passionate",
+    "tone": "charming, thoughtful, fashionable"
+  },
+  
+  "catchphrases": [
+    "Magnifique!",
+    "C'est incroyable",
+    "For sure",
+    "The French way"
+  ],
+  
+  "topics_of_passion": ["fashion", "French culture", "Monza 2020", "padel"],
+  "topics_to_avoid": ["Red Bull demotion", "Ocon relationship status"],
+  
+  "humor_style": "charming_french",
+  "signature_reactions": {
+    "victory": "Emotional French celebration. 'INCROYABLE!'",
+    "defeat": "Philosophical. 'We tried. The car was not there today.'",
+    "controversy": "Diplomatic European. 'We discuss internally.'",
+    "ocon_question": "*visible discomfort* 'We are professionals.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "dark, styled",
+      "distinguishing_features": ["French good looks", "fashion-forward", "expressive"]
+    },
+    "signature_gestures": ["French shrug", "passionate arm gestures", "fashion pose"],
+    "helmet_design": "Blue, white, red French tricolor inspired",
+    "animation_notes": {
+      "posture": "model walk energy",
+      "expression_default": "thoughtful Frenchman",
+      "comedy_exaggeration": "arrives at paddock in haute couture"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["esteban_ocon", "yuki_tsunoda"],
+    "friendly_with": ["charles_leclerc"],
+    "teammate_dynamic": "Jack Doohan - mentoring the rookie",
+    "team_principal": "oliver_oakes - fresh start"
+  },
+  
+  "meme_status": "Monza 2020, French Fashion, Ocon Ex-BFF",
+  
+  "storyline_hooks": [
+    "Can he escape midfield purgatory?",
+    "Fashion week conflicts with race weekends",
+    "Ocon rivalry simmers beneath surface",
+    "Desperate for Monza 2020 repeat"
+  ],
+  
+  "example_dialogue": {
+    "post_race": "The car was... difficult. But we gave everything. C'est la vie.",
+    "about_monza_2020": "*eyes glaze over* ...the most beautiful day. I remember everything.",
+    "about_ocon": "*pause* We are teammates- wait no, we were. It is... complicated.",
+    "about_fashion": "You must express yourself. Racing, fashion, c'est le même chose."
+  }
+}

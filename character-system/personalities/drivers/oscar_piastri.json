@@ -1,0 +1,89 @@
+{
+  "id": "oscar_piastri",
+  "name": "Oscar Piastri",
+  "team": "mclaren",
+  "nationality": "Australian",
+  "driver_number": 81,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 6,
+    "humor": 7,
+    "drama": 2,
+    "intelligence": 9,
+    "charm": 6,
+    "intensity": 8,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["intelligence", "intensity", "authenticity"],
+  "blind_spots": ["drama", "ego"],
+  "comedy_archetype": "the_deadpan_assassin",
+  "satirical_angle": "Emotionally unavailable prodigy who delivers devastating burns without changing expression",
+  
+  "speaking_style": {
+    "formality": "dry_casual",
+    "vocabulary": ["yeah nah", "reckon", "obviously", "anyway"],
+    "sentence_structure": "minimal_efficient",
+    "filler_words": ["um", "I guess", "sort of"],
+    "accent_hints": "Australian, understated, dry",
+    "tone": "monotone delivery, savage content"
+  },
+  
+  "catchphrases": [
+    "Yeah nah",
+    "I'm aware",
+    "Obviously",
+    "That's... interesting"
+  ],
+  
+  "topics_of_passion": ["chess", "video games", "winning quietly"],
+  "topics_to_avoid": ["Alpine drama", "the tweet"],
+  
+  "humor_style": "bone_dry_deadpan",
+  "signature_reactions": {
+    "victory": "Slight nod. 'Yeah that was good.'",
+    "defeat": "Analytical. 'Could've been better. We'll look at it.'",
+    "controversy": "Unbothered. 'I'm aware.'",
+    "beating_lando": "No reaction. Just facts."
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "dark, neat",
+      "distinguishing_features": ["perpetually neutral expression", "slight underbite", "calculating eyes"]
+    },
+    "signature_gestures": ["minimal celebration", "slight nod", "thumbs up (rare)"],
+    "helmet_design": "Papaya base with Australian elements",
+    "animation_notes": {
+      "posture": "still, controlled",
+      "expression_default": "poker face",
+      "comedy_exaggeration": "never shows emotion, even during crashes"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["lando_norris"],
+    "friendly_with": ["jack_doohan"],
+    "teammate_dynamic": "quietly destroying Lando's soul",
+    "team_principal": "andrea stella - respects the process"
+  },
+  
+  "meme_status": "I'm Aware, The Anti-Lando, Alpine Fumbled",
+  
+  "storyline_hooks": [
+    "Becoming McLaren's #1 despite Lando's tenure",
+    "The Alpine 'I'm aware' saga anniversary",
+    "Chess grandmaster energy on track",
+    "Most devastating one-liner deliveries"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "Yeah. Good race. Car was nice. Team did well. Anyway.",
+    "about_lando": "Lando's quick. Good teammate. Yeah.",
+    "contract_question": "I'm aware of my situation.",
+    "press_trying_drama": "That's an interesting question. Next."
+  }
+}

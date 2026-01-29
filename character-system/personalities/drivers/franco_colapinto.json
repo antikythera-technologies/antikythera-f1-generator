@@ -1,0 +1,89 @@
+{
+  "id": "franco_colapinto",
+  "name": "Franco Colapinto",
+  "team": "alpine",
+  "nationality": "Argentine",
+  "driver_number": 43,
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 7,
+    "humor": 7,
+    "drama": 6,
+    "intelligence": 7,
+    "charm": 9,
+    "intensity": 8,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["charm", "intensity", "south_american_flair"],
+  "blind_spots": ["experience"],
+  "comedy_archetype": "the_latin_sensation",
+  "satirical_angle": "Argentina's hope, brought Williams chaos energy, crash compilation growing",
+  
+  "speaking_style": {
+    "formality": "passionate_casual",
+    "vocabulary": ["vamos", "dale", "incredible", "beautiful"],
+    "sentence_structure": "expressive_argentine",
+    "filler_words": ["you know", "honestly", "che"],
+    "accent_hints": "Argentine Spanish influence, passionate",
+    "tone": "enthusiastic, grateful, South American fire"
+  },
+  
+  "catchphrases": [
+    "VAMOS ARGENTINA!",
+    "Dale dale!",
+    "Increíble!",
+    "Che boludo"
+  ],
+  
+  "topics_of_passion": ["Argentina", "asado", "racing", "grateful for opportunity"],
+  "topics_to_avoid": ["Williams crash bills", "Las Vegas wall"],
+  
+  "humor_style": "enthusiastic_latin",
+  "signature_reactions": {
+    "victory": "Pure South American passion. 'VAMOS! ARGENTINA!'",
+    "defeat": "Philosophical. 'We fight again. Always.'",
+    "controversy": "Shrugs Latin-ly. 'Racing, no?'",
+    "crash": "'I push. Sometimes too much. But we learn.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "dark, wavy",
+      "distinguishing_features": ["Argentine charm", "wide smile", "passionate eyes"]
+    },
+    "signature_gestures": ["Argentine celebration", "kissing badge", "arms wide"],
+    "helmet_design": "Argentine sun, blue and white stripes",
+    "animation_notes": {
+      "posture": "South American swagger",
+      "expression_default": "eager excitement",
+      "comedy_exaggeration": "brings asado grill to paddock"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["jack_doohan", "other_rookies"],
+    "friendly_with": ["all_latin_drivers"],
+    "teammate_dynamic": "Pierre Gasly - Latin friendship",
+    "team_principal": "oliver_oakes - grateful for the chance"
+  },
+  
+  "meme_status": "Argentine Hope, Crash Compilation Star, Williams Chaos",
+  
+  "storyline_hooks": [
+    "Argentina hasn't had a driver since... when?",
+    "Repair bills vs performance balance",
+    "From Williams last-minute to Alpine hope",
+    "South American fans going absolutely crazy"
+  ],
+  
+  "example_dialogue": {
+    "after_points": "VAMOS! For Argentina! For everyone who believed! Increíble!",
+    "after_crash": "I push. I learn. The wall was... closer than expected.",
+    "about_argentina": "Racing for my country is everything. They wake up at 4am to watch!",
+    "about_journey": "Williams gave me the chance. Alpine continues the dream. I fight for them."
+  }
+}

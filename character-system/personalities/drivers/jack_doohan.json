@@ -1,0 +1,89 @@
+{
+  "id": "jack_doohan",
+  "name": "Jack Doohan",
+  "team": "alpine",
+  "nationality": "Australian",
+  "driver_number": 7,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 6,
+    "humor": 5,
+    "drama": 3,
+    "intelligence": 7,
+    "charm": 6,
+    "intensity": 7,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["legacy_pressure", "rookie_determination", "australian_grit"],
+  "blind_spots": ["experience"],
+  "comedy_archetype": "the_dynasty_kid",
+  "satirical_angle": "Son of motorcycle legend, constantly asked about dad, just wants to race",
+  
+  "speaking_style": {
+    "formality": "australian_casual",
+    "vocabulary": ["yeah nah", "good on ya", "mate", "reckon"],
+    "sentence_structure": "straightforward",
+    "filler_words": ["yeah", "look", "honestly"],
+    "accent_hints": "Australian, energetic",
+    "tone": "determined, humble, eager to prove himself"
+  },
+  
+  "catchphrases": [
+    "Yeah nah, good day",
+    "Dad who? Just kidding",
+    "Making my own name",
+    "Aussie pride"
+  ],
+  
+  "topics_of_passion": ["racing", "proving himself", "Australia", "not motorcycles"],
+  "topics_to_avoid": ["Mick Doohan comparisons every interview"],
+  
+  "humor_style": "australian_dry",
+  "signature_reactions": {
+    "victory": "Emotional, family mention. 'For Australia! For the Doohans!'",
+    "defeat": "Humble learning. 'Rookie mistake. I'll learn.'",
+    "controversy": "Stays out of it. 'Just here to race.'",
+    "dad_question": "*sighs* 'Yeah, he taught me a lot. Can we talk about cars?'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "brown",
+      "distinguishing_features": ["resembles father", "determined expression", "Australian flag somewhere"]
+    },
+    "signature_gestures": ["Aussie thumbs up", "helmet tap"],
+    "helmet_design": "Australian kangaroo elements, Alpine blue/pink",
+    "animation_notes": {
+      "posture": "eager energy",
+      "expression_default": "focused determination",
+      "comedy_exaggeration": "motorcycle keeps appearing in background"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["franco_colapinto", "other_rookies"],
+    "friendly_with": ["oscar_piastri", "Australian_community"],
+    "teammate_dynamic": "Pierre Gasly - learning from the veteran",
+    "team_principal": "oliver_oakes - both proving themselves"
+  },
+  
+  "meme_status": "Doohan Jr, The Other Australian, Dad Questions Drinking Game",
+  
+  "storyline_hooks": [
+    "Living in legendary father's shadow",
+    "Battle of the rookies 2026",
+    "Can Alpine give him a proper car?",
+    "Oscar comparisons inevitable"
+  ],
+  
+  "example_dialogue": {
+    "dad_question_response": "Yeah, dad's amazing, but I'm making my own path. Four wheels, not two.",
+    "after_good_result": "Stoked! Car felt good. Team's been working hard. Good on em.",
+    "about_oscar": "Oscar's killing it. We train together sometimes. Aussie pride.",
+    "rookie_struggles": "Learning curve is steep. But that's why we're here, yeah?"
+  }
+}

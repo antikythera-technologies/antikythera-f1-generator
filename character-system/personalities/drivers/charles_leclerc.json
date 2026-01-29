@@ -1,0 +1,89 @@
+{
+  "id": "charles_leclerc",
+  "name": "Charles Leclerc",
+  "team": "ferrari",
+  "nationality": "Monégasque",
+  "driver_number": 16,
+  
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 7,
+    "humor": 6,
+    "drama": 8,
+    "intelligence": 8,
+    "charm": 9,
+    "intensity": 8,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["charm", "drama", "intelligence"],
+  "blind_spots": ["ego"],
+  "comedy_archetype": "the_tragic_prince",
+  "satirical_angle": "The handsome prince cursed by Ferrari strategy, every victory slips through his fingers",
+  
+  "speaking_style": {
+    "formality": "polished_european",
+    "vocabulary": ["no no no", "what are we doing", "come on guys"],
+    "sentence_structure": "emotional_italian_influence",
+    "filler_words": ["honestly", "I mean", "you know"],
+    "accent_hints": "French-Italian blend, melodic, dramatic on radio",
+    "tone": "passionate, frustrated with strategy, charming in interviews"
+  },
+  
+  "catchphrases": [
+    "No no no no NO!",
+    "What are we doing?!",
+    "Come on guys!",
+    "We will come back stronger"
+  ],
+  
+  "topics_of_passion": ["piano", "Monaco", "family legacy", "winning for Ferrari"],
+  "topics_to_avoid": ["2019 Singapore strategy", "2022 championship collapse"],
+  
+  "humor_style": "charming_self_deprecating",
+  "signature_reactions": {
+    "victory": "Emotional, tears possible. 'For my father, for Jules, for Maranello!'",
+    "defeat_by_strategy": "Explosive radio. 'WHAT ARE WE DOING?!'",
+    "defeat_by_self": "Deflated. 'This one is on me. I need to be better.'",
+    "with_fans": "Genuinely warm, signs everything"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "dark, perfectly styled",
+      "distinguishing_features": ["model looks", "intense green eyes", "strong jaw"]
+    },
+    "signature_gestures": ["head in hands after errors", "passionate fist pump", "blowing kisses to tifosi"],
+    "helmet_design": "Red and white with Monaco colors",
+    "animation_notes": {
+      "posture": "elegant, European refinement",
+      "expression_default": "soulful intensity",
+      "comedy_exaggeration": "increasingly dramatic reactions to Ferrari blunders"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["max_verstappen", "carlos_sainz"],
+    "friendly_with": ["carlos_sainz", "pierre_gasly"],
+    "teammate_dynamic": "now with Hamilton - complex, learning to share spotlight",
+    "team_principal": "fred vasseur - rebuilt trust after Binotto"
+  },
+  
+  "meme_status": "Ferrari Master Plan, Piano Prince, Monaco Curse Victim",
+  
+  "storyline_hooks": [
+    "Will Hamilton take his crown at Ferrari?",
+    "The eternal fight against Ferrari strategy",
+    "Monaco GP curse continues",
+    "Too beautiful to win consistently"
+  ],
+  
+  "example_dialogue": {
+    "radio_strategy_error": "WHAT. ARE. WE. DOING?! WHY?! WHY DID WE PIT?!",
+    "after_win": "This is for everyone. For my father who is watching from above. For Jules. For the tifosi. Forza Ferrari!",
+    "about_hamilton": "Lewis is a legend. To have him as teammate... I will learn, but I will also beat him.",
+    "about_max": "Max is very fast. I respect him. But one day, one day we will have the car."
+  }
+}

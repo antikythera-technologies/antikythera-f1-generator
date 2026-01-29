@@ -1,0 +1,89 @@
+{
+  "id": "liam_lawson",
+  "name": "Liam Lawson",
+  "team": "red_bull_racing",
+  "nationality": "New Zealand",
+  "driver_number": 30,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 7,
+    "humor": 5,
+    "drama": 4,
+    "intelligence": 8,
+    "charm": 6,
+    "intensity": 8,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["intensity", "intelligence", "authenticity"],
+  "blind_spots": ["drama"],
+  "comedy_archetype": "the_quiet_assassin",
+  "satirical_angle": "New Zealand nice guy who gives the middle finger to F1 veterans",
+  
+  "speaking_style": {
+    "formality": "kiwi_casual",
+    "vocabulary": ["yeah nah", "sweet as", "good on ya", "chur"],
+    "sentence_structure": "understated",
+    "filler_words": ["yeah", "look", "I mean"],
+    "accent_hints": "New Zealand, laid back but sharp",
+    "tone": "calm surface, competitive fire underneath"
+  },
+  
+  "catchphrases": [
+    "Yeah nah, sweet as",
+    "Good on ya",
+    "*middle finger to camera*",
+    "Chur bro"
+  ],
+  
+  "topics_of_passion": ["racing", "NZ rugby", "proving doubters wrong"],
+  "topics_to_avoid": ["reserve driver years", "the Perez situation"],
+  
+  "humor_style": "dry_kiwi",
+  "signature_reactions": {
+    "victory": "Humble but satisfied. 'Yeah, good day. Team did well.'",
+    "defeat": "Analytical. 'We'll look at it. Room to improve.'",
+    "controversy": "Middle finger. No words needed.",
+    "Fernando_mind_games": "Unfazed. 'He's quick. I'm quick too.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic",
+      "hair": "brown, clean cut",
+      "distinguishing_features": ["determined look", "all-blacks energy", "deceptively calm"]
+    },
+    "signature_gestures": ["the famous middle finger", "subtle nod", "kiwi thumbs up"],
+    "helmet_design": "Silver fern elements, Red Bull colors",
+    "animation_notes": {
+      "posture": "ready to strike",
+      "expression_default": "unassuming focus",
+      "comedy_exaggeration": "casually flips off legends during overtakes"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["fernando_alonso", "any_veteran_who_disrespects"],
+    "friendly_with": ["yuki_tsunoda"],
+    "teammate_dynamic": "Yuki is chaotic, Liam is calm - balance",
+    "team_principal": "christian horner - the chosen one"
+  },
+  
+  "meme_status": "The Bird, Kiwi Killer, Reserve No More",
+  
+  "storyline_hooks": [
+    "Replaced Perez, must prove it wasn't a mistake",
+    "Will he flip off Max too if needed?",
+    "The anti-drama Kiwi in chaos central",
+    "Rising star energy"
+  ],
+  
+  "example_dialogue": {
+    "after_overtake": "Yeah, that was good. Saw the gap, sent it. Sweet as.",
+    "about_finger_incident": "Look, he gave me no room. Sometimes you communicate. *shrugs*",
+    "about_yuki": "Yuki's mental on the radio. I just drive. Works for both of us.",
+    "about_max": "Max is the benchmark. I'm here to learn... and win."
+  }
+}

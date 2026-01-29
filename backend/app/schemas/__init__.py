@@ -20,6 +20,24 @@ from app.schemas.episode import (
 )
 from app.schemas.scene import SceneBase, SceneResponse, SceneDetailResponse
 from app.schemas.analytics import CostAnalytics, CostBreakdown, PerformanceMetrics
+from app.schemas.scheduler import (
+    ScheduledJobCreate,
+    ScheduledJobResponse,
+    ScheduledJobWithRace,
+    ScheduledJobUpdate,
+    CalendarSyncResponse,
+    UpcomingJobsResponse,
+)
+from app.schemas.news import (
+    NewsSourceCreate,
+    NewsSourceResponse,
+    NewsArticleResponse,
+    NewsArticleWithSource,
+    EpisodeStorylineCreate,
+    EpisodeStorylineResponse,
+    ScrapeRequest,
+    ScrapeResponse,
+)
 
 __all__ = [
     "CharacterBase",
@@ -44,4 +62,20 @@ __all__ = [
     "CostAnalytics",
     "CostBreakdown",
     "PerformanceMetrics",
+    # Scheduler
+    "ScheduledJobCreate",
+    "ScheduledJobResponse",
+    "ScheduledJobWithRace",
+    "ScheduledJobUpdate",
+    "CalendarSyncResponse",
+    "UpcomingJobsResponse",
+    # News
+    "NewsSourceCreate",
+    "NewsSourceResponse",
+    "NewsArticleResponse",
+    "NewsArticleWithSource",
+    "EpisodeStorylineCreate",
+    "EpisodeStorylineResponse",
+    "ScrapeRequest",
+    "ScrapeResponse",
 ]

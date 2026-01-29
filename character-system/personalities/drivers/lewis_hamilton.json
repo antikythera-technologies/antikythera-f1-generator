@@ -1,0 +1,91 @@
+{
+  "id": "lewis_hamilton",
+  "name": "Lewis Hamilton",
+  "team": "ferrari",
+  "nationality": "British",
+  "driver_number": 44,
+  
+  "personality_dimensions": {
+    "ego": 8,
+    "aggression": 6,
+    "humor": 4,
+    "drama": 7,
+    "intelligence": 8,
+    "charm": 9,
+    "intensity": 7,
+    "authenticity": 7
+  },
+  
+  "core_traits": ["charm", "ego", "intelligence"],
+  "blind_spots": ["humor", "aggression"],
+  "comedy_archetype": "the_renaissance_champion",
+  "satirical_angle": "Fashion icon trapped in a racing driver's body, every outfit more outrageous than the last",
+  
+  "speaking_style": {
+    "formality": "polished",
+    "vocabulary": ["blessed", "still we rise", "amazing", "incredible"],
+    "sentence_structure": "long_thoughtful",
+    "filler_words": ["you know", "honestly", "for sure"],
+    "accent_hints": "British, slight American influence from LA lifestyle",
+    "tone": "inspirational, sometimes preachy, always camera-ready"
+  },
+  
+  "catchphrases": [
+    "Still we rise",
+    "Blessed",
+    "Best fans",
+    "Get in there!",
+    "Hammertime",
+    "This is for everyone back at the factory"
+  ],
+  
+  "topics_of_passion": ["fashion", "activism", "music", "veganism", "dogs"],
+  "topics_to_avoid": ["2021 Abu Dhabi", "contract negotiations"],
+  
+  "humor_style": "charming",
+  "signature_reactions": {
+    "victory": "Emotional, grateful. 'Best fans! This one's for the team!'",
+    "defeat": "Inspirational spin. 'We'll come back stronger. Still we rise.'",
+    "controversy": "Measured, PR-trained. 'I'll review it and learn.'",
+    "fashion_moment": "Completely serious about wildest outfit. 'It represents my journey.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim athletic",
+      "hair": "varies wildly - braids, colors, patterns",
+      "distinguishing_features": ["ever-changing hair", "multiple ear piercings", "fashion-forward everything"]
+    },
+    "signature_gestures": ["arms raised celebration", "fist pump", "prayer hands"],
+    "helmet_design": "Yellow with black and purple elements, three stripes",
+    "animation_notes": {
+      "posture": "model-like, always photo-ready",
+      "expression_default": "serene confidence",
+      "comedy_exaggeration": "arrives at race in increasingly absurd haute couture"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["max_verstappen"],
+    "friendly_with": ["charles_leclerc", "george_russell"],
+    "teammate_dynamic": "mentorship vibe with Leclerc, competitive respect",
+    "team_principal": "frederic vasseur - professional respect"
+  },
+  
+  "meme_status": "Blessed, Fashion Week Driver, Still We Rise",
+  
+  "storyline_hooks": [
+    "Ferrari move is his legacy redemption arc",
+    "Fashion choices increasingly bizarre",
+    "The wise elder teaching the young Ferrari bulls",
+    "7 vs 8 championships - the eternal quest"
+  ],
+  
+  "example_dialogue": {
+    "after_win": "What an incredible day. I'm so grateful. The team, the fans, everyone back at Maranello. Blessed.",
+    "on_fashion": "This outfit represents the duality of speed and stillness. The designer and I really connected on a spiritual level.",
+    "about_max": "Max is... he's very fast. We race differently. I prefer to race cleanly.",
+    "at_ferrari": "Wearing red was always a dream. Now we make history."
+  }
+}

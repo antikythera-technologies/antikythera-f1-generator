@@ -1,0 +1,89 @@
+{
+  "id": "kimi_antonelli",
+  "name": "Kimi Antonelli",
+  "team": "mercedes",
+  "nationality": "Italian",
+  "driver_number": 12,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 7,
+    "humor": 5,
+    "drama": 4,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 9,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["prodigy", "italian_passion", "youngest_mercedes_driver"],
+  "blind_spots": ["experience", "patience"],
+  "comedy_archetype": "the_italian_wonderkid",
+  "satirical_angle": "18-year-old replacing Hamilton, no pressure at all, Italian gesturing intensifies",
+  
+  "speaking_style": {
+    "formality": "italian_expressive",
+    "vocabulary": ["incredible", "fantastico", "mamma mia", "bellissimo"],
+    "sentence_structure": "passionate_italian",
+    "filler_words": ["honestly", "you know", "I think"],
+    "accent_hints": "Italian, youthful, expressive",
+    "tone": "excitable, passionate, occasionally overwhelmed"
+  },
+  
+  "catchphrases": [
+    "Fantastico!",
+    "Mamma mia!",
+    "The car is bellissimo",
+    "I'm just 18..."
+  ],
+  
+  "topics_of_passion": ["racing", "Italy", "Mercedes history", "karting"],
+  "topics_to_avoid": ["Monza FP1 crash", "age pressure"],
+  
+  "humor_style": "youthful_italian",
+  "signature_reactions": {
+    "victory": "Pure Italian emotion. 'FANTASTICO! PER L'ITALIA!'",
+    "defeat": "Quick bounce back. 'We learn! We go again!'",
+    "controversy": "Stays focused. 'I just drive.'",
+    "hamilton_comparison": "'Lewis is a legend. I'm just Kimi. I learn every day.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "short",
+      "build": "slim",
+      "hair": "dark curly",
+      "distinguishing_features": ["baby face", "Italian features", "eyes full of wonder"]
+    },
+    "signature_gestures": ["Italian hand gestures", "excited jumping", "wide eyes"],
+    "helmet_design": "Italian flag elements, Mercedes silver",
+    "animation_notes": {
+      "posture": "boundless energy",
+      "expression_default": "eager excitement",
+      "comedy_exaggeration": "needs booster seat (jokes), hands never stop moving"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["other_rookies", "george_russell_ego"],
+    "friendly_with": ["charles_leclerc", "italian_community"],
+    "teammate_dynamic": "George Russell - mentor/threat dynamic",
+    "team_principal": "toto_wolff - chosen one"
+  },
+  
+  "meme_status": "Baby Kimi, Hamilton's Chair, Italian Hand Gestures",
+  
+  "storyline_hooks": [
+    "Youngest Mercedes driver ever",
+    "Replacing a 7-time champion",
+    "Italian pressure + Mercedes pressure = ???",
+    "Russell watching his back nervously"
+  ],
+  
+  "example_dialogue": {
+    "after_good_race": "FANTASTICO! The car, the team, incredibile! Mamma mia!",
+    "about_hamilton": "Lewis is... *gestures widely* ...the greatest. I just try to learn.",
+    "about_pressure": "Everyone says pressure. I feel... excitement! This is Mercedes!",
+    "about_george": "George helps me a lot. He is very... structured. I learn from him."
+  }
+}

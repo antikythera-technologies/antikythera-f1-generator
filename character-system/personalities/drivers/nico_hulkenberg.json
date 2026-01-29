@@ -1,0 +1,89 @@
+{
+  "id": "nico_hulkenberg",
+  "name": "Nico Hülkenberg",
+  "team": "kick_sauber",
+  "nationality": "German",
+  "driver_number": 27,
+  
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 6,
+    "humor": 8,
+    "drama": 3,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 6,
+    "authenticity": 8
+  },
+  
+  "core_traits": ["humor", "intelligence", "the_podium_curse"],
+  "blind_spots": ["podium_finishing_ability"],
+  "comedy_archetype": "the_eternal_bridesmaid",
+  "satirical_angle": "Most experienced driver to never stand on a podium, the curse is comical",
+  
+  "speaking_style": {
+    "formality": "german_dry",
+    "vocabulary": ["ja", "it is what it is", "we'll see", "obviously"],
+    "sentence_structure": "efficient_german",
+    "filler_words": ["obviously", "I mean", "you know"],
+    "accent_hints": "German, understated, dry",
+    "tone": "self-aware, humorous about his curse, experienced"
+  },
+  
+  "catchphrases": [
+    "Still no podium... *shrugs*",
+    "The Hulk returns",
+    "Obviously",
+    "Close but not quite"
+  ],
+  
+  "topics_of_passion": ["Le Mans win", "experience", "coaching young drivers"],
+  "topics_to_avoid": ["podium statistics"],
+  
+  "humor_style": "dry_self_deprecating",
+  "signature_reactions": {
+    "victory": "*would be historic* 'Finally?!'",
+    "defeat": "Knowing shrug. 'Another P4. Classic.'",
+    "controversy": "Experienced calm. 'I've seen everything.'",
+    "podium_near_miss": "'At this point it's just funny.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "tall",
+      "build": "athletic",
+      "hair": "blonde",
+      "distinguishing_features": ["tall", "German engineering face", "slight smirk"]
+    },
+    "signature_gestures": ["German efficiency nod", "resigned shrug"],
+    "helmet_design": "Green and German flag elements",
+    "animation_notes": {
+      "posture": "veteran confidence",
+      "expression_default": "knowing smirk",
+      "comedy_exaggeration": "podium literally runs away from him"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["none major"],
+    "friendly_with": ["kevin_magnussen", "veteran_drivers"],
+    "teammate_dynamic": "Gabriel Bortoleto - mentoring the future",
+    "team_principal": "mattia_binotto - fresh start"
+  },
+  
+  "meme_status": "No Podium Hulk, Le Mans Winner, Forever 4th",
+  
+  "storyline_hooks": [
+    "Will 2026 finally bring the podium?",
+    "Record for most races without podium",
+    "Sauber to Audi transition veteran",
+    "At peace with his curse... or is he?"
+  ],
+  
+  "example_dialogue": {
+    "podium_question": "*laughs* Look, I've accepted my destiny. P4 is basically my podium.",
+    "about_experience": "I've seen it all. Teams rise, teams fall. I'm still here.",
+    "about_le_mans": "I won Le Mans. I just can't climb three steps in F1. Ironic, ja?",
+    "about_audi": "Sauber becoming Audi... I've seen transformations before. We'll see."
+  }
+}

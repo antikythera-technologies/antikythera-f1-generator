@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, Episode, DashboardStats } from "@/lib/api";
-import { formatCurrency } from "@/lib/utils";
+import { api, Episode, DashboardStats, ScheduledJob } from "@/lib/api";
+import { formatCurrency, formatDateTime, formatRelativeTime } from "@/lib/utils";
 import { Header } from "@/components/layout/Header";
-import { Button, StatsWidget, LoadingPage } from "@/components/ui";
+import { Button, StatsWidget, LoadingPage, StatusBadge } from "@/components/ui";
 import { EpisodeCard } from "@/components/episodes/EpisodeCard";
 
 // Mock stats if API doesn't provide them
@@ -19,18 +19,32 @@ const defaultStats: DashboardStats = {
   total_cost_usd: 0,
 };
 
+const triggerTypeLabels: Record<string, string> = {
+  "post-fp2": "Post FP2",
+  "post-sprint": "Post Sprint",
+  "post-race": "Post Race",
+  "weekly-recap": "Weekly Recap",
+  "manual": "Manual",
+};
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>(defaultStats);
   const [recentEpisodes, setRecentEpisodes] = useState<Episode[]>([]);
+  const [upcomingJobs, setUpcomingJobs] = useState<ScheduledJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch episodes - the stats will be calculated from this
-        const episodes = await api.episodes.list({ limit: 6 });
+        // Fetch episodes and upcoming jobs in parallel
+        const [episodes, upcoming] = await Promise.all([
+          api.episodes.list({ limit: 6 }),
+          api.scheduler.getUpcoming(7).catch(() => ({ jobs: [], total: 0 })),
+        ]);
+        
         setRecentEpisodes(episodes);
+        setUpcomingJobs(upcoming.jobs.slice(0, 5));
 
         // Calculate stats from episodes
         const generating = episodes.filter(e => 
@@ -46,7 +60,7 @@ export default function DashboardPage() {
           episodes_published: published,
           episodes_failed: failed,
           total_characters: 0, // We'd need to fetch this separately
-          upcoming_races: 0,
+          upcoming_races: upcoming.total,
           total_cost_usd: totalCost,
         });
       } catch (err) {
@@ -67,17 +81,27 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <Header
-        title="Dashboard"
-        subtitle="Monitor your F1 video generation pipeline"
+        title="Mission Control"
+        subtitle="Antikythera F1 Video Generation Command Center"
         actions={
-          <Link href="/episodes/new">
-            <Button>
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              New Episode
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/scheduler">
+              <Button variant="secondary">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Scheduler
+              </Button>
+            </Link>
+            <Link href="/episodes/new">
+              <Button>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Episode
+              </Button>
+            </Link>
+          </div>
         }
       />
 

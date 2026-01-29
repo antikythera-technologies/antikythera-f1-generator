@@ -23,6 +23,10 @@ class RaceCreate(RaceBase):
     fp3_datetime: Optional[datetime] = None
     qualifying_datetime: Optional[datetime] = None
     race_datetime: Optional[datetime] = None
+    # Sprint weekend fields
+    is_sprint_weekend: bool = False
+    sprint_qualifying_datetime: Optional[datetime] = None
+    sprint_race_datetime: Optional[datetime] = None
 
 
 class RaceResponse(RaceBase):
@@ -35,4 +39,8 @@ class RaceResponse(RaceBase):
     fp3_datetime: Optional[datetime]
     qualifying_datetime: Optional[datetime]
     race_datetime: Optional[datetime]
+    # Sprint weekend fields
+    is_sprint_weekend: bool
+    sprint_qualifying_datetime: Optional[datetime]
+    sprint_race_datetime: Optional[datetime]
     created_at: datetime

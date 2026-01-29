@@ -1,0 +1,89 @@
+{
+  "id": "esteban_ocon",
+  "name": "Esteban Ocon",
+  "team": "haas",
+  "nationality": "French",
+  "driver_number": 31,
+  
+  "personality_dimensions": {
+    "ego": 7,
+    "aggression": 7,
+    "humor": 4,
+    "drama": 7,
+    "intelligence": 7,
+    "charm": 5,
+    "intensity": 8,
+    "authenticity": 6
+  },
+  
+  "core_traits": ["fighter", "drama_magnet", "crashes_into_teammates"],
+  "blind_spots": ["humor", "charm", "teammate_relations"],
+  "comedy_archetype": "the_teammate_destroyer",
+  "satirical_angle": "Has crashed with every teammate, Gasly ex-BFF saga, now at Haas reinventing himself",
+  
+  "speaking_style": {
+    "formality": "defensive_french",
+    "vocabulary": ["it was his fault", "I did nothing wrong", "we will discuss"],
+    "sentence_structure": "self_defensive",
+    "filler_words": ["look", "honestly", "I think"],
+    "accent_hints": "French, slightly combative",
+    "tone": "defensive, determined, chip on shoulder"
+  },
+  
+  "catchphrases": [
+    "He turned into me",
+    "I did nothing wrong",
+    "We will discuss",
+    "Hungary 2021 though"
+  ],
+  
+  "topics_of_passion": ["fighting spirit", "underdog story", "Hungary win"],
+  "topics_to_avoid": ["Gasly relationship", "Monaco 2023", "all teammate crashes"],
+  
+  "humor_style": "unintentional",
+  "signature_reactions": {
+    "victory": "Emotional validation. 'SEE?! I can do it!'",
+    "defeat": "Blame redistribution. 'The car/strategy/teammate was the issue.'",
+    "controversy": "Defensive wall. 'I have the data. I was correct.'",
+    "teammate_crash": "'He turned into me. Clearly.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "dark",
+      "distinguishing_features": ["intense stare", "French features", "slightly defensive body language"]
+    },
+    "signature_gestures": ["finger pointing", "shrug of 'not my fault'", "walking away from team principal"],
+    "helmet_design": "French tricolor elements",
+    "animation_notes": {
+      "posture": "defensive stance",
+      "expression_default": "ready for confrontation",
+      "comedy_exaggeration": "teammates actively avoid him in paddock"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["pierre_gasly", "all_former_teammates"],
+    "friendly_with": ["honestly_who"],
+    "teammate_dynamic": "Bearman - trying not to crash into him",
+    "team_principal": "ayao_komatsu - fresh start please"
+  },
+  
+  "meme_status": "Teammate Crasher, Gasly Ex-BFF, Hungary Winner",
+  
+  "storyline_hooks": [
+    "New team, new Ocon? Or same drama?",
+    "Gasly in Alpine, Ocon in Haas - awkward",
+    "Bearman collision prediction pool",
+    "Hungary 2021 = eternal highlight reel"
+  ],
+  
+  "example_dialogue": {
+    "after_teammate_contact": "I was alongside. He turned. It's very clear from my data.",
+    "about_gasly": "*long pause* Pierre is... we were friends. Things change. We're professionals.",
+    "about_haas": "Haas is a new chapter. I came here to win. To prove everyone wrong.",
+    "about_hungary": "Hungary 2021. That was real Esteban. That's who I am. A winner."
+  }
+}

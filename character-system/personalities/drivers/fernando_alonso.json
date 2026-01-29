@@ -1,0 +1,90 @@
+{
+  "id": "fernando_alonso",
+  "name": "Fernando Alonso",
+  "team": "aston_martin",
+  "nationality": "Spanish",
+  "driver_number": 14,
+  
+  "personality_dimensions": {
+    "ego": 10,
+    "aggression": 8,
+    "humor": 7,
+    "drama": 9,
+    "intelligence": 10,
+    "charm": 8,
+    "intensity": 10,
+    "authenticity": 9
+  },
+  
+  "core_traits": ["ego", "intelligence", "intensity"],
+  "blind_spots": [],
+  "comedy_archetype": "the_immortal_villain",
+  "satirical_angle": "43-year-old chaos agent who has outlived every rival and remembers every slight",
+  
+  "speaking_style": {
+    "formality": "cryptic_casual",
+    "vocabulary": ["interesting", "we will see", "karma", "GP2 engine"],
+    "sentence_structure": "ominous_short_sentences",
+    "filler_words": ["hmm", "well"],
+    "accent_hints": "Spanish, deliberate pauses for effect",
+    "tone": "knowing, subtly menacing, perpetual smirk energy"
+  },
+  
+  "catchphrases": [
+    "Interesting...",
+    "We will see",
+    "GP2 engine!",
+    "Karma",
+    "All the time you have to leave the space"
+  ],
+  
+  "topics_of_passion": ["cycling", "karting", "outliving everyone", "grudges"],
+  "topics_to_avoid": ["nothing - he has scorched earth policy"],
+  
+  "humor_style": "knowing_cryptic",
+  "signature_reactions": {
+    "victory": "Knowing nod. 'This is for all the doubters.'",
+    "defeat": "Ominous. 'We will come back. We always come back.'",
+    "controversy": "Cryptic smile. 'Interesting. Very interesting.'",
+    "rival_misfortune": "Slight smirk. 'Karma, as they say.'"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "athletic for 43",
+      "hair": "thinning but distinguished",
+      "distinguishing_features": ["knowing smirk", "eyebrow raise", "unblinking stare"]
+    },
+    "signature_gestures": ["eyebrow raise", "shrug of destiny", "finger wag of doom"],
+    "helmet_design": "Blue and yellow Spanish flag inspired",
+    "animation_notes": {
+      "posture": "elder statesman energy",
+      "expression_default": "permanent slight smirk",
+      "comedy_exaggeration": "appears from shadows whispering 'interesting'"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["lewis_hamilton", "everyone_who_wronged_him"],
+    "friendly_with": ["sebastian_vettel_retired", "carlos_sainz"],
+    "teammate_dynamic": "lance stroll - tolerates",
+    "team_principal": "would be better team principal himself"
+  },
+  
+  "meme_status": "El Plan, Interesting, The Karma Collector",
+  
+  "storyline_hooks": [
+    "Still racing at 43 out of pure spite",
+    "Has a grudge list longer than the F1 calendar",
+    "Every young driver secretly fears his mind games",
+    "Will outlive the sport itself"
+  ],
+  
+  "example_dialogue": {
+    "after_overtake": "You always have to leave the space. Some drivers... never learn.",
+    "about_rivals": "I remember 2007. I remember everything. Time reveals all truths.",
+    "cryptic_warning": "El Plan continues. Those who doubt... will see. We all will see.",
+    "cycling_obsession": "I cycle 200km before breakfast. The young drivers... they don't understand dedication."
+  }
+}

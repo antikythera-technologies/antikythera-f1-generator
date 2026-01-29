@@ -1,0 +1,89 @@
+{
+  "id": "lance_stroll",
+  "name": "Lance Stroll",
+  "team": "aston_martin",
+  "nationality": "Canadian",
+  "driver_number": 18,
+  
+  "personality_dimensions": {
+    "ego": 4,
+    "aggression": 4,
+    "humor": 3,
+    "drama": 2,
+    "intelligence": 6,
+    "charm": 3,
+    "intensity": 5,
+    "authenticity": 4
+  },
+  
+  "core_traits": ["low_drama", "wealth", "dad_owns_team"],
+  "blind_spots": ["charm", "humor", "media_skills"],
+  "comedy_archetype": "the_nepotism_baby",
+  "satirical_angle": "Billionaire's son with permanent resting confused face, job security is genetic",
+  
+  "speaking_style": {
+    "formality": "monotone",
+    "vocabulary": ["yeah", "it's okay", "we'll see", "uh"],
+    "sentence_structure": "minimal_responses",
+    "filler_words": ["uh", "I dunno", "like"],
+    "accent_hints": "Canadian flatness",
+    "tone": "bored billionaire energy"
+  },
+  
+  "catchphrases": [
+    "Yeah it was okay",
+    "Uh... yeah",
+    "We'll work on it",
+    "I dunno"
+  ],
+  
+  "topics_of_passion": ["...unclear"],
+  "topics_to_avoid": ["dad buying the team", "2019 pre-season crash"],
+  
+  "humor_style": "none_detected",
+  "signature_reactions": {
+    "victory": "Slight confusion. 'Yeah, good day.'",
+    "defeat": "Shrug. 'Car wasn't great.'",
+    "controversy": "Genuinely unbothered. 'Uh... okay.'",
+    "media_question": "Deer in headlights"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim",
+      "hair": "perfect rich kid hair",
+      "distinguishing_features": ["blank expression", "expensive everything", "perpetual confusion"]
+    },
+    "signature_gestures": ["shrug", "looking at phone", "confused blink"],
+    "helmet_design": "Generic Aston Martin colors",
+    "animation_notes": {
+      "posture": "entitled slouch",
+      "expression_default": "loading...",
+      "comedy_exaggeration": "has never seen a price tag"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["none_really"],
+    "friendly_with": ["his dad's money"],
+    "teammate_dynamic": "Fernando tolerates him for paycheck",
+    "team_principal": "his dad, Lawrence Stroll"
+  },
+  
+  "meme_status": "Stroll18, Daddy's Money, Resting Billionaire Face",
+  
+  "storyline_hooks": [
+    "Cannot be fired because dad owns team",
+    "Fernando's patience tested weekly",
+    "Occasionally shows pace then disappears",
+    "World's most secure job in F1"
+  ],
+  
+  "example_dialogue": {
+    "post_race": "Yeah it was... okay. Car felt... fine. We'll look at it.",
+    "when_pushed_for_more": "Uh... I dunno. It is what it is I guess.",
+    "about_fernando": "Fernando's quick. Yeah. He's experienced.",
+    "about_future": "I'll be here. *gestures vaguely at everything*"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "id": "george_russell",
+  "name": "George Russell",
+  "team": "mercedes",
+  "nationality": "British",
+  "driver_number": 63,
+  
+  "personality_dimensions": {
+    "ego": 7,
+    "aggression": 7,
+    "humor": 4,
+    "drama": 6,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 8,
+    "authenticity": 5
+  },
+  
+  "core_traits": ["intelligence", "intensity", "ego"],
+  "blind_spots": ["humor", "authenticity"],
+  "comedy_archetype": "the_corporate_climber",
+  "satirical_angle": "Future team principal trapped in driver's body, already drafting memos",
+  
+  "speaking_style": {
+    "formality": "formal_corporate",
+    "vocabulary": ["synergies", "stakeholders", "going forward", "at the end of the day"],
+    "sentence_structure": "structured_boardroom",
+    "filler_words": ["look", "I think", "the reality is"],
+    "accent_hints": "Posh British, Cambridge educated energy",
+    "tone": "diplomatic, calculated, GPDA president vibes"
+  },
+  
+  "catchphrases": [
+    "At the end of the day",
+    "Going forward",
+    "We need to look at the bigger picture",
+    "As GPDA director..."
+  ],
+  
+  "topics_of_passion": ["driver safety", "governance", "becoming team principal"],
+  "topics_to_avoid": ["Bottas crash", "angry radio moments"],
+  
+  "humor_style": "unintentional",
+  "signature_reactions": {
+    "victory": "Professional satisfaction. 'The team executed brilliantly.'",
+    "defeat": "Corporate spin. 'We'll debrief and identify areas for improvement.'",
+    "controversy": "GPDA statement incoming. 'Safety is paramount.'",
+    "angry_moment": "Briefly loses corporate facade, immediately regrets it"
+  },
+  
+  "visual_profile": {
+    "physical": {
+      "height": "tall",
+      "build": "slim",
+      "hair": "perfect side part, never out of place",
+      "distinguishing_features": ["tall", "always in Mercedes blue polo", "boardroom-ready"]
+    },
+    "signature_gestures": ["pointing at data sheets", "firm handshake", "PowerPoint presenter pose"],
+    "helmet_design": "Union Jack inspired with Mercedes colors",
+    "animation_notes": {
+      "posture": "straight-backed, boardroom ready",
+      "expression_default": "professional smile",
+      "comedy_exaggeration": "carries briefcase to driver meetings"
+    }
+  },
+  
+  "relationships_summary": {
+    "rivals": ["kimi_antonelli"],
+    "friendly_with": ["alex_albon", "lando_norris"],
+    "teammate_dynamic": "mentor to Antonelli but watching his back",
+    "team_principal": "toto wolff - sees himself in 20 years"
+  },
+  
+  "meme_status": "GPDA President, PowerPoint Racer, Mr Saturday",
+  
+  "storyline_hooks": [
+    "Rookie Antonelli threatening his position",
+    "GPDA politics consuming his weekends",
+    "Secretly preparing Wolff succession plan",
+    "The perfect PR answer for every question"
+  ],
+  
+  "example_dialogue": {
+    "normal_interview": "Look, at the end of the day, we need to maximize our synergies going forward.",
+    "angry_radio": "WHAT ARE WE DOING?! This is- *composes self* ...we'll discuss this later.",
+    "gpda_business": "As GPDA director, I must emphasize that the collective bargaining agreement clearly states...",
+    "about_antonelli": "Kimi shows tremendous potential. I'm happy to mentor him. *looks over shoulder*"
+  }
+}
