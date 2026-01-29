@@ -6,14 +6,6 @@ import { formatDateTime, formatRelativeTime } from "@/lib/utils";
 import { Header } from "@/components/layout/Header";
 import { Button, Card, LoadingPage, StatusBadge } from "@/components/ui";
 
-const statusColors: Record<JobStatus, "cyan" | "blue" | "green" | "red" | "gray"> = {
-  scheduled: "cyan",
-  running: "blue",
-  completed: "green",
-  failed: "red",
-  cancelled: "gray",
-};
-
 const triggerTypeLabels: Record<string, string> = {
   "post-fp2": "Post FP2",
   "post-sprint": "Post Sprint",
@@ -170,7 +162,7 @@ export default function SchedulerPage() {
                           }`}>
                             {triggerTypeLabels[job.trigger_type]}
                           </span>
-                          <StatusBadge status={job.status} color={statusColors[job.status]} />
+                          <StatusBadge status={job.status} />
                           {job.is_sprint_weekend && (
                             <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400">
                               Sprint Weekend
