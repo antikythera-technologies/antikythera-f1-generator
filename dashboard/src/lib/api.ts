@@ -155,6 +155,7 @@ export interface Scene {
   dialogue: string | null;
   action_description: string | null;
   audio_description: string | null;
+  ovi_prompt?: string | null;
   status: SceneStatus;
   source_image_path: string | null;
   video_clip_path: string | null;
