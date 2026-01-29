@@ -7,15 +7,6 @@ import { formatDateTime } from "@/lib/utils";
 import { Header } from "@/components/layout/Header";
 import { Button, Card, LoadingPage, StatusBadge } from "@/components/ui";
 
-const statusColors = {
-  pending: "gray" as const,
-  generating: "blue" as const,
-  stitching: "blue" as const,
-  uploading: "cyan" as const,
-  published: "green" as const,
-  failed: "red" as const,
-};
-
 const episodeTypeLabels: Record<string, string> = {
   "pre-race": "Pre-Race",
   "post-race": "Post Race",
@@ -84,7 +75,7 @@ export default function StorylinesPage() {
                     }`}>
                       {episodeTypeLabels[episode.episode_type] || episode.episode_type}
                     </span>
-                    <StatusBadge status={episode.status} color={statusColors[episode.status]} />
+                    <StatusBadge status={episode.status} />
                   </div>
                   
                   <h3 className="mt-2 font-semibold text-white">{episode.title}</h3>
@@ -159,14 +150,7 @@ export default function StorylinesPage() {
                                 <span className="rounded bg-white/10 px-2 py-0.5 text-xs font-mono text-white/60">
                                   Scene {scene.scene_number}
                                 </span>
-                                <StatusBadge 
-                                  status={scene.status} 
-                                  color={
-                                    scene.status === "completed" ? "green" :
-                                    scene.status === "failed" ? "red" :
-                                    scene.status === "generating" ? "blue" : "gray"
-                                  }
-                                />
+                                <StatusBadge status={scene.status} size="sm" />
                                 {scene.character_name && (
                                   <span className="text-xs text-cyber-purple">{scene.character_name}</span>
                                 )}
