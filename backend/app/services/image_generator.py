@@ -160,60 +160,43 @@ class ImageGenerator:
         reference_image_path: Optional[str],
         resolution: str,
     ) -> str:
-        """Synchronous image generation (called from executor)."""
+        """Synchronous image generation using Imagen 4.0 (called from executor)."""
         from google.genai import types
 
-        # Load reference image if provided (for style consistency)
-        input_image = None
-        if reference_image_path and os.path.exists(reference_image_path):
-            input_image = PILImage.open(reference_image_path)
-            logger.debug(f"Using reference image: {reference_image_path}")
+        # Note: Imagen 4.0 doesn't support reference image input directly
+        # For style consistency, we rely on detailed prompts
+        if reference_image_path:
+            logger.debug(f"Reference image provided but Imagen uses prompt-only generation")
 
-        # Build contents
-        if input_image:
-            # Edit mode: image + prompt for consistency
-            contents = [input_image, prompt]
-        else:
-            # Generate mode: prompt only
-            contents = prompt
-
-        # Generate
-        response = self.client.models.generate_content(
-            model="gemini-3-pro-image-preview",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(
-                    image_size=resolution
-                )
+        # Generate image using Imagen 4.0 API
+        response = self.client.models.generate_images(
+            model=settings.GEMINI_IMAGE_MODEL,  # "imagen-4.0-generate-001"
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                output_mime_type="image/png",
             )
         )
 
-        # Extract and save image
-        for part in response.parts:
-            if part.text is not None:
-                logger.debug(f"Model text response: {part.text}")
-            elif part.inline_data is not None:
-                image_data = part.inline_data.data
-                if isinstance(image_data, str):
-                    import base64
-                    image_data = base64.b64decode(image_data)
+        # Extract and save the generated image
+        if not response.generated_images:
+            raise ImageGenerationError("No images generated")
 
-                image = PILImage.open(BytesIO(image_data))
+        image_data = response.generated_images[0].image.image_bytes
+        image = PILImage.open(BytesIO(image_data))
 
-                # Convert to RGB and save
-                if image.mode == 'RGBA':
-                    rgb_image = PILImage.new('RGB', image.size, (255, 255, 255))
-                    rgb_image.paste(image, mask=image.split()[3])
-                    rgb_image.save(output_path, 'PNG')
-                elif image.mode == 'RGB':
-                    image.save(output_path, 'PNG')
-                else:
-                    image.convert('RGB').save(output_path, 'PNG')
+        # Convert to RGB and save
+        if image.mode == 'RGBA':
+            rgb_image = PILImage.new('RGB', image.size, (255, 255, 255))
+            rgb_image.paste(image, mask=image.split()[3])
+            rgb_image.save(output_path, 'PNG')
+        elif image.mode == 'RGB':
+            image.save(output_path, 'PNG')
+        else:
+            image.convert('RGB').save(output_path, 'PNG')
 
-                return output_path
-
-        raise ImageGenerationError("No image in response")
+        logger.debug(f"Image saved: {output_path} ({len(image_data)} bytes)")
+        return output_path
 
     def _build_consistent_prompt(
         self,
