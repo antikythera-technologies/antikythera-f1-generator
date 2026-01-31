@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS news_sources (
 
 -- Seed initial news sources
 INSERT INTO news_sources (name, url, feed_url, priority) VALUES
-    ('Formula1.com', 'https://www.formula1.com/en/latest', 'https://www.formula1.com/content/fom-website/en/latest.xml', 10),
+    ('Formula1.com', 'https://www.formula1.com/en/latest/all', 'https://www.formula1.com/en/latest/all.xml', 10),
     ('Motorsport.com', 'https://www.motorsport.com/f1/news/', NULL, 9),
     ('Autosport', 'https://www.autosport.com/f1/news/', NULL, 8),
     ('RaceFans', 'https://www.racefans.net/category/f1-news/', NULL, 7),
