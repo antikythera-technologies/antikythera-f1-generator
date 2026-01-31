@@ -20,6 +20,7 @@ from app.models.scene import Scene, SceneStatus
 from app.services.script_generator import ScriptGenerator
 from app.services.image_generator import ImageGenerator
 from app.services.video_generator import VideoGenerator
+from app.services.ovi_space_manager import OviSpaceManager
 from app.services.stitcher import VideoStitcher
 from app.services.youtube_uploader import YouTubeUploader
 from app.services.storage import StorageService
@@ -209,59 +210,94 @@ Season: {self.race.season} Round {self.race.round_number}
 """
 
     async def _generate_video_clips(self, db: AsyncSession, scenes: List[Scene]) -> None:
-        """Generate video clips for all scenes."""
-        for scene in scenes:
-            self.logger.info(f"Processing scene {scene.scene_number}/{len(scenes)}")
+        """
+        Generate video clips for all scenes.
+        
+        Uses OviSpaceManager to handle space lifecycle:
+        1. Starts the HuggingFace space if sleeping
+        2. Waits for full initialization
+        3. Generates all videos while keeping space alive
+        4. Pauses space after completion to save costs
+        """
+        self.logger.info("Starting Ovi space for video generation...")
+        
+        # Use OviSpaceManager for automatic lifecycle management
+        async with OviSpaceManager(quality=settings.OVI_QUALITY) as ovi_manager:
+            for scene in scenes:
+                self.logger.info(f"Processing scene {scene.scene_number}/{len(scenes)}")
 
-            try:
-                scene.status = SceneStatus.GENERATING
-                scene.generation_started_at = datetime.utcnow()
-                await db.flush()
+                try:
+                    scene.status = SceneStatus.GENERATING
+                    scene.generation_started_at = datetime.utcnow()
+                    await db.flush()
 
-                # Generate scene image with Nano Banana Pro (character consistent)
-                source_image = await self._get_scene_image(db, scene)
+                    # Generate scene image with Nano Banana Pro (character consistent)
+                    source_image = await self._get_scene_image(db, scene)
 
-                # Generate video clip
-                clip = await self.video_generator.generate_clip(
-                    scene_number=scene.scene_number,
-                    image_path=source_image,
-                    action=scene.action_description or "",
-                    dialogue=scene.dialogue,
-                    audio_description=scene.audio_description,
-                )
-
-                # Upload to storage
-                clip_path = await self.storage.upload_video_clip(
-                    race_id=self.race.id if self.race else 0,
-                    episode_id=self.episode_id,
-                    scene_number=scene.scene_number,
-                    file_path=clip.video_path,
-                )
-
-                # Update scene
-                scene.video_clip_path = clip_path
-                scene.status = SceneStatus.COMPLETED
-                scene.generation_completed_at = datetime.utcnow()
-                scene.generation_time_ms = clip.generation_time_ms
-
-                self.episode.ovi_calls += 1
-
-                self.logger.info(f"Scene {scene.scene_number} complete: {clip.generation_time_ms}ms")
-
-                await db.flush()
-
-            except Exception as e:
-                self.logger.error(f"Scene {scene.scene_number} failed: {e}")
-                scene.status = SceneStatus.FAILED
-                scene.last_error = str(e)
-                scene.retry_count += 1
-                await db.flush()
-
-                if scene.retry_count >= self.MAX_SCENE_RETRIES:
-                    raise SceneGenerationError(
-                        scene.scene_number,
-                        f"Failed after {self.MAX_SCENE_RETRIES} retries",
+                    # Build Ovi prompt with special tokens
+                    prompt = self._build_ovi_prompt(scene)
+                    
+                    # Generate video clip using OviSpaceManager
+                    start_time = datetime.utcnow()
+                    video_path = await ovi_manager.generate_video(
+                        image_path=source_image,
+                        prompt=prompt,
                     )
+                    generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+                    # Upload to storage
+                    clip_path = await self.storage.upload_video_clip(
+                        race_id=self.race.id if self.race else 0,
+                        episode_id=self.episode_id,
+                        scene_number=scene.scene_number,
+                        file_path=video_path,
+                    )
+
+                    # Update scene
+                    scene.video_clip_path = clip_path
+                    scene.status = SceneStatus.COMPLETED
+                    scene.generation_completed_at = datetime.utcnow()
+                    scene.generation_time_ms = generation_time_ms
+
+                    self.episode.ovi_calls += 1
+
+                    self.logger.info(f"Scene {scene.scene_number} complete: {generation_time_ms}ms")
+
+                    await db.flush()
+
+                except Exception as e:
+                    self.logger.error(f"Scene {scene.scene_number} failed: {e}")
+                    scene.status = SceneStatus.FAILED
+                    scene.last_error = str(e)
+                    scene.retry_count += 1
+                    await db.flush()
+
+                    if scene.retry_count >= self.MAX_SCENE_RETRIES:
+                        raise SceneGenerationError(
+                            scene.scene_number,
+                            f"Failed after {self.MAX_SCENE_RETRIES} retries",
+                        )
+        
+        # Space is automatically paused after context manager exits
+        self.logger.info("Ovi space paused to save GPU costs")
+    
+    def _build_ovi_prompt(self, scene: Scene) -> str:
+        """
+        Build Ovi prompt with special tokens.
+        
+        Ovi uses:
+        - <S>...<E> for speech/dialogue
+        - <AUDCAP>...<ENDAUDCAP> for audio description
+        """
+        parts = [scene.action_description or "Character speaking to camera"]
+        
+        if scene.dialogue:
+            parts.append(f"<S>{scene.dialogue}<E>")
+        
+        if scene.audio_description:
+            parts.append(f"<AUDCAP>{scene.audio_description}<ENDAUDCAP>")
+        
+        return " ".join(parts)
 
     async def _get_scene_image(self, db: AsyncSession, scene: Scene) -> str:
         """
