@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -92,14 +93,19 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-white/10 bg-midnight/90 backdrop-blur-xl">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-white/10 px-6">
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-racing-red to-cyber-purple">
-          <span className="text-xl font-bold text-white">F1</span>
-          <div className="absolute -inset-0.5 -z-10 rounded-xl bg-gradient-to-br from-racing-red to-cyber-purple opacity-50 blur-sm" />
+      <div className="flex h-20 items-center gap-3 border-b border-white/10 px-4">
+        <div className="relative h-14 w-14 flex-shrink-0">
+          <Image
+            src="/logo.png"
+            alt="Antikythera F1"
+            fill
+            className="object-contain"
+            priority
+          />
         </div>
-        <div>
-          <h1 className="font-bold text-white">Antikythera F1</h1>
-          <p className="text-xs text-neon-cyan">Mission Control</p>
+        <div className="min-w-0">
+          <h1 className="font-bold text-white truncate">Antikythera F1</h1>
+          <p className="text-xs text-visor-blue">Mission Control</p>
         </div>
       </div>
 

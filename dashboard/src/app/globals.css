@@ -2,15 +2,30 @@
 
 @layer base {
   :root {
-    --deep-space: #0a1628;
-    --midnight: #0f1f3a;
-    --twilight: #162a4a;
+    /* Core brand colors */
+    --visor-blue: #5BA4B5;
+    --copper: #B87333;
+    --copper-dark: #8B5A2B;
+    --copper-light: #CD9B5A;
+    --steel: #8A9A9B;
+    --steel-dark: #5A6A6B;
+    
+    /* Background colors */
+    --deep-space: #030712;
+    --midnight: #0F172A;
+    --twilight: #1E293B;
+    
+    /* Legacy colors (for compatibility) */
     --racing-red: #e31937;
-    --neon-cyan: #00f0d4;
+    --neon-cyan: #00D4FF;
     --electric-blue: #0066ff;
     --cyber-purple: #9933ff;
     --warning-orange: #ff6b00;
     --success-green: #00ff88;
+    
+    /* New accent (use visor blue as primary accent) */
+    --accent-primary: var(--visor-blue);
+    --accent-secondary: var(--copper);
   }
 
   * {
@@ -47,12 +62,22 @@
 }
 
 @theme {
-  /* Cyberpunk F1 Theme Colors */
-  --color-deep-space: #0a1628;
-  --color-midnight: #0f1f3a;
-  --color-twilight: #162a4a;
+  /* Antikythera F1 Brand Colors */
+  --color-visor-blue: #5BA4B5;
+  --color-copper: #B87333;
+  --color-copper-dark: #8B5A2B;
+  --color-copper-light: #CD9B5A;
+  --color-steel: #8A9A9B;
+  --color-steel-dark: #5A6A6B;
+  
+  /* Background Colors */
+  --color-deep-space: #030712;
+  --color-midnight: #0F172A;
+  --color-twilight: #1E293B;
+  
+  /* Accent Colors */
   --color-racing-red: #e31937;
-  --color-neon-cyan: #00f0d4;
+  --color-neon-cyan: #00D4FF;
   --color-electric-blue: #0066ff;
   --color-cyber-purple: #9933ff;
   --color-warning-orange: #ff6b00;
@@ -63,7 +88,9 @@
   --font-family-mono: var(--font-mono), monospace;
 
   /* Shadows */
-  --shadow-glow-cyan: 0 0 20px rgba(0, 240, 212, 0.3);
+  --shadow-glow-cyan: 0 0 20px rgba(0, 212, 255, 0.3);
+  --shadow-glow-visor: 0 0 20px rgba(91, 164, 181, 0.3);
+  --shadow-glow-copper: 0 0 20px rgba(184, 115, 51, 0.3);
   --shadow-glow-red: 0 0 20px rgba(227, 25, 55, 0.3);
   --shadow-glow-blue: 0 0 20px rgba(0, 102, 255, 0.3);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.2);
@@ -118,6 +145,18 @@
     -webkit-text-fill-color: transparent;
   }
 
+  .text-gradient-visor {
+    background: linear-gradient(to right, var(--color-visor-blue), var(--color-neon-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-copper {
+    background: linear-gradient(to right, var(--color-copper-light), var(--color-copper), var(--color-copper-dark));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
   .text-gradient-red {
     background: linear-gradient(to right, var(--color-racing-red), var(--color-warning-orange));
     -webkit-background-clip: text;
@@ -125,7 +164,15 @@
   }
 
   .bg-cyber-gradient {
-    background: linear-gradient(135deg, #0a1628 0%, #162a4a 50%, #0a1628 100%);
+    background: linear-gradient(135deg, #030712 0%, #1E293B 50%, #030712 100%);
+  }
+
+  .bg-copper-gradient {
+    background: linear-gradient(135deg, var(--color-copper-light) 0%, var(--color-copper) 50%, var(--color-copper-dark) 100%);
+  }
+
+  .bg-visor-gradient {
+    background: linear-gradient(135deg, #5BA4B5 0%, #4A8FA0 50%, #3A7080 100%);
   }
 }
 
