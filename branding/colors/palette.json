@@ -1,0 +1,116 @@
+{
+  "brand": "Antikythera F1",
+  "version": "1.0.0",
+  "colors": {
+    "primary": {
+      "visor-blue": {
+        "hex": "#5BA4B5",
+        "rgb": [91, 164, 181],
+        "description": "Futuristic visor blue-teal"
+      },
+      "copper": {
+        "hex": "#B87333",
+        "rgb": [184, 115, 51],
+        "description": "Primary copper/bronze"
+      },
+      "steel": {
+        "hex": "#8A9A9B",
+        "rgb": [138, 154, 155],
+        "description": "Brushed steel text"
+      }
+    },
+    "secondary": {
+      "copper-dark": {
+        "hex": "#8B5A2B",
+        "rgb": [139, 90, 43],
+        "description": "Dark copper/patina"
+      },
+      "copper-light": {
+        "hex": "#CD9B5A",
+        "rgb": [205, 155, 90],
+        "description": "Light copper highlight"
+      },
+      "steel-dark": {
+        "hex": "#5A6A6B",
+        "rgb": [90, 106, 107],
+        "description": "Dark steel"
+      }
+    },
+    "accent": {
+      "cyan-glow": {
+        "hex": "#00D4FF",
+        "rgb": [0, 212, 255],
+        "description": "Cyan accent glow"
+      },
+      "teal": {
+        "hex": "#2DD4BF",
+        "rgb": [45, 212, 191],
+        "description": "Teal accent"
+      }
+    },
+    "background": {
+      "dark": {
+        "hex": "#030712",
+        "rgb": [3, 7, 18],
+        "description": "Primary dark background"
+      },
+      "dark-secondary": {
+        "hex": "#0F172A",
+        "rgb": [15, 23, 42],
+        "description": "Secondary dark background"
+      },
+      "card": {
+        "hex": "#1E293B",
+        "rgb": [30, 41, 59],
+        "description": "Card/panel background"
+      }
+    },
+    "text": {
+      "primary": {
+        "hex": "#F8FAFC",
+        "rgb": [248, 250, 252],
+        "description": "Primary text on dark"
+      },
+      "secondary": {
+        "hex": "#94A3B8",
+        "rgb": [148, 163, 184],
+        "description": "Secondary/muted text"
+      }
+    }
+  },
+  "gradients": {
+    "copper": "linear-gradient(135deg, #CD9B5A 0%, #B87333 50%, #8B5A2B 100%)",
+    "steel": "linear-gradient(135deg, #A8B0B0 0%, #8A9A9B 50%, #5A6A6B 100%)",
+    "visor": "linear-gradient(135deg, #5BA4B5 0%, #4A8FA0 50%, #3A7080 100%)"
+  },
+  "tailwind": {
+    "extend": {
+      "colors": {
+        "copper": {
+          "50": "#FDF8F3",
+          "100": "#F9EDE0",
+          "200": "#F0D5B8",
+          "300": "#E5B98A",
+          "400": "#CD9B5A",
+          "500": "#B87333",
+          "600": "#9A5F2A",
+          "700": "#7A4A21",
+          "800": "#5A3518",
+          "900": "#3A220F"
+        },
+        "visor": {
+          "50": "#F0F9FA",
+          "100": "#D9F0F4",
+          "200": "#B3E1E9",
+          "300": "#8DD2DE",
+          "400": "#5BA4B5",
+          "500": "#4A8FA0",
+          "600": "#3A7080",
+          "700": "#2A5260",
+          "800": "#1A3440",
+          "900": "#0A1620"
+        }
+      }
+    }
+  }
+}
