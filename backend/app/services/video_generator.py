@@ -47,8 +47,10 @@ class VideoGenerator:
             # Use HuggingFace token if available for authenticated access
             hf_token = getattr(settings, 'HUGGINGFACE_TOKEN', None)
             if hf_token and hf_token.strip():
-                self._client = Client(self.space, hf_token=hf_token)
+                logger.info("Using HuggingFace token for authenticated access")
+                self._client = Client(self.space, token=hf_token)
             else:
+                logger.warning("No HuggingFace token configured - using anonymous access")
                 self._client = Client(self.space)
         return self._client
 
@@ -58,12 +60,17 @@ class VideoGenerator:
         prompt: str,
     ) -> str:
         """Synchronous video generation (called from executor)."""
-        return self.client.predict(
-            image=image_path,
+        # Ovi API expects: text_prompt, sample_steps, image (in that order)
+        result = self.client.predict(
             text_prompt=prompt,
             sample_steps=self.sample_steps,
+            image=image_path,
             api_name="/generate_scene",
         )
+        # Result is a dict with 'video' key containing the path
+        if isinstance(result, dict):
+            return result.get('video', result)
+        return result
 
     async def generate_clip(
         self,
