@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from gradio_client import Client
+from gradio_client import Client, handle_file
 
 from app.config import settings
 from app.exceptions import VideoGenerationError
@@ -61,10 +61,11 @@ class VideoGenerator:
     ) -> str:
         """Synchronous video generation (called from executor)."""
         # Ovi API expects: text_prompt, sample_steps, image (in that order)
+        # IMPORTANT: Use handle_file() to properly format the image for Gradio
         result = self.client.predict(
             text_prompt=prompt,
             sample_steps=self.sample_steps,
-            image=image_path,
+            image=handle_file(image_path),
             api_name="/generate_scene",
         )
         # Result is a dict with 'video' key containing the path
