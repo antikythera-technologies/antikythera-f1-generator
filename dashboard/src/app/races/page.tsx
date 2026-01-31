@@ -120,20 +120,59 @@ interface RaceCardProps {
   isUpcoming?: boolean;
 }
 
+interface SessionInfo {
+  key: string;
+  label: string;
+  datetime: string | null;
+  color?: string;
+}
+
 function RaceCard({ race, isUpcoming = false }: RaceCardProps) {
   const raceDate = new Date(race.race_date);
   const daysUntil = Math.ceil((raceDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+  // Build session list based on race type
+  const getSessions = (): SessionInfo[] => {
+    if (race.is_sprint_weekend) {
+      // Sprint weekend format
+      return [
+        { key: 'fp1', label: 'FP1', datetime: race.fp1_datetime },
+        { key: 'sprint_quali', label: 'Sprint Quali', datetime: race.sprint_qualifying_datetime, color: 'text-cyber-purple' },
+        { key: 'sprint', label: 'Sprint Race', datetime: race.sprint_race_datetime, color: 'text-cyber-purple' },
+        { key: 'qualifying', label: 'Qualifying', datetime: race.qualifying_datetime },
+        { key: 'race', label: 'Race', datetime: race.race_datetime, color: 'text-neon-cyan' },
+      ];
+    } else {
+      // Standard weekend format
+      return [
+        { key: 'fp1', label: 'FP1', datetime: race.fp1_datetime },
+        { key: 'fp2', label: 'FP2', datetime: race.fp2_datetime },
+        { key: 'fp3', label: 'FP3', datetime: race.fp3_datetime },
+        { key: 'qualifying', label: 'Qualifying', datetime: race.qualifying_datetime },
+        { key: 'race', label: 'Race', datetime: race.race_datetime, color: 'text-neon-cyan' },
+      ];
+    }
+  };
+
+  const sessions = getSessions().filter(s => s.datetime);
 
   return (
     <Card hover glow={isUpcoming ? "cyan" : null}>
       <CardContent className="space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <div className={cn(
-              "mb-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-              isUpcoming ? "bg-success-green/20 text-success-green" : "bg-white/10 text-white/50"
-            )}>
-              Round {race.round_number}
+            <div className="mb-2 flex items-center gap-2">
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                isUpcoming ? "bg-success-green/20 text-success-green" : "bg-white/10 text-white/50"
+              )}>
+                Round {race.round_number}
+              </span>
+              {race.is_sprint_weekend && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-cyber-purple/20 px-2 py-0.5 text-xs font-bold text-cyber-purple">
+                  ⚡ SPRINT
+                </span>
+              )}
             </div>
             <h3 className="text-lg font-semibold text-white">{race.race_name}</h3>
             <p className="text-sm text-white/60">{race.circuit_name}</p>
@@ -163,26 +202,34 @@ function RaceCard({ race, isUpcoming = false }: RaceCardProps) {
           </div>
         </div>
 
-        {/* Session times */}
-        {isUpcoming && (race.qualifying_datetime || race.race_datetime) && (
+        {/* All session times */}
+        {isUpcoming && sessions.length > 0 && (
           <div className="border-t border-white/10 pt-4">
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {race.qualifying_datetime && (
-                <div>
-                  <p className="text-white/40">Qualifying</p>
-                  <p className="text-white/70">{formatDate(race.qualifying_datetime, { dateStyle: undefined, timeStyle: "short" })}</p>
+            <div className="space-y-2">
+              {sessions.map((session) => (
+                <div key={session.key} className="flex items-center justify-between text-xs">
+                  <span className={cn("font-medium", session.color || "text-white/50")}>
+                    {session.label}
+                  </span>
+                  <span className="text-white/70">
+                    {formatSessionDateTime(session.datetime!)}
+                  </span>
                 </div>
-              )}
-              {race.race_datetime && (
-                <div>
-                  <p className="text-white/40">Race</p>
-                  <p className="text-white/70">{formatDate(race.race_datetime, { dateStyle: undefined, timeStyle: "short" })}</p>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         )}
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Format session datetime showing day + time
+ */
+function formatSessionDateTime(datetime: string): string {
+  const date = new Date(datetime);
+  const day = date.toLocaleDateString('en-US', { weekday: 'short' });
+  const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${day} ${time}`;
 }
