@@ -38,12 +38,18 @@ class ScheduledJob(Base):
     race_id: Mapped[Optional[int]] = mapped_column(ForeignKey("races.id"))
     
     # Job configuration
-    trigger_type: Mapped[JobTriggerType] = mapped_column(Enum(JobTriggerType), nullable=False)
+    trigger_type: Mapped[JobTriggerType] = mapped_column(
+        Enum(JobTriggerType, name="job_trigger_type", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     scheduled_for: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     
     # Execution tracking
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.SCHEDULED)
+    status: Mapped[JobStatus] = mapped_column(
+        Enum(JobStatus, name="job_status", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        default=JobStatus.SCHEDULED,
+    )
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     

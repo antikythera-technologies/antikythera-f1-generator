@@ -142,9 +142,8 @@ class SchedulerService:
                 while current_friday < race.race_date - timedelta(days=3):
                     # Create off-week job for this Friday
                     scheduled_time = datetime.combine(
-                        current_friday, 
+                        current_friday,
                         OFF_WEEK_RELEASE_TIME,
-                        tzinfo=SAST
                     )
                     
                     if await self._create_job_if_not_exists(

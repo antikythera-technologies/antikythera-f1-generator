@@ -121,6 +121,9 @@ export interface ScrapeResponse {
   errors: string[];
 }
 
+export type GagStatus = "active" | "cooling_down" | "exhausted" | "retired";
+export type GagCategory = "personality_trait" | "incident" | "rivalry" | "catchphrase" | "running_joke" | "relationship" | "legacy";
+
 export interface Character {
   id: number;
   name: string;
@@ -133,6 +136,19 @@ export interface Character {
   created_at: string;
   updated_at: string;
   images: CharacterImage[];
+  // Caricature traits
+  role: string | null;
+  team: string | null;
+  nationality: string | null;
+  physical_features: string | null;
+  comedy_angle: string | null;
+  signature_expression: string | null;
+  signature_pose: string | null;
+  props: string | null;
+  background_type: string | null;
+  background_detail: string | null;
+  clothing_description: string | null;
+  caricature_prompt: string | null;
 }
 
 export interface CharacterImage {
@@ -142,6 +158,47 @@ export interface CharacterImage {
   image_type: string;
   pose_description: string | null;
   is_primary: boolean;
+  is_style_reference: boolean;
+  created_at: string;
+}
+
+export interface RunningGag {
+  id: number;
+  title: string;
+  description: string;
+  category: GagCategory;
+  primary_character_id: number | null;
+  secondary_character_id: number | null;
+  setup: string | null;
+  punchline: string | null;
+  variations: string | null;
+  context_needed: string | null;
+  origin_race: string | null;
+  origin_date: string | null;
+  origin_description: string | null;
+  status: GagStatus;
+  times_used: number;
+  max_uses: number | null;
+  cooldown_races: number;
+  humor_rating: number;
+  audience_familiarity: number;
+  last_used_at: string | null;
+  last_used_in_race: string | null;
+  tags: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  usages: GagUsage[];
+}
+
+export interface GagUsage {
+  id: number;
+  gag_id: number;
+  episode_id: number;
+  scene_id: number | null;
+  usage_context: string | null;
+  dialogue_excerpt: string | null;
+  effectiveness_rating: number | null;
   created_at: string;
 }
 
@@ -422,6 +479,49 @@ export const newsApi = {
   },
 };
 
+// Running Gags API
+export const gagsApi = {
+  list: (params?: { character_id?: number; category?: GagCategory; status?: GagStatus; active_only?: boolean }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.character_id) searchParams.set("character_id", String(params.character_id));
+    if (params?.category) searchParams.set("category", params.category);
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.active_only !== undefined) searchParams.set("active_only", String(params.active_only));
+    const query = searchParams.toString();
+    return request<RunningGag[]>(`/gags${query ? `?${query}` : ""}`);
+  },
+
+  get: (id: number) => request<RunningGag>(`/gags/${id}`),
+
+  create: (data: Partial<RunningGag>) =>
+    request<RunningGag>("/gags", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: number, data: Partial<RunningGag>) =>
+    request<RunningGag>(`/gags/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: number) =>
+    request<{ detail: string }>(`/gags/${id}`, { method: "DELETE" }),
+
+  recordUsage: (gagId: number, data: { episode_id: number; scene_id?: number; usage_context?: string; dialogue_excerpt?: string }) =>
+    request<GagUsage>(`/gags/${gagId}/use`, {
+      method: "POST",
+      body: JSON.stringify({ gag_id: gagId, ...data }),
+    }),
+
+  forEpisode: (episodeType: string, characterIds?: number[]) => {
+    const searchParams = new URLSearchParams();
+    if (characterIds?.length) searchParams.set("character_ids", characterIds.join(","));
+    const query = searchParams.toString();
+    return request<RunningGag[]>(`/gags/for-episode/${episodeType}${query ? `?${query}` : ""}`);
+  },
+};
+
 // Export all APIs
 export const api = {
   episodes: episodesApi,
@@ -430,6 +530,7 @@ export const api = {
   analytics: analyticsApi,
   scheduler: schedulerApi,
   news: newsApi,
+  gags: gagsApi,
 };
 
 export default api;

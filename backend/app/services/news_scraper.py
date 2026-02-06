@@ -77,11 +77,11 @@ class NewsScraperService:
         
         # Determine time range
         if "date_range_hours" in scrape_context:
-            since = datetime.now(SAST) - timedelta(hours=scrape_context["date_range_hours"])
+            since = datetime.utcnow() - timedelta(hours=scrape_context["date_range_hours"])
         elif "date_range_days" in scrape_context:
-            since = datetime.now(SAST) - timedelta(days=scrape_context["date_range_days"])
+            since = datetime.utcnow() - timedelta(days=scrape_context["date_range_days"])
         else:
-            since = datetime.now(SAST) - timedelta(days=1)
+            since = datetime.utcnow() - timedelta(days=1)
 
         # Get active news sources
         sources = await self._get_active_sources()
@@ -156,7 +156,7 @@ class NewsScraperService:
             # Parse published date
             published_at = None
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                published_at = datetime(*entry.published_parsed[:6], tzinfo=SAST)
+                published_at = datetime(*entry.published_parsed[:6])
             
             # Skip if too old
             if published_at and published_at < since:

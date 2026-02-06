@@ -57,7 +57,10 @@ class NewsArticle(Base):
     full_content: Mapped[Optional[str]] = mapped_column(Text)
     
     # Categorization
-    context: Mapped[ArticleContext] = mapped_column(Enum(ArticleContext), default=ArticleContext.RACE_WEEKEND)
+    context: Mapped[ArticleContext] = mapped_column(
+        Enum(ArticleContext, name="article_context", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        default=ArticleContext.RACE_WEEKEND,
+    )
     keywords: Mapped[Optional[List[str]]] = mapped_column(ARRAY(Text))
     mentioned_drivers: Mapped[Optional[List[str]]] = mapped_column(ARRAY(Text))
     mentioned_teams: Mapped[Optional[List[str]]] = mapped_column(ARRAY(Text))

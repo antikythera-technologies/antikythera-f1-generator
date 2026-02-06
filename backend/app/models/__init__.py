@@ -8,6 +8,7 @@ from app.models.scene import Scene, SceneStatus
 from app.models.logs import GenerationLog, LogLevel, LogComponent, APIUsage, APIProvider, CleanupLog
 from app.models.scheduler import ScheduledJob, JobStatus, JobTriggerType
 from app.models.news import NewsSource, NewsArticle, ArticleContext, EpisodeStoryline
+from app.models.gag import RunningGag, GagUsage, GagStatus, GagCategory
 
 __all__ = [
     "Base",
@@ -34,4 +35,9 @@ __all__ = [
     "NewsArticle",
     "ArticleContext",
     "EpisodeStoryline",
+    # Running Gags
+    "RunningGag",
+    "GagUsage",
+    "GagStatus",
+    "GagCategory",
 ]

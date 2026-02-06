@@ -48,8 +48,14 @@ class GenerationLog(Base):
     episode_id: Mapped[Optional[int]] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"))
     scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenes.id", ondelete="CASCADE"))
 
-    level: Mapped[LogLevel] = mapped_column(Enum(LogLevel), nullable=False)
-    component: Mapped[LogComponent] = mapped_column(Enum(LogComponent), nullable=False)
+    level: Mapped[LogLevel] = mapped_column(
+        Enum(LogLevel, name="log_level", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
+    component: Mapped[LogComponent] = mapped_column(
+        Enum(LogComponent, name="log_component", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     message: Mapped[str] = mapped_column(Text, nullable=False)
     details: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
 
@@ -72,7 +78,10 @@ class APIUsage(Base):
     episode_id: Mapped[Optional[int]] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"))
     scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenes.id", ondelete="CASCADE"))
 
-    provider: Mapped[APIProvider] = mapped_column(Enum(APIProvider), nullable=False)
+    provider: Mapped[APIProvider] = mapped_column(
+        Enum(APIProvider, name="api_provider", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     endpoint: Mapped[Optional[str]] = mapped_column(String(255))
 
     # Request details

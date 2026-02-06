@@ -43,7 +43,10 @@ class Scene(Base):
     audio_description: Mapped[Optional[str]] = mapped_column(Text)
 
     # Output
-    status: Mapped[SceneStatus] = mapped_column(Enum(SceneStatus), default=SceneStatus.PENDING)
+    status: Mapped[SceneStatus] = mapped_column(
+        Enum(SceneStatus, name="scene_status", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        default=SceneStatus.PENDING,
+    )
     source_image_path: Mapped[Optional[str]] = mapped_column(String(500))
     video_clip_path: Mapped[Optional[str]] = mapped_column(String(500))
     duration_seconds: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=5.0)

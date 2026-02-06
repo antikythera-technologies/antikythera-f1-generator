@@ -60,7 +60,9 @@ export default function CharacterDetailPage() {
         actions={
           <div className="flex items-center gap-3">
             <StatusBadge status={character.is_active ? "active" : "inactive"} />
-            <Button variant="secondary">Edit Character</Button>
+            <Link href={`/characters/${characterId}/edit`}>
+              <Button variant="secondary">Edit Character</Button>
+            </Link>
           </div>
         }
       />
@@ -143,6 +145,67 @@ export default function CharacterDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Caricature Traits */}
+          {(character.role || character.team || character.physical_features || character.comedy_angle) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Caricature Traits</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {character.role && (
+                    <div>
+                      <p className="text-xs text-white/50 uppercase tracking-wider">Role</p>
+                      <p className="mt-1 text-sm text-white/80 capitalize">{character.role.replace("_", " ")}</p>
+                    </div>
+                  )}
+                  {character.team && (
+                    <div>
+                      <p className="text-xs text-white/50 uppercase tracking-wider">Team</p>
+                      <p className="mt-1 text-sm text-white/80">{character.team}</p>
+                    </div>
+                  )}
+                  {character.nationality && (
+                    <div>
+                      <p className="text-xs text-white/50 uppercase tracking-wider">Nationality</p>
+                      <p className="mt-1 text-sm text-white/80">{character.nationality}</p>
+                    </div>
+                  )}
+                  {character.background_type && (
+                    <div>
+                      <p className="text-xs text-white/50 uppercase tracking-wider">Background</p>
+                      <p className="mt-1 text-sm text-white/80 capitalize">{character.background_type.replace("_", " ")}</p>
+                    </div>
+                  )}
+                </div>
+                {character.physical_features && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-xs text-white/50 uppercase tracking-wider">Physical Features</p>
+                    <p className="mt-1 text-sm text-white/80">{character.physical_features}</p>
+                  </div>
+                )}
+                {character.comedy_angle && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-xs text-white/50 uppercase tracking-wider">Comedy Angle</p>
+                    <p className="mt-1 text-sm text-white/80">{character.comedy_angle}</p>
+                  </div>
+                )}
+                {character.signature_expression && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-xs text-white/50 uppercase tracking-wider">Signature Expression</p>
+                    <p className="mt-1 text-sm text-white/80">{character.signature_expression}</p>
+                  </div>
+                )}
+                {character.clothing_description && (
+                  <div className="border-t border-white/10 pt-4">
+                    <p className="text-xs text-white/50 uppercase tracking-wider">Clothing</p>
+                    <p className="mt-1 text-sm text-white/80">{character.clothing_description}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Reference Images */}
           <Card>

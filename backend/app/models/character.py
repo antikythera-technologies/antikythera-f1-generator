@@ -10,8 +10,8 @@ from app.database import Base
 
 
 class Character(Base):
-    """F1 character definitions with voice/personality for consistent generation."""
-    
+    """F1 character definitions with voice/personality and caricature traits for consistent generation."""
+
     __tablename__ = "characters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -24,6 +24,20 @@ class Character(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Caricature traits for satirical image generation
+    role: Mapped[Optional[str]] = mapped_column(String(50))
+    team: Mapped[Optional[str]] = mapped_column(String(100))
+    nationality: Mapped[Optional[str]] = mapped_column(String(100))
+    physical_features: Mapped[Optional[str]] = mapped_column(Text)
+    comedy_angle: Mapped[Optional[str]] = mapped_column(Text)
+    signature_expression: Mapped[Optional[str]] = mapped_column(Text)
+    signature_pose: Mapped[Optional[str]] = mapped_column(Text)
+    props: Mapped[Optional[str]] = mapped_column(Text)
+    background_type: Mapped[Optional[str]] = mapped_column(String(50), default="orange_gradient")
+    background_detail: Mapped[Optional[str]] = mapped_column(Text)
+    clothing_description: Mapped[Optional[str]] = mapped_column(Text)
+    caricature_prompt: Mapped[Optional[str]] = mapped_column(Text)
 
     # Relationships
     images: Mapped[List["CharacterImage"]] = relationship("CharacterImage", back_populates="character", cascade="all, delete-orphan")
@@ -44,6 +58,7 @@ class CharacterImage(Base):
     image_type: Mapped[str] = mapped_column(String(50), default="reference")  # reference, action, emotion
     pose_description: Mapped[Optional[str]] = mapped_column(String(255))
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_style_reference: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships

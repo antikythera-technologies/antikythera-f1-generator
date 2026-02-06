@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +44,15 @@ const navigation: NavItem[] = [
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    name: "Running Gags",
+    href: "/gags",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -93,19 +101,14 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-white/10 bg-midnight/90 backdrop-blur-xl">
       {/* Logo */}
-      <div className="flex h-20 items-center gap-3 border-b border-white/10 px-4">
-        <div className="relative h-14 w-14 flex-shrink-0">
-          <Image
-            src="/logo.png"
-            alt="Antikythera F1"
-            fill
-            className="object-contain"
-            priority
-          />
+      <div className="flex h-16 items-center gap-3 border-b border-white/10 px-6">
+        <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-racing-red to-cyber-purple">
+          <span className="text-xl font-bold text-white">F1</span>
+          <div className="absolute -inset-0.5 -z-10 rounded-xl bg-gradient-to-br from-racing-red to-cyber-purple opacity-50 blur-sm" />
         </div>
-        <div className="min-w-0">
-          <h1 className="font-bold text-white truncate">Antikythera F1</h1>
-          <p className="text-xs text-visor-blue">Mission Control</p>
+        <div>
+          <h1 className="font-bold text-white">Antikythera F1</h1>
+          <p className="text-xs text-neon-cyan">Mission Control</p>
         </div>
       </div>
 

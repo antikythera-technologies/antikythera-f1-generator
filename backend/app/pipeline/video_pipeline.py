@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import async_session_maker
 from app.exceptions import SceneGenerationError, VideoStitchError
-from app.models.character import Character
+from app.models.character import Character, CharacterImage
 from app.models.episode import Episode, EpisodeStatus
 from app.models.logs import APIProvider, APIUsage, GenerationLog, LogComponent, LogLevel
 from app.models.race import Race
@@ -301,25 +301,43 @@ Season: {self.race.season} Round {self.race.round_number}
 
     async def _get_scene_image(self, db: AsyncSession, scene: Scene) -> str:
         """
-        Generate scene image using Nano Banana Pro with character consistency.
-        
+        Generate scene image using Gemini with character consistency.
+
         Character consistency is maintained through:
-        1. Detailed visual style guides baked into prompts
-        2. Character-specific appearance templates
-        3. Reference images (if available) for edit mode
+        1. Style reference images fed as multi-modal input to Gemini
+        2. Character traits from database (physical features, comedy angle, etc.)
+        3. Master style template baked into every prompt
         """
         # Get character info
         character_name = "generic_commentator"
         reference_image_path = None
-        
+        character_traits = {}
+        style_reference_paths = []
+
         if scene.character_id:
             stmt = select(Character).where(Character.id == scene.character_id)
             result = await db.execute(stmt)
             character = result.scalar_one_or_none()
-            
+
             if character:
                 character_name = character.name
-                
+
+                # Build character traits dict for prompt generation
+                character_traits = {
+                    "display_name": character.display_name,
+                    "role": character.role,
+                    "team": character.team,
+                    "nationality": character.nationality,
+                    "physical_features": character.physical_features,
+                    "comedy_angle": character.comedy_angle,
+                    "signature_expression": character.signature_expression,
+                    "signature_pose": character.signature_pose,
+                    "props": character.props,
+                    "background_type": character.background_type,
+                    "background_detail": character.background_detail,
+                    "clothing_description": character.clothing_description,
+                }
+
                 # Check for reference image in MinIO
                 if character.primary_image_path:
                     try:
@@ -329,14 +347,35 @@ Season: {self.race.season} Round {self.race.round_number}
                         self.logger.debug(f"Using reference image: {reference_image_path}")
                     except Exception as e:
                         self.logger.warning(f"Could not load reference image: {e}")
-        
-        # Generate scene image with Nano Banana Pro
+
+                # Load style reference images (gold standard caricatures)
+                style_ref_stmt = (
+                    select(CharacterImage)
+                    .where(CharacterImage.is_style_reference == True)
+                    .limit(settings.GEMINI_STYLE_REFERENCE_COUNT)
+                )
+                style_result = await db.execute(style_ref_stmt)
+                style_refs = style_result.scalars().all()
+
+                for ref in style_refs:
+                    try:
+                        local_path = await self.storage.download_character_image(ref.image_path)
+                        style_reference_paths.append(local_path)
+                    except Exception as e:
+                        self.logger.warning(f"Could not load style ref {ref.image_path}: {e}")
+
+                if style_reference_paths:
+                    self.logger.info(f"Loaded {len(style_reference_paths)} style references")
+
+        # Generate scene image with Gemini + style references + character traits
         generated = await self.image_generator.generate_scene_image(
             scene_number=scene.scene_number,
             episode_id=self.episode_id,
             character_name=character_name,
             action_description=scene.action_description or "Character speaking to camera",
             reference_image_path=reference_image_path,
+            style_reference_paths=style_reference_paths,
+            character_traits=character_traits,
             resolution=settings.GEMINI_IMAGE_RESOLUTION,
         )
         

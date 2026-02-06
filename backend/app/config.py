@@ -61,10 +61,11 @@ class Settings(BaseSettings):
     HAIKU_INPUT_COST_PER_1K: float = 0.00025
     HAIKU_OUTPUT_COST_PER_1K: float = 0.00125
 
-    # Gemini / Imagen (Image Generation)
+    # Gemini / Nano Banana Pro (Image Generation)
     GEMINI_API_KEY: str = ""
-    GEMINI_IMAGE_MODEL: str = "imagen-4.0-generate-001"  # Verified working model
-    GEMINI_IMAGE_RESOLUTION: str = "1024x1024"  # Imagen uses pixel dimensions
+    GEMINI_IMAGE_MODEL: str = "gemini-2.0-flash-exp"  # Supports multi-modal input with reference images
+    GEMINI_IMAGE_RESOLUTION: str = "1024x1536"  # Portrait orientation for character images
+    GEMINI_STYLE_REFERENCE_COUNT: int = 4  # Number of style reference images to feed
 
     # Ovi (HuggingFace Gradio)
     OVI_SPACE: str = "alexnasa/Ovi-ZEROGPU"  # Working space with API params

@@ -37,10 +37,16 @@ class Episode(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     race_id: Mapped[Optional[int]] = mapped_column(ForeignKey("races.id"))
-    episode_type: Mapped[EpisodeType] = mapped_column(Enum(EpisodeType), nullable=False)
+    episode_type: Mapped[EpisodeType] = mapped_column(
+        Enum(EpisodeType, name="episode_type", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
-    status: Mapped[EpisodeStatus] = mapped_column(Enum(EpisodeStatus), default=EpisodeStatus.PENDING)
+    status: Mapped[EpisodeStatus] = mapped_column(
+        Enum(EpisodeStatus, name="episode_status", create_type=False, values_callable=lambda x: [e.value for e in x]),
+        default=EpisodeStatus.PENDING,
+    )
 
     # Timing
     triggered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

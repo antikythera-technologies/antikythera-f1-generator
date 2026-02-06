@@ -7,8 +7,10 @@ services:
       dockerfile: Dockerfile
     container_name: f1-generator-backend
     restart: unless-stopped
+    extra_hosts:
+      - "minio.antikythera.co.za:172.18.0.5"
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - APP_ENV=production
       - DATABASE_URL=${DATABASE_URL}
@@ -19,6 +21,15 @@ services:
       - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
       - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
       - REDIS_URL=redis://redis:6379/0
+      - MINIO_SECURE=${MINIO_SECURE}
+      - MINIO_BUCKET_CHARACTERS=${MINIO_BUCKET_CHARACTERS}
+      - MINIO_BUCKET_SCENE_IMAGES=${MINIO_BUCKET_SCENE_IMAGES}
+      - MINIO_BUCKET_VIDEO_CLIPS=${MINIO_BUCKET_VIDEO_CLIPS}
+      - MINIO_BUCKET_FINAL_VIDEOS=${MINIO_BUCKET_FINAL_VIDEOS}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_IMAGE_MODEL=${GEMINI_IMAGE_MODEL}
+      - GEMINI_IMAGE_RESOLUTION=${GEMINI_IMAGE_RESOLUTION}
+      - GEMINI_STYLE_REFERENCE_COUNT=${GEMINI_STYLE_REFERENCE_COUNT}
     volumes:
       - ./backend:/app
       - video-temp:/tmp/videos
@@ -27,6 +38,7 @@ services:
       - redis
     networks:
       - f1-network
+      - antikythera-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -40,10 +52,10 @@ services:
     container_name: f1-generator-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=https://f1.antikythera.co.za/api/v1
     depends_on:
       - backend
     networks:
@@ -77,6 +89,8 @@ services:
       dockerfile: Dockerfile
     container_name: f1-generator-worker
     restart: unless-stopped
+    extra_hosts:
+      - "minio.antikythera.co.za:172.18.0.5"
     command: python -m app.worker
     environment:
       - APP_ENV=production
@@ -88,6 +102,15 @@ services:
       - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
       - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
       - REDIS_URL=redis://redis:6379/0
+      - MINIO_SECURE=${MINIO_SECURE}
+      - MINIO_BUCKET_CHARACTERS=${MINIO_BUCKET_CHARACTERS}
+      - MINIO_BUCKET_SCENE_IMAGES=${MINIO_BUCKET_SCENE_IMAGES}
+      - MINIO_BUCKET_VIDEO_CLIPS=${MINIO_BUCKET_VIDEO_CLIPS}
+      - MINIO_BUCKET_FINAL_VIDEOS=${MINIO_BUCKET_FINAL_VIDEOS}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_IMAGE_MODEL=${GEMINI_IMAGE_MODEL}
+      - GEMINI_IMAGE_RESOLUTION=${GEMINI_IMAGE_RESOLUTION}
+      - GEMINI_STYLE_REFERENCE_COUNT=${GEMINI_STYLE_REFERENCE_COUNT}
     volumes:
       - ./backend:/app
       - video-temp:/tmp/videos
@@ -97,10 +120,14 @@ services:
       - backend
     networks:
       - f1-network
+      - antikythera-network
 
 networks:
   f1-network:
     driver: bridge
+  antikythera-network:
+    external:
+      name: n8n-docker-caddy_antikythera_internal_network
 
 volumes:
   redis-data:
