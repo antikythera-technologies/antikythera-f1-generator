@@ -21,27 +21,40 @@ from app.services.script_generator import ScriptGenerator
 from app.services.image_generator import ImageGenerator
 from app.services.video_generator import VideoGenerator
 from app.services.ovi_space_manager import OviSpaceManager
+from app.services.ltx_video_generator import LTX2VideoGenerator
 from app.services.stitcher import VideoStitcher
 from app.services.youtube_uploader import YouTubeUploader
 from app.services.storage import StorageService
 
 
 class VideoPipeline:
-    """Main video generation pipeline orchestrator."""
+    """Main video generation pipeline orchestrator.
+
+    Supports two video engines:
+    - "ovi": Ovi Gradio on HuggingFace (default)
+    - "ltx2": LTX-2 19B via ComfyUI on RunPod
+
+    Both engines are configured for style preservation to maintain
+    the caricature art style during image-to-video conversion.
+    """
 
     MAX_SCENE_RETRIES = 3
 
-    def __init__(self, episode_id: int):
+    def __init__(self, episode_id: int, video_engine: Optional[str] = None):
         self.episode_id = episode_id
         self.logger = logging.getLogger(f"pipeline.episode.{episode_id}")
+        self.video_engine = video_engine or settings.VIDEO_ENGINE
 
         # Services
         self.script_generator = ScriptGenerator()
         self.image_generator = ImageGenerator()
         self.video_generator = VideoGenerator(quality=settings.OVI_QUALITY)
+        self.ltx2_generator = LTX2VideoGenerator(quality=settings.OVI_QUALITY)
         self.stitcher = VideoStitcher()
         self.uploader = YouTubeUploader()
         self.storage = StorageService()
+
+        self.logger.info(f"Video engine: {self.video_engine}")
 
         # State
         self.episode: Optional[Episode] = None
@@ -211,92 +224,176 @@ Season: {self.race.season} Round {self.race.round_number}
 
     async def _generate_video_clips(self, db: AsyncSession, scenes: List[Scene]) -> None:
         """
-        Generate video clips for all scenes.
-        
-        Uses OviSpaceManager to handle space lifecycle:
-        1. Starts the HuggingFace space if sleeping
-        2. Waits for full initialization
-        3. Generates all videos while keeping space alive
-        4. Pauses space after completion to save costs
+        Generate video clips for all scenes using the configured video engine.
+
+        Supports two engines:
+        - "ovi": Uses OviSpaceManager with HuggingFace Gradio
+        - "ltx2": Uses LTX2VideoGenerator with ComfyUI on RunPod
+
+        Both engines use style-preservation parameters to maintain the
+        caricature art style during image-to-video conversion.
         """
+        if self.video_engine == "ltx2":
+            await self._generate_clips_ltx2(db, scenes)
+        else:
+            await self._generate_clips_ovi(db, scenes)
+
+    async def _generate_clips_ovi(self, db: AsyncSession, scenes: List[Scene]) -> None:
+        """Generate video clips using Ovi (HuggingFace Gradio)."""
         self.logger.info("Starting Ovi space for video generation...")
-        
+
         # Use OviSpaceManager for automatic lifecycle management
-        async with OviSpaceManager(quality=settings.OVI_QUALITY) as ovi_manager:
+        # Use "caricature" preset for maximum style preservation
+        ovi_quality = settings.OVI_QUALITY
+        if ovi_quality == "standard":
+            # Default to caricature preset for better results
+            ovi_quality = "caricature"
+            self.logger.info("Using caricature preset for style preservation")
+
+        async with OviSpaceManager(quality=ovi_quality) as ovi_manager:
             for scene in scenes:
-                self.logger.info(f"Processing scene {scene.scene_number}/{len(scenes)}")
+                await self._generate_single_clip_ovi(db, scene, ovi_manager, len(scenes))
 
-                try:
-                    scene.status = SceneStatus.GENERATING
-                    scene.generation_started_at = datetime.utcnow()
-                    await db.flush()
-
-                    # Generate scene image with Nano Banana Pro (character consistent)
-                    source_image = await self._get_scene_image(db, scene)
-
-                    # Build Ovi prompt with special tokens
-                    prompt = self._build_ovi_prompt(scene)
-                    
-                    # Generate video clip using OviSpaceManager
-                    start_time = datetime.utcnow()
-                    video_path = await ovi_manager.generate_video(
-                        image_path=source_image,
-                        prompt=prompt,
-                    )
-                    generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-
-                    # Upload to storage
-                    clip_path = await self.storage.upload_video_clip(
-                        race_id=self.race.id if self.race else 0,
-                        episode_id=self.episode_id,
-                        scene_number=scene.scene_number,
-                        file_path=video_path,
-                    )
-
-                    # Update scene
-                    scene.video_clip_path = clip_path
-                    scene.status = SceneStatus.COMPLETED
-                    scene.generation_completed_at = datetime.utcnow()
-                    scene.generation_time_ms = generation_time_ms
-
-                    self.episode.ovi_calls += 1
-
-                    self.logger.info(f"Scene {scene.scene_number} complete: {generation_time_ms}ms")
-
-                    await db.flush()
-
-                except Exception as e:
-                    self.logger.error(f"Scene {scene.scene_number} failed: {e}")
-                    scene.status = SceneStatus.FAILED
-                    scene.last_error = str(e)
-                    scene.retry_count += 1
-                    await db.flush()
-
-                    if scene.retry_count >= self.MAX_SCENE_RETRIES:
-                        raise SceneGenerationError(
-                            scene.scene_number,
-                            f"Failed after {self.MAX_SCENE_RETRIES} retries",
-                        )
-        
         # Space is automatically paused after context manager exits
         self.logger.info("Ovi space paused to save GPU costs")
+
+    async def _generate_single_clip_ovi(
+        self, db: AsyncSession, scene: Scene, ovi_manager: OviSpaceManager, total: int
+    ) -> None:
+        """Generate a single video clip using Ovi."""
+        self.logger.info(f"Processing scene {scene.scene_number}/{total}")
+
+        try:
+            scene.status = SceneStatus.GENERATING
+            scene.generation_started_at = datetime.utcnow()
+            await db.flush()
+
+            source_image = await self._get_scene_image(db, scene)
+            prompt = self._build_ovi_prompt(scene)
+
+            start_time = datetime.utcnow()
+            video_path = await ovi_manager.generate_video(
+                image_path=source_image,
+                prompt=prompt,
+            )
+            generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+            clip_path = await self.storage.upload_video_clip(
+                race_id=self.race.id if self.race else 0,
+                episode_id=self.episode_id,
+                scene_number=scene.scene_number,
+                file_path=video_path,
+            )
+
+            scene.video_clip_path = clip_path
+            scene.status = SceneStatus.COMPLETED
+            scene.generation_completed_at = datetime.utcnow()
+            scene.generation_time_ms = generation_time_ms
+            self.episode.ovi_calls += 1
+
+            self.logger.info(f"Scene {scene.scene_number} complete: {generation_time_ms}ms")
+            await db.flush()
+
+        except Exception as e:
+            self.logger.error(f"Scene {scene.scene_number} failed: {e}")
+            scene.status = SceneStatus.FAILED
+            scene.last_error = str(e)
+            scene.retry_count += 1
+            await db.flush()
+
+            if scene.retry_count >= self.MAX_SCENE_RETRIES:
+                raise SceneGenerationError(
+                    scene.scene_number,
+                    f"Failed after {self.MAX_SCENE_RETRIES} retries",
+                )
+
+    async def _generate_clips_ltx2(self, db: AsyncSession, scenes: List[Scene]) -> None:
+        """Generate video clips using LTX-2 via ComfyUI on RunPod."""
+        self.logger.info("Starting LTX-2 video generation via ComfyUI...")
+
+        # Health check
+        is_healthy = await self.ltx2_generator.check_health()
+        if not is_healthy:
+            self.logger.error(
+                "ComfyUI is not reachable. Make sure RunPod pod is running "
+                "and ComfyUI is started."
+            )
+            raise VideoGenerationError("ComfyUI not reachable on RunPod")
+
+        for scene in scenes:
+            self.logger.info(f"Processing scene {scene.scene_number}/{len(scenes)}")
+
+            try:
+                scene.status = SceneStatus.GENERATING
+                scene.generation_started_at = datetime.utcnow()
+                await db.flush()
+
+                source_image = await self._get_scene_image(db, scene)
+
+                start_time = datetime.utcnow()
+                clip = await self.ltx2_generator.generate_clip(
+                    scene_number=scene.scene_number,
+                    image_path=source_image,
+                    action=scene.action_description or "Character speaking to camera",
+                    dialogue=scene.dialogue,
+                    audio_description=scene.audio_description,
+                )
+                generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+                clip_path = await self.storage.upload_video_clip(
+                    race_id=self.race.id if self.race else 0,
+                    episode_id=self.episode_id,
+                    scene_number=scene.scene_number,
+                    file_path=clip.video_path,
+                )
+
+                scene.video_clip_path = clip_path
+                scene.status = SceneStatus.COMPLETED
+                scene.generation_completed_at = datetime.utcnow()
+                scene.generation_time_ms = generation_time_ms
+
+                self.logger.info(f"Scene {scene.scene_number} complete: {generation_time_ms}ms")
+                await db.flush()
+
+            except Exception as e:
+                self.logger.error(f"Scene {scene.scene_number} failed: {e}")
+                scene.status = SceneStatus.FAILED
+                scene.last_error = str(e)
+                scene.retry_count += 1
+                await db.flush()
+
+                if scene.retry_count >= self.MAX_SCENE_RETRIES:
+                    raise SceneGenerationError(
+                        scene.scene_number,
+                        f"Failed after {self.MAX_SCENE_RETRIES} retries",
+                    )
     
     def _build_ovi_prompt(self, scene: Scene) -> str:
         """
-        Build Ovi prompt with special tokens.
-        
+        Build Ovi prompt with special tokens and style-preservation prefix.
+
         Ovi uses:
         - <S>...<E> for speech/dialogue
         - <AUDCAP>...<ENDAUDCAP> for audio description
+
+        The style-preservation prefix tells the model to animate the existing
+        image rather than re-interpreting it, which is critical for maintaining
+        the caricature art style.
         """
-        parts = [scene.action_description or "Character speaking to camera"]
-        
+        parts = [
+            "Subtle animated motion of the existing image. "
+            "Maintain the exact art style, colors, and character appearance. "
+            "Only add gentle movement: slight head turn, blinking, mouth movement for speech."
+        ]
+
+        parts.append(scene.action_description or "Character speaking to camera")
+
         if scene.dialogue:
             parts.append(f"<S>{scene.dialogue}<E>")
-        
+
         if scene.audio_description:
             parts.append(f"<AUDCAP>{scene.audio_description}<ENDAUDCAP>")
-        
+
         return " ".join(parts)
 
     async def _get_scene_image(self, db: AsyncSession, scene: Scene) -> str:

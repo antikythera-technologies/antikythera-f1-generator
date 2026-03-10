@@ -69,12 +69,14 @@ class OviSpaceManager:
     DEFAULT_HEALTH_CHECK_RETRIES = 3
     POLL_INTERVAL_SECONDS = 10
     
-    # Quality presets (sample_steps)
+    # Quality presets: (sample_steps, image_conditioning, denoise, guidance)
+    # Lower steps + higher conditioning + lower denoise = better style preservation
     QUALITY_PRESETS = {
-        "draft": 15,
-        "standard": 30,
-        "high": 50,
-        "ultra": 75,
+        "draft": {"steps": 10, "conditioning": 0.90, "denoise": 0.40, "guidance": 1.5},
+        "standard": {"steps": 20, "conditioning": 0.85, "denoise": 0.55, "guidance": 2.0},
+        "high": {"steps": 30, "conditioning": 0.80, "denoise": 0.60, "guidance": 2.5},
+        "ultra": {"steps": 40, "conditioning": 0.75, "denoise": 0.65, "guidance": 3.0},
+        "caricature": {"steps": 15, "conditioning": 0.92, "denoise": 0.35, "guidance": 1.5},
     }
 
     def __init__(
@@ -96,8 +98,22 @@ class OviSpaceManager:
         self.space_id = space_id or settings.OVI_SPACE
         self.token = token or settings.HUGGINGFACE_TOKEN
         self.quality = quality
-        self.sample_steps = self.QUALITY_PRESETS.get(quality, 30)
         self.auto_shutdown = auto_shutdown
+
+        # Load style-preservation parameters from preset
+        preset = self.QUALITY_PRESETS.get(quality, self.QUALITY_PRESETS["standard"])
+        self.sample_steps = preset["steps"]
+        self.image_conditioning_strength = preset["conditioning"]
+        self.denoise_strength = preset["denoise"]
+        self.guidance_scale = preset["guidance"]
+
+        # Allow env-level overrides
+        if settings.OVI_IMAGE_CONDITIONING_STRENGTH != 0.85:
+            self.image_conditioning_strength = settings.OVI_IMAGE_CONDITIONING_STRENGTH
+        if settings.OVI_DENOISE_STRENGTH != 0.55:
+            self.denoise_strength = settings.OVI_DENOISE_STRENGTH
+        if settings.OVI_GUIDANCE_SCALE != 2.0:
+            self.guidance_scale = settings.OVI_GUIDANCE_SCALE
         
         self._hf_api: Optional[HfApi] = None
         self._gradio_client: Optional[Client] = None
@@ -343,14 +359,31 @@ class OviSpaceManager:
         image_path: str,
         prompt: str,
     ) -> str:
-        """Synchronous video generation (for executor)."""
-        result = self.gradio_client.predict(
-            text_prompt=prompt,
-            sample_steps=self.sample_steps,
-            image=handle_file(image_path),
-            api_name="/generate_scene",
-        )
-        
+        """Synchronous video generation with style-preservation parameters."""
+        try:
+            # Try with full parameter set (newer Ovi spaces support these)
+            result = self.gradio_client.predict(
+                text_prompt=prompt,
+                sample_steps=self.sample_steps,
+                image=handle_file(image_path),
+                image_conditioning_strength=self.image_conditioning_strength,
+                denoise_strength=self.denoise_strength,
+                guidance_scale=self.guidance_scale,
+                api_name="/generate_scene",
+            )
+        except TypeError:
+            # Fallback: older Ovi space only accepts basic params
+            logger.warning(
+                "Ovi space does not support extended params, "
+                "falling back to basic mode"
+            )
+            result = self.gradio_client.predict(
+                text_prompt=prompt,
+                sample_steps=self.sample_steps,
+                image=handle_file(image_path),
+                api_name="/generate_scene",
+            )
+
         if isinstance(result, dict):
             return result.get('video', result)
         return result
@@ -361,16 +394,23 @@ class OviSpaceManager:
         prompt: str,
     ) -> str:
         """
-        Generate a single video from image and prompt.
-        
+        Generate a single video from image and prompt with style preservation.
+
+        Style-preservation parameters (conditioning, denoise, guidance) are
+        configured at init time via the quality preset or env overrides.
+
         Args:
             image_path: Path to source image
             prompt: Text prompt with Ovi tokens (<S>...<E>, <AUDCAP>...<ENDAUDCAP>)
-            
+
         Returns:
             Path to generated video file
         """
-        logger.info(f"Generating video from: {image_path}")
+        logger.info(
+            f"Generating video from: {image_path} "
+            f"(steps={self.sample_steps}, conditioning={self.image_conditioning_strength:.2f}, "
+            f"denoise={self.denoise_strength:.2f})"
+        )
         logger.debug(f"Prompt: {prompt}")
         
         start_time = time.time()
