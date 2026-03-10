@@ -9,6 +9,7 @@ from app.models.logs import GenerationLog, LogLevel, LogComponent, APIUsage, API
 from app.models.scheduler import ScheduledJob, JobStatus, JobTriggerType
 from app.models.news import NewsSource, NewsArticle, ArticleContext, EpisodeStoryline
 from app.models.gag import RunningGag, GagUsage, GagStatus, GagCategory
+from app.models.storyline import Storyline, StorylineEpisode, StorylineType, StorylineStatus, storyline_characters
 
 __all__ = [
     "Base",
@@ -40,4 +41,10 @@ __all__ = [
     "GagUsage",
     "GagStatus",
     "GagCategory",
+    # Storylines
+    "Storyline",
+    "StorylineEpisode",
+    "StorylineType",
+    "StorylineStatus",
+    "storyline_characters",
 ]
