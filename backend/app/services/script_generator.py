@@ -3,8 +3,8 @@
 import json
 import logging
 import time
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 import anthropic
 
@@ -32,6 +32,7 @@ class EpisodeScript:
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    gags_referenced: List[str] = field(default_factory=list)
 
 
 SCRIPT_SYSTEM_PROMPT = """You are a satirical F1 commentator creating scripts for animated videos.
@@ -41,6 +42,7 @@ Your style:
 - Deep F1 knowledge
 - Character-driven comedy
 - Pop culture references when appropriate
+- Real F1 events and drama become the fuel for satirical comedy
 
 You will create scripts with exactly 24 scenes, each 5 seconds long.
 Each scene features one character speaking or reacting.
@@ -57,7 +59,8 @@ Output format (JSON):
       "dialogue": "What they say (keep under 15 words)",
       "audio_description": "Background sounds, voice tone"
     }
-  ]
+  ],
+  "gags_used": ["gag_title_1", "gag_title_2"]
 }
 ```
 
@@ -67,6 +70,9 @@ Rules:
 - Actions must be simple and animatable
 - Audio descriptions help set the mood
 - Create a coherent narrative across all 24 scenes
+- If recent news is provided, use it as comedy material — exaggerate, satirize, and lampoon real events
+- If running gags are provided, weave them in naturally where they fit (don't force every gag)
+- List all running gag titles you referenced in the "gags_used" array
 """
 
 
@@ -84,6 +90,8 @@ class ScriptGenerator:
         race_context: str,
         characters: list[dict],
         episode_type: str = "post-race",
+        news_context: Optional[List[dict]] = None,
+        running_gags: Optional[List[dict]] = None,
     ) -> EpisodeScript:
         """
         Generate a 24-scene script for an episode.
@@ -92,14 +100,23 @@ class ScriptGenerator:
             race_context: Description of the race/event to comment on
             characters: List of available characters with their personalities
             episode_type: 'pre-race' or 'post-race'
+            news_context: Recent F1 news articles for comedic material
+            running_gags: Active running gags to weave into the script
 
         Returns:
             EpisodeScript with generated content and usage metrics
         """
         logger.info(f"Starting script generation for {episode_type} episode")
         logger.debug(f"Race context: {race_context[:200]}...")
+        if news_context:
+            logger.info(f"News context: {len(news_context)} articles provided")
+        if running_gags:
+            logger.info(f"Running gags: {len(running_gags)} gags provided")
 
-        prompt = self._build_prompt(race_context, characters, episode_type)
+        prompt = self._build_prompt(
+            race_context, characters, episode_type,
+            news_context=news_context, running_gags=running_gags,
+        )
         logger.debug(f"Prompt length: {len(prompt)} characters")
 
         start_time = time.time()
@@ -146,12 +163,18 @@ class ScriptGenerator:
             if len(scenes) != 24:
                 logger.warning(f"Expected 24 scenes, got {len(scenes)}")
 
+            # Extract gag references from response
+            gags_referenced = script_data.get("gags_used", [])
+            if gags_referenced:
+                logger.info(f"Gags referenced in script: {gags_referenced}")
+
             return EpisodeScript(
                 title=script_data["title"],
                 scenes=scenes,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cost_usd=cost_usd,
+                gags_referenced=gags_referenced,
             )
 
         except anthropic.APIError as e:
@@ -166,6 +189,8 @@ class ScriptGenerator:
         race_context: str,
         characters: list[dict],
         episode_type: str,
+        news_context: Optional[List[dict]] = None,
+        running_gags: Optional[List[dict]] = None,
     ) -> str:
         """Build the prompt for script generation."""
         character_info = "\n".join(
@@ -180,17 +205,92 @@ class ScriptGenerator:
             else "Post-race analysis and commentary"
         )
 
-        return f"""Generate a {episode_type} episode script.
+        prompt_parts = [
+            f"Generate a {episode_type} episode script.",
+            f"\nEpisode type: {type_context}",
+            f"\nAvailable characters:\n{character_info}",
+            f"\nRace context:\n{race_context}",
+        ]
 
-Episode type: {type_context}
+        # Add news context if available
+        if news_context:
+            news_section = self._format_news_context(news_context)
+            prompt_parts.append(f"\n{news_section}")
 
-Available characters:
-{character_info}
+        # Add running gags if available
+        if running_gags:
+            gags_section = self._format_running_gags(running_gags)
+            prompt_parts.append(f"\n{gags_section}")
 
-Race context:
-{race_context}
+        prompt_parts.append(
+            "\nGenerate a 24-scene satirical commentary script. "
+            "Use the real news as comedy fuel — exaggerate and satirize real events. "
+            "Weave in any running gags that fit naturally. "
+            "Output valid JSON only."
+        )
 
-Generate a 24-scene satirical commentary script. Output valid JSON only."""
+        return "\n".join(prompt_parts)
+
+    def _format_news_context(self, news_articles: List[dict]) -> str:
+        """Format news articles into prompt context."""
+        lines = ["Recent F1 News (use as satirical material — real drama becomes comedy):"]
+
+        for i, article in enumerate(news_articles, 1):
+            title = article.get("title", "Untitled")
+            summary = article.get("summary", "")
+            drivers = article.get("mentioned_drivers", [])
+            teams = article.get("mentioned_teams", [])
+
+            entry = f"{i}. {title}"
+            if summary:
+                # Truncate long summaries to save tokens
+                truncated = summary[:300] + "..." if len(summary) > 300 else summary
+                entry += f"\n   Summary: {truncated}"
+            if drivers:
+                entry += f"\n   Drivers mentioned: {', '.join(drivers)}"
+            if teams:
+                entry += f"\n   Teams mentioned: {', '.join(teams)}"
+
+            lines.append(entry)
+
+        return "\n".join(lines)
+
+    def _format_running_gags(self, gags: List[dict]) -> str:
+        """Format running gags into prompt context."""
+        lines = [
+            "Running Gags (weave these in naturally where they fit — "
+            "don't force them all, pick the ones that work best):"
+        ]
+
+        for gag in gags:
+            title = gag.get("title", "Untitled")
+            description = gag.get("description", "")
+            category = gag.get("category", "")
+            character = gag.get("primary_character", "")
+            setup = gag.get("setup", "")
+            punchline = gag.get("punchline", "")
+            variations = gag.get("variations", "")
+            times_used = gag.get("times_used", 0)
+
+            entry = f"- \"{title}\""
+            if character:
+                entry += f" (character: {character})"
+            if category:
+                entry += f" [{category}]"
+            if description:
+                entry += f"\n  Description: {description}"
+            if setup:
+                entry += f"\n  Setup: {setup}"
+            if punchline:
+                entry += f"\n  Punchline: {punchline}"
+            if variations:
+                entry += f"\n  Variations: {variations}"
+            if times_used > 0:
+                entry += f"\n  Used {times_used} times before — find a fresh angle"
+
+            lines.append(entry)
+
+        return "\n".join(lines)
 
     def _parse_response(self, content: str) -> dict:
         """Parse the LLM response into structured data."""

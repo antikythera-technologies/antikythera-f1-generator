@@ -13,12 +13,16 @@ from app.config import settings
 from app.database import async_session_maker
 from app.exceptions import SceneGenerationError, VideoStitchError
 from app.models.character import Character, CharacterImage
-from app.models.episode import Episode, EpisodeStatus
+from app.models.episode import Episode, EpisodeStatus, EpisodeType
+from app.models.gag import GagStatus, GagUsage, RunningGag
 from app.models.logs import APIProvider, APIUsage, GenerationLog, LogComponent, LogLevel
+from app.models.news import NewsArticle
 from app.models.race import Race
 from app.models.scene import Scene, SceneStatus
+from app.models.scheduler import JobTriggerType
 from app.services.script_generator import ScriptGenerator
 from app.services.image_generator import ImageGenerator
+from app.services.news_scraper import NewsScraperService
 from app.services.video_generator import VideoGenerator
 from app.services.ovi_space_manager import OviSpaceManager
 from app.services.stitcher import VideoStitcher
@@ -63,7 +67,11 @@ class VideoPipeline:
                 # Load episode
                 await self._load_episode(db)
 
-                # Phase 1: Generate script
+                # Phase 0: Scrape latest news for context
+                self.logger.info("PHASE 0: News Scraping")
+                await self._scrape_news(db)
+
+                # Phase 1: Generate script (with news + gags context)
                 self.logger.info("PHASE 1: Script Generation")
                 await self._update_status(db, EpisodeStatus.GENERATING)
                 scenes = await self._generate_script(db)
@@ -130,6 +138,68 @@ class VideoPipeline:
         await db.flush()
         self.logger.info(f"Status updated to: {status.value}")
 
+    async def _scrape_news(self, db: AsyncSession) -> None:
+        """Scrape latest F1 news relevant to this episode's race/context."""
+        try:
+            scraper = NewsScraperService(session=db)
+
+            # Build scrape context based on episode type
+            scrape_context = self._build_scrape_context()
+
+            self.logger.info(f"Scraping news with context: {scrape_context.get('type', 'unknown')}")
+            articles = await scraper.scrape_for_context(
+                scrape_context=scrape_context,
+                max_articles=20,
+            )
+
+            self.logger.info(f"Scraped {len(articles)} relevant articles")
+            await scraper.close()
+
+        except Exception as e:
+            # News scraping failure is non-fatal — log and continue
+            self.logger.warning(f"News scraping failed (non-fatal): {e}")
+
+    def _build_scrape_context(self) -> dict:
+        """Build scrape context configuration based on episode type."""
+        episode_type = self.episode.episode_type
+
+        if episode_type == EpisodeType.WEEKLY_RECAP:
+            return {
+                "type": "off-week",
+                "date_range_days": 7,
+                "focus": [
+                    "paddock_news", "transfers", "technical_developments",
+                    "paddock_gossip", "driver_quotes",
+                ],
+            }
+
+        # Race weekend context
+        focus_map = {
+            EpisodeType.POST_FP2: [
+                "fp1_results", "fp2_results", "driver_quotes",
+                "track_conditions", "team_drama",
+            ],
+            EpisodeType.POST_SPRINT: [
+                "sprint_results", "driver_battles", "penalties",
+                "driver_quotes", "championship_implications",
+            ],
+            EpisodeType.POST_RACE: [
+                "race_results", "driver_battles", "penalties",
+                "post_race_interviews", "championship_implications",
+                "team_drama",
+            ],
+            EpisodeType.PRE_RACE: [
+                "track_conditions", "driver_quotes", "team_drama",
+                "championship_implications",
+            ],
+        }
+
+        return {
+            "type": "race-weekend",
+            "date_range_hours": 48,
+            "focus": focus_map.get(episode_type, ["race_results", "driver_quotes"]),
+        }
+
     async def _generate_script(self, db: AsyncSession) -> List[Scene]:
         """Generate script and create scene records."""
         # Get available characters
@@ -149,11 +219,19 @@ class VideoPipeline:
         # Build race context
         race_context = self._build_race_context()
 
-        # Generate script
+        # Fetch news articles for script context
+        news_context = await self._fetch_news_for_script(db)
+
+        # Fetch active running gags
+        running_gags_data, gag_records = await self._fetch_running_gags(db)
+
+        # Generate script with news + gags context
         script = await self.script_generator.generate_script(
             race_context=race_context,
             characters=character_data,
             episode_type=self.episode.episode_type.value,
+            news_context=news_context,
+            running_gags=running_gags_data,
         )
 
         # Update episode with script metadata
@@ -170,6 +248,12 @@ class VideoPipeline:
             output_tokens=script.output_tokens,
             cost_usd=script.cost_usd,
         )
+
+        # Record gag usage for any gags referenced in the script
+        await self._record_gag_usage(db, script.gags_referenced, gag_records)
+
+        # Mark news articles as used in this episode
+        await self._mark_news_used(db, news_context)
 
         # Create scene records
         scenes = []
@@ -196,6 +280,180 @@ class VideoPipeline:
         self.logger.info(f"Created {len(scenes)} scene records")
 
         return scenes
+
+    async def _fetch_news_for_script(self, db: AsyncSession) -> List[dict]:
+        """Fetch recent news articles formatted for the script generator."""
+        try:
+            # Map episode type to trigger type for the news scraper query
+            trigger_map = {
+                EpisodeType.POST_FP2: JobTriggerType.POST_FP2,
+                EpisodeType.POST_SPRINT: JobTriggerType.POST_SPRINT,
+                EpisodeType.POST_RACE: JobTriggerType.POST_RACE,
+                EpisodeType.PRE_RACE: JobTriggerType.POST_RACE,
+                EpisodeType.WEEKLY_RECAP: JobTriggerType.WEEKLY_RECAP,
+            }
+            trigger_type = trigger_map.get(
+                self.episode.episode_type, JobTriggerType.POST_RACE
+            )
+
+            scraper = NewsScraperService(session=db)
+            articles = await scraper.get_articles_for_episode(
+                trigger_type=trigger_type,
+                race_id=self.race.id if self.race else None,
+                limit=10,
+            )
+            await scraper.close()
+
+            if not articles:
+                self.logger.info("No news articles available for script context")
+                return []
+
+            # Convert to dicts for the script generator
+            news_context = []
+            for article in articles:
+                news_context.append({
+                    "id": article.id,
+                    "title": article.title,
+                    "summary": article.summary or "",
+                    "mentioned_drivers": article.mentioned_drivers or [],
+                    "mentioned_teams": article.mentioned_teams or [],
+                })
+
+            self.logger.info(f"Fetched {len(news_context)} news articles for script context")
+            return news_context
+
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch news for script (non-fatal): {e}")
+            return []
+
+    async def _fetch_running_gags(self, db: AsyncSession) -> tuple:
+        """
+        Fetch active running gags for script generation.
+
+        Returns:
+            Tuple of (gag_data_for_prompt, gag_records_for_usage_tracking)
+        """
+        try:
+            stmt = (
+                select(RunningGag)
+                .where(
+                    RunningGag.is_active == True,
+                    RunningGag.status == GagStatus.ACTIVE,
+                )
+                .order_by(RunningGag.humor_rating.desc())
+                .limit(10)
+            )
+            result = await db.execute(stmt)
+            gag_records = list(result.scalars().all())
+
+            if not gag_records:
+                self.logger.info("No active running gags available")
+                return [], []
+
+            # Build gag data for the script generator prompt
+            gag_data = []
+            for gag in gag_records:
+                # Resolve primary character name if linked
+                primary_character_name = ""
+                if gag.primary_character_id:
+                    char_stmt = select(Character.name).where(
+                        Character.id == gag.primary_character_id
+                    )
+                    char_result = await db.execute(char_stmt)
+                    char_name = char_result.scalar_one_or_none()
+                    if char_name:
+                        primary_character_name = char_name
+
+                gag_data.append({
+                    "title": gag.title,
+                    "description": gag.description,
+                    "category": gag.category.value if gag.category else "",
+                    "primary_character": primary_character_name,
+                    "setup": gag.setup or "",
+                    "punchline": gag.punchline or "",
+                    "variations": gag.variations or "",
+                    "times_used": gag.times_used,
+                })
+
+            self.logger.info(f"Fetched {len(gag_data)} running gags for script context")
+            return gag_data, gag_records
+
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch running gags (non-fatal): {e}")
+            return [], []
+
+    async def _record_gag_usage(
+        self,
+        db: AsyncSession,
+        gags_referenced: List[str],
+        gag_records: List[RunningGag],
+    ) -> None:
+        """Record GagUsage for any running gags referenced in the generated script."""
+        if not gags_referenced or not gag_records:
+            return
+
+        # Build a lookup by title (case-insensitive)
+        gag_lookup = {gag.title.lower(): gag for gag in gag_records}
+
+        used_count = 0
+        for gag_title in gags_referenced:
+            gag = gag_lookup.get(gag_title.lower())
+            if not gag:
+                self.logger.debug(f"Gag title '{gag_title}' not found in records — skipping")
+                continue
+
+            # Create usage record
+            usage = GagUsage(
+                gag_id=gag.id,
+                episode_id=self.episode_id,
+                usage_context=f"Referenced in {self.episode.episode_type.value} script",
+            )
+            db.add(usage)
+
+            # Update gag tracking
+            gag.times_used += 1
+            gag.last_used_in_episode_id = self.episode_id
+            gag.last_used_at = datetime.utcnow()
+            if self.race:
+                gag.last_used_in_race = self.race.race_name
+
+            # Check if gag should be retired
+            if gag.max_uses and gag.times_used >= gag.max_uses:
+                gag.status = GagStatus.EXHAUSTED
+                self.logger.info(f"Gag '{gag.title}' exhausted after {gag.times_used} uses")
+
+            used_count += 1
+
+        if used_count > 0:
+            self.logger.info(f"Recorded {used_count} gag usages for this episode")
+        await db.flush()
+
+    async def _mark_news_used(
+        self,
+        db: AsyncSession,
+        news_context: List[dict],
+    ) -> None:
+        """Mark news articles as used in this episode."""
+        if not news_context:
+            return
+
+        article_ids = [a["id"] for a in news_context if "id" in a]
+        if not article_ids:
+            return
+
+        try:
+            for article_id in article_ids:
+                stmt = select(NewsArticle).where(NewsArticle.id == article_id)
+                result = await db.execute(stmt)
+                article = result.scalar_one_or_none()
+                if article:
+                    article.used_in_episode_id = self.episode_id
+                    article.used_at = datetime.utcnow()
+
+            await db.flush()
+            self.logger.info(f"Marked {len(article_ids)} articles as used in episode")
+        except Exception as e:
+            self.logger.warning(f"Failed to mark articles as used (non-fatal): {e}")
 
     def _build_race_context(self) -> str:
         """Build race context for script generation."""
