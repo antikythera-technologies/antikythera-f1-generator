@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import ScheduledJob, JobStatus
+from app.models import ScheduledJob, JobStatus, Episode, EpisodeStatus
 from app.services import SchedulerService
+from app.jobs import enqueue_pipeline, get_job_status, get_queue
 from app.schemas.scheduler import (
     ScheduledJobCreate,
     ScheduledJobResponse,
@@ -185,34 +186,90 @@ async def trigger_job(
 ):
     """
     Manually trigger a scheduled job to run now.
-    
-    This bypasses the scheduled time and immediately starts
-    the video generation pipeline.
+
+    Creates an Episode record, enqueues the video generation pipeline
+    onto the persistent RQ queue, and marks the job as RUNNING.
     """
     from sqlalchemy import select
-    
+
     result = await session.execute(
         select(ScheduledJob).where(ScheduledJob.id == job_id)
     )
     job = result.scalar_one_or_none()
-    
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     if job.status not in [JobStatus.SCHEDULED, JobStatus.FAILED]:
         raise HTTPException(
             status_code=400,
-            detail=f"Job cannot be triggered (status: {job.status.value})"
+            detail=f"Job cannot be triggered (status: {job.status.value})",
         )
-    
+
     service = SchedulerService(session)
-    await service.mark_job_running(job)
-    
-    # TODO: Actually trigger the pipeline here
-    # For now, just return that it's been marked as running
-    
+
+    # Determine the episode type from the job trigger
+    episode_type = service.map_trigger_to_episode_type(job.trigger_type)
+
+    # Build a title
+    title = job.description or f"Manual {episode_type.value} episode"
+
+    # Create an Episode record
+    episode = Episode(
+        race_id=job.race_id,
+        episode_type=episode_type,
+        title=title,
+        status=EpisodeStatus.PENDING,
+    )
+    session.add(episode)
+    await session.flush()  # obtain episode.id
+
+    # Mark job as running and link to episode
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime.utcnow()
+    job.episode_id = episode.id
+    await session.flush()
+
+    # Enqueue pipeline onto the persistent RQ queue
+    rq_job_id = enqueue_pipeline(episode.id)
+
     return {
         "status": "triggered",
         "job_id": job_id,
-        "message": "Job marked as running. Pipeline will process it."
+        "episode_id": episode.id,
+        "rq_job_id": rq_job_id,
+        "message": "Pipeline enqueued for processing.",
     }
+
+
+@router.get("/queue/status")
+async def queue_status():
+    """
+    Get the current state of the RQ pipeline queue.
+
+    Returns counts of queued, active, finished, and failed jobs.
+    """
+    try:
+        queue = get_queue()
+        return {
+            "queue": queue.name,
+            "queued": len(queue),
+            "started": queue.started_job_registry.count,
+            "finished": queue.finished_job_registry.count,
+            "failed": queue.failed_job_registry.count,
+            "workers": len(queue.workers),
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot connect to Redis queue: {exc}",
+        )
+
+
+@router.get("/queue/jobs/{rq_job_id}")
+async def rq_job_detail(rq_job_id: str):
+    """Get the status of an individual RQ job by its ID."""
+    info = get_job_status(rq_job_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail="RQ job not found")
+    return info

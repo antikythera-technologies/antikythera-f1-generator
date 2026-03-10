@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.episode import Episode, EpisodeStatus, EpisodeType
 from app.models.race import Race
+from app.jobs import enqueue_pipeline
 from app.schemas.episode import (
     EpisodeDetailResponse,
     EpisodeResponse,
@@ -18,7 +19,6 @@ from app.schemas.episode import (
     GenerateEpisodeResponse,
     RetryRequest,
 )
-from app.pipeline.video_pipeline import VideoPipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,10 +27,9 @@ router = APIRouter()
 @router.post("/generate", response_model=GenerateEpisodeResponse)
 async def generate_episode(
     request: GenerateEpisodeRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger episode generation."""
+    """Trigger episode generation via the persistent RQ queue."""
     logger.info(f"Generate episode request: race_id={request.race_id}, type={request.episode_type}")
 
     # Check if race exists
@@ -65,24 +64,16 @@ async def generate_episode(
 
     logger.info(f"Created episode {episode.id}: {title}")
 
-    # Start pipeline in background
-    background_tasks.add_task(run_pipeline_background, episode.id)
+    # Enqueue onto the persistent RQ queue (survives API restarts)
+    rq_job_id = enqueue_pipeline(episode.id)
+
+    logger.info(f"Episode {episode.id} enqueued as RQ job {rq_job_id}")
 
     return GenerateEpisodeResponse(
         episode_id=episode.id,
         status=EpisodeStatus.GENERATING,
         estimated_completion_minutes=45,
     )
-
-
-async def run_pipeline_background(episode_id: int):
-    """Run video pipeline in background."""
-    logger.info(f"Starting background pipeline for episode {episode_id}")
-    try:
-        pipeline = VideoPipeline(episode_id)
-        await pipeline.run()
-    except Exception as e:
-        logger.error(f"Pipeline failed for episode {episode_id}: {e}")
 
 
 @router.get("", response_model=list[EpisodeResponse])
@@ -147,7 +138,6 @@ async def get_episode(
 async def retry_episode(
     episode_id: int,
     request: RetryRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """Retry failed episode or specific scenes."""
@@ -161,7 +151,7 @@ async def retry_episode(
     episode.status = EpisodeStatus.GENERATING
     episode.retry_count += 1
 
-    # Start retry in background
-    background_tasks.add_task(run_pipeline_background, episode.id)
+    # Enqueue retry onto persistent RQ queue
+    rq_job_id = enqueue_pipeline(episode.id)
 
-    return {"status": "retry_started", "episode_id": episode_id}
+    return {"status": "retry_started", "episode_id": episode_id, "rq_job_id": rq_job_id}
