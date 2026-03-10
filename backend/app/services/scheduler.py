@@ -175,7 +175,10 @@ class SchedulerService:
         scrape_context: dict = None
     ) -> bool:
         """Create a scheduled job if one doesn't already exist."""
-        
+        # Strip timezone info — scheduled_for column is TIMESTAMP WITHOUT TIME ZONE
+        if scheduled_for.tzinfo is not None:
+            scheduled_for = scheduled_for.replace(tzinfo=None)
+
         # Check for existing job
         query = select(ScheduledJob).where(
             and_(
