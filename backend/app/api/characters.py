@@ -1,9 +1,10 @@
 """Character API endpoints."""
 
+import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,11 @@ from app.schemas.character import (
     CharacterImageResponse,
     CharacterResponse,
     CharacterUpdate,
+)
+from app.services.personality import (
+    PERSONALITY_DIR,
+    find_personality_file,
+    load_personality_traits,
 )
 from app.services.storage import StorageService
 
@@ -111,7 +117,6 @@ async def upload_character_image(
     image_type: str = Form(default="reference"),
     pose_description: Optional[str] = Form(default=None),
     is_primary: bool = Form(default=False),
-    is_style_reference: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a character image."""
@@ -134,7 +139,6 @@ async def upload_character_image(
         image_type=image_type,
         pose_description=pose_description,
         is_primary=is_primary,
-        is_style_reference=is_style_reference,
     )
     db.add(db_image)
     
@@ -158,15 +162,40 @@ async def upload_character_image(
     return db_image
 
 
+@router.get("/{character_id}/personality")
+async def get_character_personality(
+    character_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the full personality JSON for a character.
+
+    Reads from the personality files in character-system/personalities/.
+    """
+    character = await db.get(Character, character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    personality_path = find_personality_file(character.name)
+    if not personality_path:
+        raise HTTPException(status_code=404, detail="No personality file found for this character")
+
+    with open(personality_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    return data
+
+
 @router.post("/{character_id}/generate-image")
 async def generate_character_image(
     character_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate a new caricature image for a character using Gemini + style references.
+    """Generate a new caricature image for a character using ComfyUI.
 
-    Uses the character's traits from the database and style reference images
-    to generate a consistent Pixar-quality satirical caricature.
+    Uses Flux Dev + ANTKF1STYLE LoRA + PuLID on RunPod.
+    Enriches the prompt with traits from the personality JSON files in
+    ``character-system/personalities/``.  If no matching JSON exists,
+    falls back to the minimal DB fields (display_name + team).
     """
     from app.services.image_generator import ImageGenerator
 
@@ -174,56 +203,53 @@ async def generate_character_image(
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
 
-    # Build character traits dict
-    traits = {
-        "display_name": character.display_name,
-        "role": character.role,
-        "team": character.team,
-        "nationality": character.nationality,
-        "physical_features": character.physical_features,
-        "comedy_angle": character.comedy_angle,
-        "signature_expression": character.signature_expression,
-        "signature_pose": character.signature_pose,
-        "props": character.props,
-        "background_type": character.background_type,
-        "background_detail": character.background_detail,
-        "clothing_description": character.clothing_description,
-    }
+    # ----- Try to load rich traits from personality JSON -----
+    personality_path = find_personality_file(character.name)
+    personality_loaded = False
 
-    # Load style reference images from DB
-    style_ref_stmt = (
-        select(CharacterImage)
-        .where(CharacterImage.is_style_reference == True)
-        .limit(settings.GEMINI_STYLE_REFERENCE_COUNT)
-    )
-    style_result = await db.execute(style_ref_stmt)
-    style_refs = style_result.scalars().all()
-
-    # Download style reference images from MinIO
-    storage = StorageService()
-    style_reference_paths = []
-    for ref in style_refs:
+    if personality_path:
         try:
-            local_path = await storage.download_character_image(ref.image_path)
-            style_reference_paths.append(local_path)
+            traits = load_personality_traits(personality_path)
+            personality_loaded = True
+            logger.info(
+                f"Loaded personality traits for {character.name} "
+                f"from {personality_path.relative_to(PERSONALITY_DIR)}"
+            )
         except Exception as e:
-            logger.warning(f"Could not load style ref {ref.image_path}: {e}")
+            logger.warning(
+                f"Failed to load personality JSON for {character.name}: {e}. "
+                "Falling back to DB-only traits."
+            )
+            traits = {
+                "display_name": character.display_name,
+                "team": character.team,
+            }
+    else:
+        logger.info(
+            f"No personality JSON found for {character.name}. "
+            "Using DB-only traits."
+        )
+        traits = {
+            "display_name": character.display_name,
+            "team": character.team,
+        }
+
+    # Ensure face reference is in ComfyUI (downloads from MinIO if needed)
+    generator = ImageGenerator()
+    face_image = await generator.ensure_face_reference(character.name)
 
     logger.info(
         f"Generating caricature for {character.display_name} "
-        f"with {len(style_reference_paths)} style references"
+        f"(face={'yes' if face_image else 'no'})"
+        f"{' (personality-enriched)' if personality_loaded else ''}"
     )
 
-    # Generate
-    generator = ImageGenerator()
     result = await generator.generate_character_reference(
         character_name=character.name,
         character_traits=traits,
-        style_reference_paths=style_reference_paths,
+        face_image=face_image,
     )
 
-    # Save the prompt to the character record
-    character.caricature_prompt = result.prompt_used
     await db.flush()
 
     return {
@@ -231,6 +257,60 @@ async def generate_character_image(
         "character_name": character.display_name,
         "image_path": result.image_path,
         "generation_time_ms": result.generation_time_ms,
-        "style_references_used": len(style_reference_paths),
         "prompt_length": len(result.prompt_used),
+        "personality_loaded": personality_loaded,
+        "face_reference_used": face_image is not None,
+    }
+
+
+@router.get("/{character_id}/face-reference")
+async def get_face_reference(
+    character_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the face reference image URL for a character."""
+    character = await db.get(Character, character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    storage = StorageService()
+    face_path = await storage.get_face_reference_path(character.name)
+
+    return {
+        "character_id": character_id,
+        "character_name": character.name,
+        "face_reference_path": face_path,
+        "has_face_reference": face_path is not None,
+    }
+
+
+@router.post("/{character_id}/face-reference")
+async def upload_face_reference(
+    character_id: int,
+    image: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload or replace the face reference image for a character.
+
+    This is the close-up headshot used by PuLID for face conditioning
+    during caricature generation.  Replaces any existing face reference.
+    """
+    character = await db.get(Character, character_id)
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    content = await image.read()
+    content_type = image.content_type or "image/jpeg"
+
+    storage = StorageService()
+    face_path = await storage.upload_face_reference(
+        character.name, content, content_type
+    )
+
+    logger.info(f"Uploaded face reference for {character.name}: {face_path}")
+
+    return {
+        "character_id": character_id,
+        "character_name": character.name,
+        "face_reference_path": face_path,
     }

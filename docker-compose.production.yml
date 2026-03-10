@@ -11,6 +11,9 @@ services:
       dockerfile: Dockerfile
     container_name: f1-generator-backend
     restart: unless-stopped
+    extra_hosts:
+      - "postgres.antikythera.co.za:172.19.0.1"
+      - "minio.antikythera.co.za:172.19.0.1"
     ports:
       - "8001:8000"  # Different port from internal-tools (8000)
     env_file:
@@ -21,6 +24,7 @@ services:
     volumes:
       - video-temp:/tmp/videos
       - youtube-credentials:/root/.credentials
+      - ./character-system:/character-system:ro
     depends_on:
       - redis
     networks:

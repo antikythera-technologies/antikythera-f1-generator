@@ -1,7 +1,7 @@
 {
   "id": "liam_lawson",
   "name": "Liam Lawson",
-  "team": "red_bull_racing",
+  "team": "racing_bulls",
   "nationality": "New Zealand",
   "driver_number": 30,
   
@@ -38,7 +38,7 @@
   ],
   
   "topics_of_passion": ["racing", "NZ rugby", "proving doubters wrong"],
-  "topics_to_avoid": ["reserve driver years", "the Perez situation"],
+  "topics_to_avoid": ["reserve driver years", "being moved back to Racing Bulls"],
   
   "humor_style": "dry_kiwi",
   "signature_reactions": {
@@ -56,7 +56,7 @@
       "distinguishing_features": ["determined look", "all-blacks energy", "deceptively calm"]
     },
     "signature_gestures": ["the famous middle finger", "subtle nod", "kiwi thumbs up"],
-    "helmet_design": "Silver fern elements, Red Bull colors",
+    "helmet_design": "Silver fern elements, Racing Bulls colors",
     "animation_notes": {
       "posture": "ready to strike",
       "expression_default": "unassuming focus",
@@ -65,25 +65,25 @@
   },
   
   "relationships_summary": {
-    "rivals": ["fernando_alonso", "any_veteran_who_disrespects"],
+    "rivals": ["fernando_alonso", "any_veteran_who_disrespects", "isack_hadjar"],
     "friendly_with": ["yuki_tsunoda"],
-    "teammate_dynamic": "Yuki is chaotic, Liam is calm - balance",
-    "team_principal": "christian horner - the chosen one"
+    "teammate_dynamic": "Arvid Lindblad is the rookie - Liam is now the senior driver mentoring",
+    "team_principal": "laurent_mekies - rebuilding at Racing Bulls"
   },
   
-  "meme_status": "The Bird, Kiwi Killer, Reserve No More",
-  
+  "meme_status": "The Bird, Kiwi Killer, Demoted but Dangerous",
+
   "storyline_hooks": [
-    "Replaced Perez, must prove it wasn't a mistake",
-    "Will he flip off Max too if needed?",
-    "The anti-drama Kiwi in chaos central",
-    "Rising star energy"
+    "Moved from Red Bull Racing back to Racing Bulls - the demotion stings",
+    "Must prove he deserved better than being replaced by Hadjar",
+    "The anti-drama Kiwi mentoring rookie Lindblad",
+    "Will he flip off Hadjar when they battle on track?"
   ],
   
   "example_dialogue": {
     "after_overtake": "Yeah, that was good. Saw the gap, sent it. Sweet as.",
     "about_finger_incident": "Look, he gave me no room. Sometimes you communicate. *shrugs*",
-    "about_yuki": "Yuki's mental on the radio. I just drive. Works for both of us.",
-    "about_max": "Max is the benchmark. I'm here to learn... and win."
+    "about_lindblad": "Arvid's quick. Good kid. I'll show him the ropes. Yeah nah, he'll be fine.",
+    "about_demotion": "It is what it is. I'm still in F1. Still quick. They'll see."
   }
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, Race } from "@/lib/api";
 import { formatDate, cn } from "@/lib/utils";
+import { getCircuitPath } from "@/lib/circuits";
 import { Header } from "@/components/layout/Header";
 import { Button, LoadingPage, Card, CardContent } from "@/components/ui";
 
@@ -127,6 +128,30 @@ interface SessionInfo {
   color?: string;
 }
 
+function CircuitThumbnail({ circuitName, isUpcoming }: { circuitName: string | null; isUpcoming: boolean }) {
+  const circuit = getCircuitPath(circuitName);
+  if (!circuit) return null;
+
+  return (
+    <div className="flex-shrink-0">
+      <svg
+        viewBox="0 0 500 500"
+        className={cn(
+          "h-16 w-16",
+          isUpcoming ? "text-neon-cyan/40" : "text-white/15"
+        )}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="12"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d={circuit.path} />
+      </svg>
+    </div>
+  );
+}
+
 function RaceCard({ race, isUpcoming = false }: RaceCardProps) {
   const raceDate = new Date(race.race_date);
   const daysUntil = Math.ceil((raceDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -159,8 +184,8 @@ function RaceCard({ race, isUpcoming = false }: RaceCardProps) {
   return (
     <Card hover glow={isUpcoming ? "cyan" : null}>
       <CardContent className="space-y-4">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <div className="mb-2 flex items-center gap-2">
               <span className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
@@ -173,15 +198,16 @@ function RaceCard({ race, isUpcoming = false }: RaceCardProps) {
                   ⚡ SPRINT
                 </span>
               )}
+              {isUpcoming && daysUntil <= 7 && (
+                <span className="rounded-full bg-racing-red/20 px-2 py-0.5 text-xs font-medium text-racing-red">
+                  {daysUntil === 0 ? "Today!" : daysUntil === 1 ? "Tomorrow" : `${daysUntil}d`}
+                </span>
+              )}
             </div>
             <h3 className="text-lg font-semibold text-white">{race.race_name}</h3>
             <p className="text-sm text-white/60">{race.circuit_name}</p>
           </div>
-          {isUpcoming && daysUntil <= 7 && (
-            <div className="rounded-lg bg-racing-red/20 px-2 py-1 text-xs font-medium text-racing-red">
-              {daysUntil === 0 ? "Today!" : daysUntil === 1 ? "Tomorrow" : `${daysUntil} days`}
-            </div>
-          )}
+          <CircuitThumbnail circuitName={race.circuit_name} isUpcoming={isUpcoming} />
         </div>
 
         <div className="flex items-center gap-4">

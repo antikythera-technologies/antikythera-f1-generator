@@ -1,4 +1,4 @@
-"""Video generation service using Ovi (HuggingFace Gradio).
+"""Video generation service using Ovi (self-hosted Gradio on RunPod).
 
 Style preservation is the primary challenge for image-to-video conversion.
 The default I2V behaviour re-interprets the source image through the video
@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 from gradio_client import Client, handle_file
 
@@ -100,7 +100,7 @@ class VideoGenerator:
             denoise_strength: Override preset value (0.0-1.0)
             guidance_scale: Override preset value
         """
-        self.space = settings.OVI_SPACE
+        self.server_url = settings.OVI_SERVER_URL
         self.timeout = settings.OVI_TIMEOUT_SECONDS
 
         # Load preset defaults
@@ -132,26 +132,34 @@ class VideoGenerator:
 
         self._client: Optional[Client] = None
 
-        logger.info(
-            f"VideoGenerator initialized: quality={quality}, "
-            f"steps={self.sample_steps}, "
-            f"conditioning={self.image_conditioning_strength:.2f}, "
-            f"denoise={self.denoise_strength:.2f}, "
-            f"guidance={self.guidance_scale:.1f}"
+        # Video generation defaults (configurable via settings)
+        self.frame_height: float = getattr(settings, "OVI_FRAME_HEIGHT", 512)
+        self.frame_width: float = getattr(settings, "OVI_FRAME_WIDTH", 992)
+        self.video_seed: float = getattr(settings, "OVI_VIDEO_SEED", 100)
+        self.solver_name: Literal["unipc", "euler", "dpm++"] = getattr(
+            settings, "OVI_SOLVER_NAME", "unipc"
+        )
+        self.shift: float = getattr(settings, "OVI_SHIFT", 5.0)
+        self.video_guidance_scale: float = getattr(
+            settings, "OVI_VIDEO_GUIDANCE_SCALE", 4.0
+        )
+        self.audio_guidance_scale: float = getattr(
+            settings, "OVI_AUDIO_GUIDANCE_SCALE", 3.0
+        )
+        self.slg_layer: float = getattr(settings, "OVI_SLG_LAYER", 11)
+        self.video_negative_prompt: str = getattr(
+            settings, "OVI_VIDEO_NEGATIVE_PROMPT", ""
+        )
+        self.audio_negative_prompt: str = getattr(
+            settings, "OVI_AUDIO_NEGATIVE_PROMPT", ""
         )
 
     @property
     def client(self) -> Client:
         """Lazy initialization of Gradio client."""
         if self._client is None:
-            logger.info(f"Connecting to Ovi space: {self.space}")
-            hf_token = getattr(settings, 'HUGGINGFACE_TOKEN', None)
-            if hf_token and hf_token.strip():
-                logger.info("Using HuggingFace token for authenticated access")
-                self._client = Client(self.space, token=hf_token)
-            else:
-                logger.warning("No HuggingFace token configured - using anonymous access")
-                self._client = Client(self.space)
+            logger.info(f"Connecting to Ovi server: {self.server_url}")
+            self._client = Client(self.server_url)
         return self._client
 
     def _generate_clip_sync(
@@ -162,36 +170,41 @@ class VideoGenerator:
         """Synchronous video generation (called from executor).
 
         Passes style-preservation parameters to the Ovi API.
-        The API may not support all parameters depending on the space version —
-        we pass them as kwargs and let the Gradio client handle it.
+        Falls back to full Ovi parameter set if extended params are rejected.
         """
         try:
-            # Try with full parameter set (newer Ovi spaces support these)
             result = self.client.predict(
                 text_prompt=prompt,
-                sample_steps=self.sample_steps,
                 image=handle_file(image_path),
-                image_conditioning_strength=self.image_conditioning_strength,
-                denoise_strength=self.denoise_strength,
-                guidance_scale=self.guidance_scale,
-                api_name="/generate_scene",
+                video_frame_height=self.frame_height,
+                video_frame_width=self.frame_width,
+                video_seed=self.video_seed,
+                solver_name=self.solver_name,
+                sample_steps=self.sample_steps,
+                shift=self.shift,
+                video_guidance_scale=self.video_guidance_scale,
+                audio_guidance_scale=self.audio_guidance_scale,
+                slg_layer=self.slg_layer,
+                video_negative_prompt=self.video_negative_prompt,
+                audio_negative_prompt=self.audio_negative_prompt,
+                api_name="/generate_video",
             )
         except TypeError:
-            # Fallback: older Ovi space only accepts basic params
             logger.warning(
-                "Ovi space does not support extended params, "
-                "falling back to basic mode (steps only)"
+                "Ovi does not support full params, falling back to basic mode"
             )
             result = self.client.predict(
                 text_prompt=prompt,
                 sample_steps=self.sample_steps,
                 image=handle_file(image_path),
-                api_name="/generate_scene",
+                api_name="/generate_video",
             )
 
+        if hasattr(result, "path"):
+            return result.path
         if isinstance(result, dict):
-            return result.get('video', result)
-        return result
+            return result.get("path", result.get("video", str(result)))
+        return str(result)
 
     async def generate_clip(
         self,
@@ -216,8 +229,7 @@ class VideoGenerator:
         """
         logger.info(
             f"Scene {scene_number}: Starting video generation "
-            f"(steps={self.sample_steps}, conditioning={self.image_conditioning_strength:.2f}, "
-            f"denoise={self.denoise_strength:.2f})"
+            f"(steps={self.sample_steps}, {self.frame_width}x{self.frame_height})"
         )
         logger.debug(f"Scene {scene_number}: Image: {image_path}")
 

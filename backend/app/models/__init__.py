@@ -1,7 +1,7 @@
 """SQLAlchemy models."""
 
 from app.database import Base
-from app.models.character import Character, CharacterImage
+from app.models.character import Character, CharacterImage, CharacterType
 from app.models.race import Race
 from app.models.episode import Episode, EpisodeType, EpisodeStatus
 from app.models.scene import Scene, SceneStatus
@@ -15,6 +15,7 @@ __all__ = [
     "Base",
     "Character",
     "CharacterImage",
+    "CharacterType",
     "Race",
     "Episode",
     "EpisodeType",

@@ -16,12 +16,12 @@ export function CharacterCard({ character }: CharacterCardProps) {
     <Link href={`/characters/${character.id}`}>
       <Card hover glow="cyan" className="overflow-hidden">
         {/* Character image */}
-        <div className="relative aspect-square bg-gradient-to-br from-twilight to-deep-space">
+        <div className="relative aspect-[3/4] bg-gradient-to-br from-twilight to-deep-space">
           {imageUrl ? (
             <img
               src={imageUrl}
               alt={character.display_name}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover object-top"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">

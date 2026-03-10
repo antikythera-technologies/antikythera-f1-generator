@@ -1,7 +1,7 @@
 {
   "id": "nico_hulkenberg",
   "name": "Nico Hülkenberg",
-  "team": "kick_sauber",
+  "team": "audi",
   "nationality": "German",
   "driver_number": 27,
   
@@ -76,7 +76,7 @@
   "storyline_hooks": [
     "Will 2026 finally bring the podium?",
     "Record for most races without podium",
-    "Sauber to Audi transition veteran",
+    "Audi factory team veteran",
     "At peace with his curse... or is he?"
   ],
   
@@ -84,6 +84,6 @@
     "podium_question": "*laughs* Look, I've accepted my destiny. P4 is basically my podium.",
     "about_experience": "I've seen it all. Teams rise, teams fall. I'm still here.",
     "about_le_mans": "I won Le Mans. I just can't climb three steps in F1. Ironic, ja?",
-    "about_audi": "Sauber becoming Audi... I've seen transformations before. We'll see."
+    "about_audi": "Audi is here now. New era. German team, German driver. Let's see what we can do."
   }
 }

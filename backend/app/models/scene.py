@@ -22,7 +22,7 @@ class SceneStatus(str, enum.Enum):
 class Scene(Base):
     """Individual 5-second scenes with full prompt traceability."""
     
-    __tablename__ = "scenes"
+    __tablename__ = "episode_scenes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     episode_id: Mapped[int] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
@@ -70,7 +70,7 @@ class Scene(Base):
     api_usage: Mapped[list["APIUsage"]] = relationship("APIUsage", back_populates="scene", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("episode_id", "scene_number", name="uq_scene_episode_number"),
+        UniqueConstraint("episode_id", "scene_number", name="episode_scenes_episode_id_scene_number_key"),
     )
 
     def __repr__(self) -> str:

@@ -1,7 +1,7 @@
 {
   "id": "isack_hadjar",
   "name": "Isack Hadjar",
-  "team": "rb",
+  "team": "red_bull_racing",
   "nationality": "French",
   "number": null,
   
@@ -16,10 +16,10 @@
     "authenticity": 7
   },
   
-  "core_traits": ["hungry", "aggressive", "red_bull_academy_product"],
+  "core_traits": ["hungry", "aggressive", "red_bull_academy_graduate"],
   "blind_spots": ["patience"],
-  "comedy_archetype": "the_hungry_rookie",
-  "satirical_angle": "French-Algerian Red Bull academy product who's been told he's next in line for years - the pressure cooker lifestyle",
+  "comedy_archetype": "the_promoted_prodigy",
+  "satirical_angle": "French-Algerian Red Bull academy product who actually GOT the call-up - now must survive alongside Max Verstappen",
   
   "speaking_style": {
     "formality": "professional_eager",
@@ -27,7 +27,7 @@
     "sentence_structure": "eager_professional",
     "filler_words": ["yeah", "for sure", "you know"],
     "accent_hints": "French, young, hungry",
-    "tone": "eager to prove himself, aware the whole Red Bull program is watching"
+    "tone": "eager to prove himself, aware he's now Max Verstappen's teammate"
   },
   
   "catchphrases": [
@@ -41,19 +41,19 @@
     "strengths": ["race craft", "tyre management", "overtaking"],
     "weaknesses": ["rookie mistakes", "pressure situations"],
     "signature_moves": ["late braking", "aggressive defense"],
-    "mental_game": "hungry but managing Red Bull pressure",
+    "mental_game": "hungry and now under the brightest spotlight alongside Verstappen",
     "development_areas": ["consistency", "qualifying pace"]
   },
   
-  "topics_of_passion": ["proving himself", "F2 battles", "Red Bull pathway"],
-  "topics_to_avoid": ["other Red Bull juniors", "when's the main team call"],
+  "topics_of_passion": ["proving himself", "Red Bull Racing", "matching Verstappen"],
+  "topics_to_avoid": ["Lawson being moved aside for him", "being seen as a number two"],
   
   "humor_style": "rookie_earnest",
   "signature_reactions": {
     "victory": "Emotional relief. 'This is what we've worked for!'",
     "defeat": "Determined. 'We learn. We come back stronger.'",
     "controversy": "Stays quiet. 'I focus on my driving.'",
-    "main_team_questions": "*nervous laugh* 'I'm focused on RB. One step at a time.'"
+    "max_comparison": "*deep breath* 'Max is Max. I'm here to do my own thing.'"
   },
   
   "visual_profile": {
@@ -61,36 +61,36 @@
       "height": "average",
       "build": "slim racing physique",
       "hair": "dark, curly",
-      "distinguishing_features": ["intense focus", "rookie energy", "Red Bull branding head to toe"]
+      "distinguishing_features": ["intense focus", "main team energy", "Red Bull Racing branding"]
     },
     "signature_gestures": ["determined nod", "fist pump on good result", "helmet adjustment"],
     "animation_notes": {
       "posture": "eager energy",
       "expression_default": "hungry determination",
-      "comedy_exaggeration": "looks at main Red Bull garage longingly"
+      "comedy_exaggeration": "stands in Verstappen's shadow, literally"
     }
   },
   
   "relationships_summary": {
-    "rivals": ["other_rookies"],
+    "rivals": ["other_rookies", "liam_lawson"],
     "friendly_with": ["red_bull_academy"],
-    "team_dynamic": "Junior driver trying to earn promotion",
-    "teammates": "Yuki is the experienced one to learn from"
+    "teammate_dynamic": "Max Verstappen's new teammate - surviving the pressure cooker",
+    "team_principal": "christian_horner"
   },
   
-  "meme_status": "Next Red Bull Hopeful, F2 Champion Energy, French Connection",
-  
+  "meme_status": "Red Bull Promoted, F2 Champion Arrives, French Connection",
+
   "storyline_hooks": [
-    "Red Bull academy pressure",
-    "Will he get the call up?",
-    "French driver in Red Bull system",
-    "Rookie season drama"
+    "Got the Red Bull Racing seat - now must justify it",
+    "Can anyone survive as Verstappen's teammate?",
+    "French driver at the top Red Bull team",
+    "The academy product who made it all the way"
   ],
   
   "example_dialogue": {
     "after_win": "Incredible! The team did amazing. This is just the start.",
-    "about_main_team": "I'm focused here. Do my job. The rest... we'll see.",
+    "about_max": "Max is the best. I learn from him every day. But I'm not here to be second.",
     "under_pressure": "Pressure? It's Formula 1. Everyone feels pressure. I thrive on it.",
-    "about_yuki": "Yuki's been great. Learning a lot from him. Good teammate."
+    "about_promotion": "They believed in me. Now I must deliver. No more waiting - this is my time."
   }
 }

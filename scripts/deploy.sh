@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-REMOTE_HOST="antikythera-n8n"
+REMOTE_HOST="antikythera"
 REMOTE_PATH="/opt/antikythera-f1-generator/"
 SERVICE_NAME="f1-generator"
 DOMAIN="f1.antikythera.co.za"

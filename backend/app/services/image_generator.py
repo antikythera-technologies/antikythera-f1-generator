@@ -1,98 +1,320 @@
-"""Image generation service using Nano Banana Pro (Gemini) with reference image support.
+"""Image generation service using ComfyUI API on RunPod.
 
 Implements character consistency through:
-1. Style reference images - feed 3-4 "gold standard" caricatures as style input
-2. Character traits from database - physical features, comedy angle, pose, expression
-3. Master style template - locked-down style description proven to produce correct output
-4. Prompt saving - every generated prompt is saved to DB for reproducibility
+1. ANTKF1STYLE LoRA — fine-tuned Flux Dev model for our satirical caricature look
+2. PuLID face conditioning — injects facial identity from a reference headshot
+3. Character traits from database — physical features, comedy angle, pose, expression
+4. Team-specific styling — suit colors, background gradients per F1 team
+5. Prompt saving — every generated prompt is saved to DB for reproducibility
+
+ComfyUI workflow chain:
+  UNETLoader → LoraLoader → (optional) ApplyPulidFlux → KSampler → VAEDecode → SaveImage
 """
 
 import asyncio
 import logging
-import os
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+import httpx
 from PIL import Image as PILImage
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# 2026 F1 team visual mapping
+# ---------------------------------------------------------------------------
+TEAM_COLORS: dict[str, dict[str, str]] = {
+    "red_bull_racing": {
+        "suit": "dark blue Red Bull Racing suit with Oracle and Bybit logos",
+        "background": "dark navy blue to midnight blue gradient",
+    },
+    "racing_bulls": {
+        "suit": "white Racing Bulls suit with blue and Ford accents",
+        "background": "white to steel blue gradient",
+    },
+    "mclaren": {
+        "suit": "papaya orange and black McLaren suit with OKX logos",
+        "background": "papaya orange to black gradient",
+    },
+    "ferrari": {
+        "suit": "red Ferrari suit with white accents and HP logos",
+        "background": "deep red to dark crimson gradient",
+    },
+    "mercedes": {
+        "suit": "black Mercedes-AMG Petronas suit with Petronas teal accents",
+        "background": "dark teal to black gradient",
+    },
+    "aston_martin": {
+        "suit": "British racing green Aston Martin suit",
+        "background": "dark British racing green gradient",
+    },
+    "williams": {
+        "suit": "blue Williams Racing suit with Barclays lighter blue accents",
+        "background": "dark blue to navy gradient",
+    },
+    "haas": {
+        "suit": "black and white TGR Haas suit with Toyota red accents",
+        "background": "black to dark grey gradient with red accent",
+    },
+    "alpine": {
+        "suit": "blue Alpine suit with BWT pink accents",
+        "background": "dark blue to pink gradient",
+    },
+    "audi": {
+        "suit": "silver and black Audi suit with red accents",
+        "background": "silver to black gradient",
+    },
+    "cadillac": {
+        "suit": "white and black Cadillac suit with chrome details",
+        "background": "black to dark grey gradient with chrome highlights",
+    },
+}
+
+# Fallback for pundits / characters without a team
+PUNDIT_STYLE = {
+    "suit": "smart dark suit with Sky Sports / F1 branding",
+    "background": "warm burnt-orange to dark amber gradient",
+}
+
 
 @dataclass
 class GeneratedImage:
     """Result of image generation."""
+
     image_path: str
     generation_time_ms: int
     prompt_used: str
 
 
-# Master style template - the core style DNA that NEVER changes.
-# This was derived from analyzing the successful Manus.ai-generated caricatures
-# (Toto Wolff, Fernando Alonso, Lando Norris, etc.) that define our target style.
-MASTER_STYLE_TEMPLATE = """Highly detailed 3D satirical caricature rendered as a comedic Pixar-quality animated character. \
-This is a FUNNY satirical portrait meant to humorously exaggerate the subject's personality.
+class ImageGenerationError(Exception):
+    """Raised when image generation fails."""
 
-STYLE REQUIREMENTS:
-- Fully stylized smooth 3D animated skin, NOT photorealistic
-- Exaggerated animated body proportions like a high-end animated movie character
-- Bold exaggerated facial features while still being recognizable as the real person
-- Fine detail in facial expressions: wrinkles, frown lines, crow's feet, expression creases, laugh lines
-- Visible detail in skin texture, muscle definition, fabric wrinkles and stitching
-- Asymmetric expressions for comedy: one eye wider than the other, lopsided smirks, raised eyebrows
-- Dynamic poses with personality-driven action, NOT static portraits
-- Rich saturated colors with dramatic cinematic lighting and deep shadows
-- This should look like a frame from a big-budget Pixar or DreamWorks animated comedy film"""
+    pass
 
+
+# ---------------------------------------------------------------------------
+# ComfyUI workflow builders
+# ---------------------------------------------------------------------------
+
+def _build_workflow(
+    prompt_text: str,
+    negative_prompt: str = "",
+    face_image: str | None = None,
+    width: int = 768,
+    height: int = 1344,
+    steps: int = 20,
+    cfg: float = 1.0,
+    seed: int | None = None,
+    lora_strength: float | None = None,
+    pulid_weight: float | None = None,
+) -> dict[str, Any]:
+    """Build a ComfyUI API workflow dict.
+
+    Matches the proven workflow from ``scripts/generate_all_characters.py``.
+    When *face_image* is provided the full LoRA + PuLID chain is used.
+    When it is ``None`` the PuLID / InsightFace / EvaClip / LoadImage nodes
+    are omitted and the LoRA output connects directly to the KSampler.
+    """
+    lora_str = lora_strength if lora_strength is not None else settings.COMFYUI_LORA_STRENGTH
+    pulid_w = pulid_weight if pulid_weight is not None else settings.COMFYUI_PULID_WEIGHT
+
+    if seed is None:
+        import random
+        seed = random.randint(0, 2**32 - 1)
+
+    workflow: dict[str, Any] = {}
+
+    # --- 1  UNET loader (Flux Dev fp8) ---
+    workflow["1"] = {
+        "class_type": "UNETLoader",
+        "inputs": {
+            "unet_name": "flux1-dev-fp8.safetensors",
+            "weight_dtype": "fp8_e4m3fn",
+        },
+    }
+
+    # --- 5  Dual CLIP loader (clip_l + t5xxl) ---
+    workflow["5"] = {
+        "class_type": "DualCLIPLoader",
+        "inputs": {
+            "clip_name1": "clip_l.safetensors",
+            "clip_name2": "t5xxl_fp8_e4m3fn.safetensors",
+            "type": "flux",
+        },
+    }
+
+    # --- 2  LoRA loader ---
+    workflow["2"] = {
+        "class_type": "LoraLoader",
+        "inputs": {
+            "model": ["1", 0],
+            "clip": ["5", 0],
+            "lora_name": "antkf1style_v1.safetensors",
+            "strength_model": lora_str,
+            "strength_clip": lora_str,
+        },
+    }
+
+    # --- 6  CLIP Text Encode (positive prompt) ---
+    # Uses DualCLIPLoader output directly (not LoRA-modified clip)
+    workflow["6"] = {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+            "text": prompt_text,
+            "clip": ["5", 0],
+        },
+    }
+
+    # --- 7  CLIP Text Encode (negative prompt / conditioning) ---
+    workflow["7"] = {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+            "text": negative_prompt,
+            "clip": ["5", 0],
+        },
+    }
+
+    # --- 8  Empty SD3 latent image (required for Flux) ---
+    workflow["8"] = {
+        "class_type": "EmptySD3LatentImage",
+        "inputs": {
+            "width": width,
+            "height": height,
+            "batch_size": 1,
+        },
+    }
+
+    # --- 9  VAE loader ---
+    workflow["9"] = {
+        "class_type": "VAELoader",
+        "inputs": {
+            "vae_name": "ae.safetensors",
+        },
+    }
+
+    # Determine model input to KSampler — either PuLID output or LoRA output
+    if face_image:
+        # --- 10  PuLID model loader ---
+        workflow["10"] = {
+            "class_type": "PulidFluxModelLoader",
+            "inputs": {
+                "pulid_file": "pulid_flux_v0.9.0.safetensors",
+            },
+        }
+
+        # --- 11  InsightFace loader (provides face_analysis) ---
+        workflow["11"] = {
+            "class_type": "PulidFluxInsightFaceLoader",
+            "inputs": {
+                "provider": "CUDA",
+            },
+        }
+
+        # --- 12  EvaClip loader (provides eva_clip) ---
+        workflow["12"] = {
+            "class_type": "PulidFluxEvaClipLoader",
+            "inputs": {},
+        }
+
+        # --- 13  Load face reference image ---
+        workflow["13"] = {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": face_image,
+            },
+        }
+
+        # --- 14  Apply PuLID ---
+        workflow["14"] = {
+            "class_type": "ApplyPulidFlux",
+            "inputs": {
+                "model": ["2", 0],         # model from LoRA loader
+                "pulid_flux": ["10", 0],    # PuLID model
+                "eva_clip": ["12", 0],      # EvaClip loader
+                "face_analysis": ["11", 0], # InsightFace loader
+                "image": ["13", 0],         # loaded face image
+                "weight": pulid_w,
+                "start_at": 0.0,
+                "end_at": 1.0,
+            },
+        }
+
+        model_source = ["14", 0]  # PuLID output
+    else:
+        model_source = ["2", 0]  # LoRA output (no PuLID)
+
+    # --- 20  KSampler ---
+    workflow["20"] = {
+        "class_type": "KSampler",
+        "inputs": {
+            "model": model_source,
+            "positive": ["6", 0],
+            "negative": ["7", 0],
+            "latent_image": ["8", 0],
+            "seed": seed,
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": "euler",
+            "scheduler": "simple",
+            "denoise": 1.0,
+        },
+    }
+
+    # --- 21  VAE Decode ---
+    workflow["21"] = {
+        "class_type": "VAEDecode",
+        "inputs": {
+            "samples": ["20", 0],
+            "vae": ["9", 0],
+        },
+    }
+
+    # --- 22  Save Image ---
+    workflow["22"] = {
+        "class_type": "SaveImage",
+        "inputs": {
+            "images": ["21", 0],
+            "filename_prefix": "antkf1",
+        },
+    }
+
+    return workflow
+
+
+# ---------------------------------------------------------------------------
+# Main service
+# ---------------------------------------------------------------------------
 
 class ImageGenerator:
-    """Service for generating consistent character images using Gemini with reference images."""
+    """Service for generating consistent character images via ComfyUI on RunPod."""
+
+    # Polling parameters for ComfyUI prompt execution
+    POLL_INTERVAL_S = 2.0
+    POLL_TIMEOUT_S = 300.0
 
     def __init__(self):
-        self.api_key = settings.GEMINI_API_KEY
+        self.comfyui_url = settings.COMFYUI_URL.rstrip("/")
         self.output_dir = Path("/tmp/f1-images")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._client = None
-        self._style_ref_images: list[PILImage.Image] | None = None
+        self._http_client: httpx.AsyncClient | None = None
 
     @property
-    def client(self):
-        """Lazy initialization of Gemini client."""
-        if self._client is None:
-            from google import genai
-            self._client = genai.Client(api_key=self.api_key)
-        return self._client
+    def http_client(self) -> httpx.AsyncClient:
+        """Lazy initialization of async HTTP client."""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=120.0)
+        return self._http_client
 
-    def _load_style_reference_images(
-        self,
-        reference_paths: list[str],
-    ) -> list[PILImage.Image]:
-        """Load style reference images from local paths or MinIO.
-
-        These are the 'gold standard' caricatures that define our visual style.
-        They are fed to the model alongside the text prompt so it can SEE
-        what style we want, rather than relying on text description alone.
-        """
-        images = []
-        for path in reference_paths:
-            try:
-                if os.path.exists(path):
-                    img = PILImage.open(path)
-                    if img.mode != "RGB":
-                        img = img.convert("RGB")
-                    images.append(img)
-                    logger.debug(f"Loaded style reference: {path}")
-                else:
-                    logger.warning(f"Style reference not found: {path}")
-            except Exception as e:
-                logger.warning(f"Failed to load style reference {path}: {e}")
-
-        logger.info(f"Loaded {len(images)} style reference images")
-        return images
+    # ------------------------------------------------------------------
+    # Prompt building
+    # ------------------------------------------------------------------
 
     def build_character_prompt(
         self,
@@ -113,67 +335,256 @@ class ImageGenerator:
     ) -> str:
         """Build a complete generation prompt from character traits.
 
-        Combines the master style template with character-specific traits
+        Combines the ANTKF1STYLE trigger word with character-specific traits
         loaded from the database. The resulting prompt is deterministic
         and reproducible.
         """
-        # Start with master style
-        parts = [MASTER_STYLE_TEMPLATE, ""]
+        # Resolve team-specific visuals
+        team_slug = (team or "").lower().replace(" ", "_")
+        team_style = TEAM_COLORS.get(team_slug, PUNDIT_STYLE)
 
-        # Character identity - use generic description to avoid real-person image filters
-        # The model blocks generation of named real people, so we describe them
-        # by role and features rather than name
-        role_str = f", {role}" if role else ""
-        team_str = f" for {team}" if team else ""
+        # Identity line
         nat_str = f"{nationality} " if nationality else ""
-        parts.append(
-            f"CHARACTER: A {nat_str}Formula 1{role_str}{team_str}. "
-            f"This is a FICTIONAL animated character loosely inspired by motorsport personalities."
-        )
-        parts.append("")
+        role_str = role or "personality"
+        parts = [
+            f"ANTKF1STYLE satirical caricature portrait of a {nat_str}{role_str}"
+            f" resembling F1's {display_name}."
+        ]
 
-        # Physical features for the character design
+        # Physical description
         if physical_features:
-            parts.append(f"CHARACTER DESIGN: {physical_features}")
-            parts.append("")
+            parts.append(physical_features)
 
-        # Expression and pose
-        expr_pose_parts = []
+        # Expression
         if signature_expression:
-            expr_pose_parts.append(f"EXPRESSION: {signature_expression}")
-        if signature_pose:
-            expr_pose_parts.append(f"POSE: {signature_pose}")
-        if props:
-            expr_pose_parts.append(f"PROPS: {props}")
-        if comedy_angle:
-            expr_pose_parts.append(f"COMEDY: {comedy_angle}")
-        if expr_pose_parts:
-            parts.append("EXPRESSION AND POSE: " + " ".join(expr_pose_parts))
-            parts.append("")
+            parts.append(signature_expression)
+        elif comedy_angle:
+            parts.append(comedy_angle)
 
-        # Scene-specific action (for episode scene generation)
+        # Scene action (for episode scenes, overrides static pose)
         if action_description:
-            parts.append(f"ACTION: {action_description}")
-            parts.append("")
+            parts.append(action_description)
+        elif signature_pose:
+            parts.append(signature_pose)
 
-        # Clothing
+        # Clothing — prefer explicit description, fall back to team suit
         if clothing_description:
-            parts.append(f"CLOTHING: {clothing_description}")
-            parts.append("")
+            parts.append(f"Wearing {clothing_description}.")
+        else:
+            parts.append(f"Wearing {team_style['suit']}.")
 
         # Background
-        bg_type = background_type or "orange_gradient"
-        if bg_type == "orange_gradient":
-            parts.append("BACKGROUND: Warm orange to dark amber gradient background.")
-        elif bg_type == "team_logo":
-            detail = background_detail or "Team logo subtly visible"
-            parts.append(f"BACKGROUND: {detail}")
-        elif bg_type == "custom" and background_detail:
-            parts.append(f"BACKGROUND: {background_detail}")
+        if background_detail:
+            parts.append(f"{background_detail} background.")
         else:
-            parts.append("BACKGROUND: Warm orange to dark amber gradient background.")
+            parts.append(f"{team_style['background']} background.")
 
-        return "\n".join(parts)
+        # Core style instructions
+        parts.append(
+            "Oversized head, exaggerated facial features, photorealistic skin with visible pores and wrinkles. "
+            "One eye wider than the other, asymmetric expression. "
+            "Head and shoulders portrait crop only. "
+            "Dramatic warm side lighting with deep shadows."
+        )
+
+        return " ".join(parts)
+
+    # ------------------------------------------------------------------
+    # ComfyUI API interaction
+    # ------------------------------------------------------------------
+
+    async def upload_face_to_comfyui(self, local_path: str, filename: str) -> str:
+        """Upload a face reference image to ComfyUI's input directory.
+
+        Uses the ``POST /upload/image`` endpoint.  Returns the filename
+        as stored by ComfyUI (used in the ``LoadImage`` node).
+        """
+        url = f"{self.comfyui_url}/upload/image"
+
+        with open(local_path, "rb") as f:
+            files = {"image": (filename, f, "image/jpeg")}
+            data = {"overwrite": "true"}
+            response = await self.http_client.post(url, files=files, data=data)
+
+        if response.status_code != 200:
+            raise ImageGenerationError(
+                f"ComfyUI /upload/image returned HTTP {response.status_code}: "
+                f"{response.text[:300]}"
+            )
+
+        result = response.json()
+        stored_name = result.get("name", filename)
+        logger.info(f"Uploaded face reference to ComfyUI: {stored_name}")
+        return stored_name
+
+    async def ensure_face_reference(self, character_name: str) -> str | None:
+        """Ensure a character's face reference is available in ComfyUI.
+
+        1. Checks if it already exists in ComfyUI's input dir.
+        2. If not, downloads from MinIO and uploads to ComfyUI.
+
+        Returns the filename in ComfyUI, or None if no face reference exists.
+        """
+        from app.services.storage import StorageService
+
+        # Check if already in ComfyUI
+        for ext in ("jpg", "jpeg", "png", "webp"):
+            filename = f"{character_name}.{ext}"
+            try:
+                resp = await self.http_client.get(
+                    f"{self.comfyui_url}/view",
+                    params={"filename": filename, "type": "input"},
+                )
+                if resp.status_code == 200:
+                    logger.debug(f"Face reference already in ComfyUI: {filename}")
+                    return filename
+            except Exception:
+                continue
+
+        # Not in ComfyUI — try downloading from MinIO
+        storage = StorageService()
+        local_path = await storage.download_face_reference(character_name)
+        if not local_path:
+            return None
+
+        # Upload to ComfyUI
+        filename = Path(local_path).name
+        return await self.upload_face_to_comfyui(local_path, filename)
+
+    async def _queue_prompt(self, workflow: dict[str, Any]) -> str:
+        """POST workflow to ComfyUI /prompt and return the prompt_id."""
+        url = f"{self.comfyui_url}/prompt"
+        payload = {"prompt": workflow}
+
+        response = await self.http_client.post(url, json=payload)
+
+        if response.status_code != 200:
+            detail = response.text[:500]
+            raise ImageGenerationError(
+                f"ComfyUI /prompt returned HTTP {response.status_code}: {detail}"
+            )
+
+        data = response.json()
+        prompt_id = data.get("prompt_id")
+        if not prompt_id:
+            raise ImageGenerationError(
+                f"ComfyUI /prompt response missing prompt_id: {data}"
+            )
+
+        return prompt_id
+
+    async def _poll_for_completion(self, prompt_id: str) -> dict[str, Any]:
+        """Poll GET /history/{prompt_id} until the job finishes or times out."""
+        url = f"{self.comfyui_url}/history/{prompt_id}"
+        deadline = time.time() + self.POLL_TIMEOUT_S
+
+        while time.time() < deadline:
+            response = await self.http_client.get(url)
+            if response.status_code != 200:
+                logger.warning(
+                    f"ComfyUI /history returned {response.status_code}, retrying..."
+                )
+                await asyncio.sleep(self.POLL_INTERVAL_S)
+                continue
+
+            data = response.json()
+            if prompt_id in data:
+                history = data[prompt_id]
+                # Check for execution error
+                status_info = history.get("status", {})
+                if status_info.get("status_str") == "error":
+                    messages = status_info.get("messages", [])
+                    raise ImageGenerationError(
+                        f"ComfyUI execution error: {messages}"
+                    )
+                outputs = history.get("outputs")
+                if outputs:
+                    return outputs
+
+            await asyncio.sleep(self.POLL_INTERVAL_S)
+
+        raise ImageGenerationError(
+            f"ComfyUI prompt {prompt_id} timed out after {self.POLL_TIMEOUT_S}s"
+        )
+
+    async def _download_image(self, filename: str, subfolder: str = "", image_type: str = "output") -> bytes:
+        """Download a generated image from ComfyUI via GET /view."""
+        url = f"{self.comfyui_url}/view"
+        params = {
+            "filename": filename,
+            "type": image_type,
+        }
+        if subfolder:
+            params["subfolder"] = subfolder
+
+        response = await self.http_client.get(url, params=params)
+        if response.status_code != 200:
+            raise ImageGenerationError(
+                f"ComfyUI /view returned HTTP {response.status_code} for {filename}"
+            )
+
+        return response.content
+
+    async def _generate_via_comfyui(
+        self,
+        prompt_text: str,
+        face_image: str | None = None,
+        width: int = 768,
+        height: int = 1344,
+        seed: int | None = None,
+    ) -> bytes:
+        """Build workflow, queue it, poll for completion, download the result.
+
+        Args:
+            prompt_text: The positive text prompt.
+            face_image: Filename of a face reference in ComfyUI's input dir.
+                        If None, PuLID nodes are skipped (LoRA-only workflow).
+            width: Output image width.
+            height: Output image height.
+            seed: Optional fixed seed for reproducibility.
+
+        Returns:
+            Raw PNG image bytes.
+        """
+        workflow = _build_workflow(
+            prompt_text=prompt_text,
+            face_image=face_image,
+            width=width,
+            height=height,
+            seed=seed,
+        )
+
+        prompt_id = await self._queue_prompt(workflow)
+        logger.info(f"ComfyUI prompt queued: {prompt_id}")
+
+        outputs = await self._poll_for_completion(prompt_id)
+
+        # Find the SaveImage node output (node "22")
+        save_node = outputs.get("22")
+        if not save_node:
+            # Fall back to first node that has images
+            for node_id, node_output in outputs.items():
+                if "images" in node_output:
+                    save_node = node_output
+                    break
+
+        if not save_node or "images" not in save_node:
+            raise ImageGenerationError(
+                f"ComfyUI output has no images. Output keys: {list(outputs.keys())}"
+            )
+
+        image_info = save_node["images"][0]
+        image_bytes = await self._download_image(
+            filename=image_info["filename"],
+            subfolder=image_info.get("subfolder", ""),
+            image_type=image_info.get("type", "output"),
+        )
+
+        return image_bytes
+
+    # ------------------------------------------------------------------
+    # Public generation methods
+    # ------------------------------------------------------------------
 
     async def generate_character_image(
         self,
@@ -181,31 +592,32 @@ class ImageGenerator:
         prompt: str,
         style_reference_paths: list[str] | None = None,
         output_filename: str | None = None,
+        face_image: str | None = None,
     ) -> GeneratedImage:
-        """Generate a character image using style references + prompt.
-
-        This is the primary generation method. It feeds style reference images
-        to the model alongside the text prompt, so the model can SEE the
-        target style rather than guessing from text alone.
+        """Generate a character image using ComfyUI (Flux + LoRA + PuLID).
 
         Args:
-            character_name: Character key for file naming
-            prompt: Full assembled prompt (from build_character_prompt)
-            style_reference_paths: Paths to style reference images (the 'gold standard' caricatures)
-            output_filename: Optional custom filename
+            character_name: Character key for file naming.
+            prompt: Full assembled prompt (from build_character_prompt).
+            style_reference_paths: Accepted for API compatibility; not used
+                by ComfyUI workflow (style comes from LoRA).
+            output_filename: Optional custom filename for the output.
+            face_image: Filename of face reference in ComfyUI's input dir.
+                        When provided, PuLID is used for facial identity.
+                        When None, LoRA-only workflow is used.
 
         Returns:
-            GeneratedImage with path and metadata
+            GeneratedImage with path and metadata.
         """
-        logger.info(f"Generating caricature for {character_name}")
+        logger.info(f"Generating caricature for {character_name} via ComfyUI")
 
-        # Load style references if provided
-        style_images = []
         if style_reference_paths:
-            style_images = self._load_style_reference_images(style_reference_paths)
+            logger.info(
+                f"Note: {len(style_reference_paths)} style reference paths provided "
+                f"but ComfyUI workflow uses LoRA for style; paths ignored"
+            )
 
         # Build output path
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         if output_filename:
             filename = output_filename
@@ -217,158 +629,63 @@ class ImageGenerator:
         start_time = time.time()
 
         max_retries = 3
-        last_error = None
+        last_error: Exception | None = None
 
         for attempt in range(max_retries):
             try:
-                image_path = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    self._generate_with_references_sync,
-                    prompt,
-                    style_images,
-                    str(output_path),
+                image_bytes = await self._generate_via_comfyui(
+                    prompt_text=prompt,
+                    face_image=face_image,
                 )
 
+                # Save the image, converting to RGB PNG
+                image = PILImage.open(BytesIO(image_bytes))
+                if image.mode == "RGBA":
+                    rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
+                    rgb_image.paste(image, mask=image.split()[3])
+                    rgb_image.save(str(output_path), "PNG")
+                elif image.mode == "RGB":
+                    image.save(str(output_path), "PNG")
+                else:
+                    image.convert("RGB").save(str(output_path), "PNG")
+
                 elapsed_ms = int((time.time() - start_time) * 1000)
-                logger.info(f"Generated {character_name} in {elapsed_ms}ms -> {image_path}")
+                logger.info(
+                    f"Generated {character_name} in {elapsed_ms}ms -> {output_path} "
+                    f"({len(image_bytes)} bytes, face={'yes' if face_image else 'no'})"
+                )
 
                 return GeneratedImage(
-                    image_path=image_path,
+                    image_path=str(output_path),
                     generation_time_ms=elapsed_ms,
                     prompt_used=prompt,
                 )
 
             except ImageGenerationError as e:
                 last_error = e
-                if "IMAGE_OTHER" in str(e) and attempt < max_retries - 1:
+                if attempt < max_retries - 1:
+                    backoff = 2 ** attempt  # 1s, 2s
                     logger.warning(
                         f"Attempt {attempt + 1}/{max_retries} for {character_name} "
-                        f"hit IMAGE_OTHER filter, retrying..."
+                        f"failed ({e}), retrying in {backoff}s..."
                     )
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(backoff)
                     continue
                 break
             except Exception as e:
                 last_error = e
+                if attempt < max_retries - 1:
+                    backoff = 2 ** attempt
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{max_retries} for {character_name} "
+                        f"failed ({type(e).__name__}: {e}), retrying in {backoff}s..."
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
                 break
 
         logger.error(f"Image generation failed for {character_name}: {last_error}")
         raise ImageGenerationError(f"Failed to generate {character_name}: {last_error}")
-
-    def _generate_with_references_sync(
-        self,
-        prompt: str,
-        style_images: list[PILImage.Image],
-        output_path: str,
-    ) -> str:
-        """Generate image using Gemini with multi-modal input (reference images + text).
-
-        This uses generate_content() instead of generate_images() because
-        generate_content supports feeding reference images as input, which is
-        essential for style consistency.
-        """
-        from google.genai import types
-
-        # Build content parts: style reference images first, then the prompt
-        content_parts = []
-
-        # Add style reference images
-        if style_images:
-            content_parts.append(
-                "Here are style reference images. Generate the new character "
-                "in the EXACT SAME art style as these references:"
-            )
-            for img in style_images:
-                content_parts.append(img)
-            content_parts.append("")
-
-        # Add the generation prompt
-        content_parts.append(prompt)
-
-        # Generate using multi-modal content generation with image output
-        # Use BLOCK_NONE for safety since we're generating fictional animated characters
-        response = self.client.models.generate_content(
-            model=settings.GEMINI_IMAGE_MODEL,
-            contents=content_parts,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-                temperature=0.8,
-                safety_settings=[
-                    types.SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    types.SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    types.SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    types.SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="BLOCK_NONE",
-                    ),
-                ],
-            ),
-        )
-
-        # Extract the generated image from the response
-        image_data = None
-
-        if not response.candidates:
-            raise ImageGenerationError(
-                f"No candidates in response. Finish reason: {getattr(response, 'prompt_feedback', 'unknown')}"
-            )
-
-        candidate = response.candidates[0]
-        if not candidate.content or not candidate.content.parts:
-            # Model returned without image - log the response for debugging
-            finish_reason = getattr(candidate, "finish_reason", "unknown")
-            text_response = ""
-            try:
-                text_response = response.text[:500] if response.text else ""
-            except Exception:
-                pass
-            raise ImageGenerationError(
-                f"No content parts in response. Finish reason: {finish_reason}. "
-                f"Text: {text_response or 'None'}"
-            )
-
-        for part in candidate.content.parts:
-            if hasattr(part, "inline_data") and part.inline_data is not None:
-                image_data = part.inline_data.data
-                break
-
-        if image_data is None:
-            # Try alternative response format
-            for part in candidate.content.parts:
-                if hasattr(part, "image") and part.image is not None:
-                    image_data = part.image.image_bytes
-                    break
-
-        if image_data is None:
-            # Collect text parts for debugging
-            text_parts = [p.text for p in candidate.content.parts if hasattr(p, "text") and p.text]
-            raise ImageGenerationError(
-                "No image in response. Model may have returned text only. "
-                f"Text parts: {'; '.join(text_parts)[:500] if text_parts else 'None'}"
-            )
-
-        # Save the image
-        image = PILImage.open(BytesIO(image_data))
-        if image.mode == "RGBA":
-            rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
-            rgb_image.paste(image, mask=image.split()[3])
-            rgb_image.save(output_path, "PNG")
-        elif image.mode == "RGB":
-            image.save(output_path, "PNG")
-        else:
-            image.convert("RGB").save(output_path, "PNG")
-
-        logger.debug(f"Image saved: {output_path} ({len(image_data)} bytes)")
-        return output_path
 
     async def generate_scene_image(
         self,
@@ -380,24 +697,26 @@ class ImageGenerator:
         style_reference_paths: list[str] | None = None,
         character_traits: dict | None = None,
         resolution: str = "1K",
+        face_image: str | None = None,
     ) -> GeneratedImage:
         """Generate a scene image with character consistency.
 
-        This is the scene-level generation used during episode pipeline.
+        This is the scene-level generation used during the episode pipeline.
         It combines character traits from DB with the action description.
 
         Args:
-            scene_number: Scene number (1-24)
-            episode_id: Episode ID for file naming
-            character_name: Character key
-            action_description: What the character is doing in this scene
-            reference_image_path: Character's primary reference image
-            style_reference_paths: Style reference images for consistency
-            character_traits: Dict of character trait fields from DB
-            resolution: Output resolution
+            scene_number: Scene number (1-24).
+            episode_id: Episode ID for file naming.
+            character_name: Character key.
+            action_description: What the character is doing in this scene.
+            reference_image_path: Accepted for API compatibility (not used).
+            style_reference_paths: Accepted for API compatibility (not used).
+            character_traits: Dict of character trait fields from DB.
+            resolution: Output resolution (accepted for compatibility).
+            face_image: Filename of face reference in ComfyUI's input dir.
 
         Returns:
-            GeneratedImage with path and metadata
+            GeneratedImage with path and metadata.
         """
         logger.info(f"Scene {scene_number}: Generating image for {character_name}")
 
@@ -422,21 +741,16 @@ class ImageGenerator:
 
         logger.debug(f"Scene {scene_number}: Prompt: {prompt[:200]}...")
 
-        # Load reference images
-        ref_paths = style_reference_paths or []
-        if reference_image_path and os.path.exists(reference_image_path):
-            ref_paths = [reference_image_path] + ref_paths
-
         # Output filename
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         filename = f"episode_{episode_id}_scene_{scene_number:02d}_{timestamp}.png"
 
         return await self.generate_character_image(
             character_name=character_name,
             prompt=prompt,
-            style_reference_paths=ref_paths,
+            style_reference_paths=style_reference_paths,
             output_filename=filename,
+            face_image=face_image,
         )
 
     async def generate_character_reference(
@@ -445,12 +759,23 @@ class ImageGenerator:
         character_traits: dict | None = None,
         style_reference_paths: list[str] | None = None,
         resolution: str = "2K",
+        face_image: str | None = None,
     ) -> GeneratedImage:
         """Generate a canonical reference image for a character.
 
-        Uses the full character traits from DB + style references to create
-        the definitive caricature of this character. The prompt is saved
-        to the character's caricature_prompt field for reproducibility.
+        Uses the full character traits from DB to create the definitive
+        caricature of this character. The prompt is saved to the
+        character's caricature_prompt field for reproducibility.
+
+        Args:
+            character_name: Character key.
+            character_traits: Dict of character trait fields.
+            style_reference_paths: Accepted for API compatibility (not used).
+            resolution: Accepted for compatibility.
+            face_image: Filename of face reference in ComfyUI's input dir.
+
+        Returns:
+            GeneratedImage with path and metadata.
         """
         logger.info(f"Generating reference caricature for {character_name}")
 
@@ -475,9 +800,5 @@ class ImageGenerator:
             character_name=character_name,
             prompt=prompt,
             style_reference_paths=style_reference_paths,
+            face_image=face_image,
         )
-
-
-class ImageGenerationError(Exception):
-    """Raised when image generation fails."""
-    pass

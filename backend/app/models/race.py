@@ -21,16 +21,16 @@ class Race(Base):
     circuit_name: Mapped[Optional[str]] = mapped_column(String(100))
     country: Mapped[Optional[str]] = mapped_column(String(100))
     race_date: Mapped[date] = mapped_column(Date, nullable=False)
-    fp1_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    fp2_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    fp3_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    qualifying_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    race_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    fp1_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    fp2_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    fp3_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    qualifying_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    race_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     
     # Sprint weekend fields
     is_sprint_weekend: Mapped[bool] = mapped_column(Boolean, default=False)
-    sprint_qualifying_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    sprint_race_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    sprint_qualifying_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    sprint_race_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

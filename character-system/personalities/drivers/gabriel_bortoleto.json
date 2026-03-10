@@ -1,7 +1,7 @@
 {
   "id": "gabriel_bortoleto",
   "name": "Gabriel Bortoleto",
-  "team": "kick_sauber",
+  "team": "audi",
   "nationality": "Brazilian",
   "driver_number": 5,
   
@@ -77,13 +77,13 @@
     "Entire nation's expectations on his shoulders",
     "F2 champion entering underdog team",
     "Senna comparisons every Brazilian GP",
-    "Can Sauber/Audi give him a chance?"
+    "Can Audi give him a car to fight with?"
   ],
   
   "example_dialogue": {
     "about_brazil": "Racing for Brazil is incredible. The fans wake up at 4am. I feel them.",
     "senna_question": "Senna is... *pauses* ...everything. I just try to honor the Brazilian way.",
     "rookie_learning": "Nico teaches me a lot. He has so much experience. I listen.",
-    "about_future": "F2 champion, but F1 is different. Audi project excites me."
+    "about_future": "F2 champion, but F1 is different. The Audi project excites me. New era."
   }
 }

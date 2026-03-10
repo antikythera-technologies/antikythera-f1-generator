@@ -348,10 +348,68 @@ export const episodesApi = {
     }),
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface CharacterPersonality {
+  id: string;
+  name: string;
+  team: string | null;
+  nationality: string | null;
+  personality_dimensions: Record<string, number>;
+  core_traits: string[];
+  blind_spots: string[];
+  comedy_archetype: string;
+  satirical_angle: string;
+  speaking_style: {
+    formality: string;
+    vocabulary: string[];
+    sentence_structure: string;
+    filler_words: string[];
+    accent_hints: string;
+    tone: string;
+  };
+  catchphrases: string[];
+  management_style?: string;
+  topics_of_passion: string[];
+  topics_to_avoid: string[];
+  humor_style: string;
+  signature_reactions: Record<string, string>;
+  visual_profile: {
+    physical: Record<string, unknown>;
+    signature_gestures: string[];
+    animation_notes: Record<string, string>;
+  };
+  relationships_summary: Record<string, unknown>;
+  meme_status: string;
+  storyline_hooks: string[];
+  example_dialogue: Record<string, string>;
+  season_arc?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+// Face reference response
+export interface FaceReferenceResponse {
+  character_id: number;
+  character_name: string;
+  face_reference_path: string | null;
+  has_face_reference?: boolean;
+}
+
 // Characters API
 export const charactersApi = {
   list: () => request<Character[]>("/characters"),
   get: (id: number) => request<Character>(`/characters/${id}`),
+  getPersonality: (id: number) => request<CharacterPersonality>(`/characters/${id}/personality`),
+  getFaceReference: (id: number) => request<FaceReferenceResponse>(`/characters/${id}/face-reference`),
+  uploadFaceReference: async (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    const res = await fetch(`${API_BASE}/characters/${id}/face-reference`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json() as Promise<FaceReferenceResponse>;
+  },
   create: (data: Partial<Character>) =>
     request<Character>("/characters", {
       method: "POST",

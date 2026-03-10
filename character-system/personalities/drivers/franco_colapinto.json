@@ -65,9 +65,9 @@
   },
   
   "relationships_summary": {
-    "rivals": ["jack_doohan", "other_rookies"],
+    "rivals": ["other_rookies", "gabriel_bortoleto"],
     "friendly_with": ["all_latin_drivers"],
-    "teammate_dynamic": "Pierre Gasly - Latin friendship",
+    "teammate_dynamic": "Pierre Gasly - the experienced Frenchman and the fiery Argentine, unlikely bromance",
     "team_principal": "oliver_oakes - grateful for the chance"
   },
   

@@ -15,7 +15,6 @@ Content Schedule:
 import logging
 from datetime import datetime, timedelta, time
 from typing import List, Optional, Tuple
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,9 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Race, ScheduledJob, JobStatus, JobTriggerType, EpisodeType
 
 logger = logging.getLogger(__name__)
-
-# Timezone for scheduling
-SAST = ZoneInfo("Africa/Johannesburg")
 
 # Default trigger delays after session end
 TRIGGER_DELAYS = {
@@ -238,7 +234,7 @@ class SchedulerService:
 
     async def get_pending_jobs(self, limit: int = 10) -> List[ScheduledJob]:
         """Get jobs that are ready to run."""
-        now = datetime.now(SAST)
+        now = datetime.utcnow()
         
         result = await self.session.execute(
             select(ScheduledJob)
@@ -255,7 +251,7 @@ class SchedulerService:
 
     async def get_upcoming_jobs(self, days: int = 7) -> List[ScheduledJob]:
         """Get jobs scheduled for the next N days."""
-        now = datetime.now(SAST)
+        now = datetime.utcnow()
         future = now + timedelta(days=days)
         
         result = await self.session.execute(
@@ -273,13 +269,13 @@ class SchedulerService:
     async def mark_job_running(self, job: ScheduledJob) -> None:
         """Mark a job as running."""
         job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(SAST)
+        job.started_at = datetime.utcnow()
         await self.session.commit()
 
     async def mark_job_completed(self, job: ScheduledJob, episode_id: int) -> None:
         """Mark a job as completed."""
         job.status = JobStatus.COMPLETED
-        job.completed_at = datetime.now(SAST)
+        job.completed_at = datetime.utcnow()
         job.episode_id = episode_id
         await self.session.commit()
 
@@ -293,7 +289,7 @@ class SchedulerService:
         else:
             job.status = JobStatus.SCHEDULED  # Will retry
             # Reschedule for 30 minutes later
-            job.scheduled_for = datetime.now(SAST) + timedelta(minutes=30)
+            job.scheduled_for = datetime.utcnow() + timedelta(minutes=30)
         
         await self.session.commit()
 

@@ -199,6 +199,83 @@ class StorageService:
         
         return local_path
 
+    async def upload_face_reference(
+        self,
+        character_name: str,
+        data: bytes,
+        content_type: str = "image/jpeg",
+    ) -> str:
+        """Upload a face reference image for PuLID face conditioning.
+
+        Stored at ``face-references/{character_name}.{ext}`` in the characters
+        bucket.  Any previous face reference for this character is overwritten.
+
+        Returns:
+            The MinIO object path (``f1-characters/face-references/...``).
+        """
+        ext_map = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+        }
+        ext = ext_map.get(content_type, "jpg")
+        object_name = f"face-references/{character_name}.{ext}"
+
+        # Remove old face references with different extensions
+        for old_ext in ("jpg", "jpeg", "png", "webp"):
+            old_name = f"face-references/{character_name}.{old_ext}"
+            if old_name != object_name:
+                try:
+                    self.client.stat_object(settings.MINIO_BUCKET_CHARACTERS, old_name)
+                    await self.delete_file(settings.MINIO_BUCKET_CHARACTERS, old_name)
+                    logger.info(f"Removed old face reference: {old_name}")
+                except S3Error:
+                    pass  # doesn't exist, fine
+
+        return await self.upload_bytes(
+            settings.MINIO_BUCKET_CHARACTERS,
+            object_name,
+            data,
+            content_type,
+        )
+
+    async def download_face_reference(self, character_name: str) -> str | None:
+        """Download a character's face reference from MinIO to a local temp file.
+
+        Tries common image extensions. Returns the local file path, or None
+        if no face reference exists for this character.
+        """
+        import tempfile
+
+        temp_dir = Path(tempfile.gettempdir()) / "f1-face-refs"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        for ext in ("jpg", "jpeg", "png", "webp"):
+            object_name = f"face-references/{character_name}.{ext}"
+            local_path = str(temp_dir / f"{character_name}.{ext}")
+            try:
+                self.client.stat_object(settings.MINIO_BUCKET_CHARACTERS, object_name)
+                await self.download_file(
+                    settings.MINIO_BUCKET_CHARACTERS,
+                    object_name,
+                    local_path,
+                )
+                return local_path
+            except S3Error:
+                continue
+        return None
+
+    async def get_face_reference_path(self, character_name: str) -> str | None:
+        """Return the MinIO object path for a character's face reference, or None."""
+        for ext in ("jpg", "jpeg", "png", "webp"):
+            object_name = f"face-references/{character_name}.{ext}"
+            try:
+                self.client.stat_object(settings.MINIO_BUCKET_CHARACTERS, object_name)
+                return f"{settings.MINIO_BUCKET_CHARACTERS}/{object_name}"
+            except S3Error:
+                continue
+        return None
+
     async def upload_scene_image(
         self,
         race_id: int,

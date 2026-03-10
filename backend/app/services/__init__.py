@@ -2,14 +2,20 @@
 
 from app.services.scheduler import SchedulerService
 from app.services.news_scraper import NewsScraperService
-from app.services.ovi_space_manager import OviSpaceManager, SpaceStatus, generate_episode_videos
-from app.services.ltx_video_generator import LTX2VideoGenerator
+from app.services.ovi_space_manager import (
+    RunPodManager,
+    OviSpaceManager,
+    PodStatus,
+    SpaceStatus,
+    generate_episode_videos,
+)
 
 __all__ = [
     "SchedulerService",
     "NewsScraperService",
+    "RunPodManager",
     "OviSpaceManager",
+    "PodStatus",
     "SpaceStatus",
     "generate_episode_videos",
-    "LTX2VideoGenerator",
 ]

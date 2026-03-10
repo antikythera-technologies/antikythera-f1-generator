@@ -46,7 +46,7 @@ class GenerationLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     episode_id: Mapped[Optional[int]] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"))
-    scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenes.id", ondelete="CASCADE"))
+    scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("episode_scenes.id", ondelete="CASCADE"))
 
     level: Mapped[LogLevel] = mapped_column(
         Enum(LogLevel, name="log_level", create_type=False, values_callable=lambda x: [e.value for e in x]),
@@ -76,7 +76,7 @@ class APIUsage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     episode_id: Mapped[Optional[int]] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"))
-    scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenes.id", ondelete="CASCADE"))
+    scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("episode_scenes.id", ondelete="CASCADE"))
 
     provider: Mapped[APIProvider] = mapped_column(
         Enum(APIProvider, name="api_provider", create_type=False, values_callable=lambda x: [e.value for e in x]),

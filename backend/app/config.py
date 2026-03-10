@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,8 +35,9 @@ class Settings(BaseSettings):
         """Construct database URL if not provided."""
         if self.DATABASE_URL:
             return self.DATABASE_URL
+        password = quote_plus(self.DATABASE_PASSWORD)
         return (
-            f"postgresql+asyncpg://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}"
+            f"postgresql+asyncpg://{self.DATABASE_USER}:{password}"
             f"@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
         )
 
@@ -61,49 +63,33 @@ class Settings(BaseSettings):
     HAIKU_INPUT_COST_PER_1K: float = 0.00025
     HAIKU_OUTPUT_COST_PER_1K: float = 0.00125
 
-    # Gemini / Nano Banana Pro (Image Generation)
-    GEMINI_API_KEY: str = ""
-    GEMINI_IMAGE_MODEL: str = "gemini-2.0-flash-exp"  # Supports multi-modal input with reference images
-    GEMINI_IMAGE_RESOLUTION: str = "1024x1536"  # Portrait orientation for character images
-    GEMINI_STYLE_REFERENCE_COUNT: int = 4  # Number of style reference images to feed
+    # Google Imagen 4 (legacy — kept for compatibility references)
+    GOOGLE_API_KEY: str = ""
+    IMAGEN_MODEL: str = "imagen-4.0-generate-001"
+    IMAGEN_ASPECT_RATIO: str = "9:16"  # Portrait for character scenes
+    IMAGEN_STYLE_REFERENCE_COUNT: int = 4  # Max style references to load (passed through for compatibility)
 
-    # Video Engine Selection
-    # "ovi" = Ovi Gradio (HuggingFace), "ltx2" = LTX-2 via ComfyUI on RunPod
-    VIDEO_ENGINE: str = "ovi"
+    # ComfyUI (Image Generation — Flux Dev + LoRA + PuLID on RunPod)
+    COMFYUI_URL: str = "https://tims42v3eaqrz7-19123.proxy.runpod.net"
+    COMFYUI_LORA_STRENGTH: float = 1.4
+    COMFYUI_PULID_WEIGHT: float = 0.7
 
-    # Ovi (HuggingFace Gradio)
-    OVI_SPACE: str = "alexnasa/Ovi-ZEROGPU"  # Working space with API params
+    # Ovi (RunPod GPU Pod)
+    RUNPOD_API_KEY: str = ""
+    RUNPOD_POD_ID: str = "tims42v3eaqrz7"
+    OVI_SERVER_URL: str = "https://tims42v3eaqrz7-8888.proxy.runpod.net"
     OVI_TIMEOUT_SECONDS: int = 300
     OVI_QUALITY: str = "standard"  # draft, standard, high, ultra
-    HUGGINGFACE_TOKEN: str = ""  # HF token for private spaces
-
-    # Ovi Style Preservation — critical for caricature I2V
-    # Lower sample_steps = less deviation from source image
-    # image_conditioning_strength: how tightly to follow the source image (0.0-1.0)
-    OVI_IMAGE_CONDITIONING_STRENGTH: float = 0.85  # High = preserve source style
-    OVI_DENOISE_STRENGTH: float = 0.55  # Low = less re-interpretation of the image
-    OVI_GUIDANCE_SCALE: float = 2.0  # Lower = less hallucination, more source fidelity
-
-    # RunPod / ComfyUI (for LTX-2 and image generation)
-    RUNPOD_POD_ID: str = "tims42v3eaqrz7"
-    COMFYUI_PORT: int = 19123
-    COMFYUI_TIMEOUT_SECONDS: int = 600
-
-    @property
-    def comfyui_url(self) -> str:
-        """Construct ComfyUI API URL from RunPod pod ID."""
-        return f"https://{self.RUNPOD_POD_ID}-{self.COMFYUI_PORT}.proxy.runpod.net"
-
-    # LTX-2 Video Generation Settings
-    LTX2_DENOISE_STRENGTH: float = 0.45  # Low = strong source preservation
-    LTX2_CONDITIONING_SCALE: float = 0.90  # How tightly to follow source image
-    LTX2_GUIDANCE_SCALE: float = 3.0  # Balance prompt vs image fidelity
-    LTX2_STEPS: int = 20  # Fewer steps = less deviation
-    LTX2_FRAME_COUNT: int = 121  # ~5s at 24fps (LTX-2 generates 121 frames)
-    LTX2_WIDTH: int = 768
-    LTX2_HEIGHT: int = 512  # Landscape for video; source image is resized to fit
-    LTX2_FPS: int = 24
-    LTX2_SEED: int = -1  # -1 = random
+    OVI_FRAME_HEIGHT: float = 512
+    OVI_FRAME_WIDTH: float = 992
+    OVI_VIDEO_SEED: float = 100
+    OVI_SOLVER_NAME: str = "unipc"  # unipc, euler, dpm++
+    OVI_SHIFT: float = 5.0
+    OVI_VIDEO_GUIDANCE_SCALE: float = 4.0
+    OVI_AUDIO_GUIDANCE_SCALE: float = 3.0
+    OVI_SLG_LAYER: float = 11
+    OVI_VIDEO_NEGATIVE_PROMPT: str = ""
+    OVI_AUDIO_NEGATIVE_PROMPT: str = ""
 
     # YouTube API
     YOUTUBE_CLIENT_ID: str = ""
