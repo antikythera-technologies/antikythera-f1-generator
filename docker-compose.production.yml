@@ -69,6 +69,29 @@ services:
       timeout: 5s
       retries: 3
 
+  # Persistent background worker for video pipeline jobs
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: f1-generator-worker
+    restart: unless-stopped
+    command: python -m app.worker
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - video-temp:/tmp/videos
+      - youtube-credentials:/root/.credentials
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - f1-network
+      - n8n-docker-caddy_default
+
 networks:
   f1-network:
     driver: bridge
