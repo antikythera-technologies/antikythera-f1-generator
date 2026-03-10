@@ -522,6 +522,124 @@ export const gagsApi = {
   },
 };
 
+// Storyline types
+export type StorylineType = "rivalry" | "character_arc" | "running_joke" | "season_plot" | "event_reaction";
+export type StorylineStatus = "active" | "paused" | "completed" | "archived";
+
+export interface PlotPoint {
+  title: string;
+  description: string;
+  completed?: boolean;
+}
+
+export interface StorylineCharacter {
+  id: number;
+  name: string;
+  display_name: string;
+  team: string | null;
+}
+
+export interface StorylineEpisodeLink {
+  id: number;
+  storyline_id: number;
+  episode_id: number;
+  beat_used: number | null;
+  scene_numbers: number[] | null;
+  usage_notes: string | null;
+  created_at: string;
+}
+
+export interface Storyline {
+  id: number;
+  title: string;
+  description: string;
+  storyline_type: StorylineType;
+  status: StorylineStatus;
+  priority: number;
+  start_race_id: number | null;
+  end_race_id: number | null;
+  plot_points: PlotPoint[] | null;
+  current_beat: number;
+  comedy_notes: string | null;
+  tags: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  characters: StorylineCharacter[];
+  episode_links: StorylineEpisodeLink[];
+  episode_count: number | null;
+}
+
+export interface StorylineListItem {
+  id: number;
+  title: string;
+  description: string;
+  storyline_type: StorylineType;
+  status: StorylineStatus;
+  priority: number;
+  current_beat: number;
+  plot_points: PlotPoint[] | null;
+  comedy_notes: string | null;
+  tags: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  characters: StorylineCharacter[];
+  episode_count: number | null;
+}
+
+// Storylines API
+export const storylinesApi = {
+  list: (params?: { status?: StorylineStatus; storyline_type?: StorylineType; character_id?: number; active_only?: boolean }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.storyline_type) searchParams.set("storyline_type", params.storyline_type);
+    if (params?.character_id) searchParams.set("character_id", String(params.character_id));
+    if (params?.active_only !== undefined) searchParams.set("active_only", String(params.active_only));
+    const query = searchParams.toString();
+    return request<StorylineListItem[]>(`/storylines${query ? `?${query}` : ""}`);
+  },
+
+  get: (id: number) => request<Storyline>(`/storylines/${id}`),
+
+  getActive: () => request<StorylineListItem[]>("/storylines/active"),
+
+  create: (data: {
+    title: string;
+    description: string;
+    storyline_type?: StorylineType;
+    priority?: number;
+    start_race_id?: number | null;
+    end_race_id?: number | null;
+    plot_points?: PlotPoint[] | null;
+    comedy_notes?: string | null;
+    tags?: string[] | null;
+    character_ids?: number[];
+  }) =>
+    request<Storyline>("/storylines", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: number, data: Partial<Storyline> & { character_ids?: number[] }) =>
+    request<Storyline>(`/storylines/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: number) =>
+    request<{ detail: string }>(`/storylines/${id}`, { method: "DELETE" }),
+
+  advance: (id: number) =>
+    request<Storyline>(`/storylines/${id}/advance`, { method: "POST" }),
+
+  linkEpisode: (id: number, data: { episode_id: number; beat_used?: number; scene_numbers?: number[]; usage_notes?: string }) =>
+    request<StorylineEpisodeLink>(`/storylines/${id}/episodes`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
 // Export all APIs
 export const api = {
   episodes: episodesApi,
@@ -531,6 +649,7 @@ export const api = {
   scheduler: schedulerApi,
   news: newsApi,
   gags: gagsApi,
+  storylines: storylinesApi,
 };
 
 export default api;
