@@ -1,509 +1,522 @@
-"""LTX-2 video generation service via ComfyUI API on RunPod.
+"""LTX 2.3 video generation service via ComfyUI.
 
-LTX-2 is a 19B parameter video generation model that supports image-to-video
-with synchronized audio generation. It runs on our RunPod pod via ComfyUI.
+Generates 5-second video clips using first-frame + last-frame conditioning.
+The model interpolates between start and end images based on a text prompt
+describing the camera movement and character motion.
 
-Style preservation strategy:
-- Low denoise_strength (0.3-0.5) to avoid re-interpreting the source image
-- High conditioning_scale (0.8-0.95) to anchor the video to the source
-- Moderate guidance_scale (2.0-4.0) for prompt-following without hallucination
-- Fewer steps (15-25) to reduce drift from source
-- The prompt explicitly instructs "animate, don't redraw"
+ComfyUI workflow chain (17 nodes):
+  CheckpointLoaderSimple -> CLIPTextEncode(pos) + CLIPTextEncode(neg)
+  -> LTXVConditioning -> EmptyLTXVLatentVideo
+  -> LTXVAddGuide(start, frame_idx=0) -> LTXVAddGuide(end, frame_idx=-1)
+  -> LTXVApplySTG -> STGGuiderAdvanced -> LTXVScheduler
+  -> KSamplerSelect -> RandomNoise -> SamplerCustomAdvanced
+  -> LTXVSpatioTemporalTiledVAEDecode -> SaveWEBM
 """
 
-import asyncio
 import logging
+import random
 import time
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
-import httpx
+from typing import Any
 
 from app.config import settings
-from app.exceptions import VideoGenerationError
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class LTX2VideoClip:
-    """Generated LTX-2 video clip."""
+class LTXVideoClip:
+    """Result of LTX 2.3 video generation."""
+
     scene_number: int
     video_path: str
     generation_time_ms: int
+    prompt_used: str
+    seed_used: int
 
 
-class LTX2VideoGenerator:
-    """Generate video clips from images using LTX-2 via ComfyUI API.
+class LTXVideoGenerationError(Exception):
+    """Raised when LTX video generation fails."""
 
-    The ComfyUI workflow:
-    1. Load source image
-    2. Encode with LTX-2 VAE (image)
-    3. Text encode with Gemma 3 12B
-    4. LTX-2 sampler with image conditioning
-    5. Decode and save video
+    pass
 
-    Style preservation is controlled by denoise_strength and conditioning_scale.
-    Lower denoise = less re-interpretation. Higher conditioning = more source fidelity.
+
+class LTXVideoGenerator:
+    """Generate video clips using LTX 2.3 via ComfyUI with first/last frame support.
+
+    Quality presets balance between motion fidelity and style preservation.
+    The 'caricature' preset minimizes re-interpretation of the source art style
+    by using lower STG scale values and fewer sampling steps.
     """
 
-    # Style-preservation presets
     PRESETS = {
-        "draft": {
-            "denoise_strength": 0.50,
-            "conditioning_scale": 0.85,
-            "guidance_scale": 3.0,
-            "steps": 15,
+        "caricature": {
+            "steps": 18,
+            "stg_block_indices": "14, 19",
+            "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
+            "cfg_values": "6, 4, 4, 3, 2, 1",
+            "stg_scale_values": "2, 2, 2, 1, 1, 0",
+            "stg_rescale_values": "1, 1, 1, 1, 1, 1",
+            "stg_layers_indices": "[29], [29], [29], [29], [29], [29]",
+            "start_frame_strength": 1.0,
+            "end_frame_strength": 1.0,
         },
         "standard": {
-            "denoise_strength": 0.45,
-            "conditioning_scale": 0.90,
-            "guidance_scale": 3.0,
             "steps": 20,
+            "stg_block_indices": "14, 19",
+            "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
+            "cfg_values": "8, 6, 6, 4, 3, 1",
+            "stg_scale_values": "4, 4, 3, 2, 1, 0",
+            "stg_rescale_values": "1, 1, 1, 1, 1, 1",
+            "stg_layers_indices": "[29], [29], [29], [29], [29], [29]",
+            "start_frame_strength": 1.0,
+            "end_frame_strength": 1.0,
         },
-        "high": {
-            "denoise_strength": 0.40,
-            "conditioning_scale": 0.92,
-            "guidance_scale": 2.5,
+        "high_motion": {
             "steps": 25,
-        },
-        # Maximum style preservation — minimal motion, maximum fidelity
-        "caricature": {
-            "denoise_strength": 0.30,
-            "conditioning_scale": 0.95,
-            "guidance_scale": 2.0,
-            "steps": 18,
+            "stg_block_indices": "14, 19",
+            "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
+            "cfg_values": "10, 8, 8, 6, 4, 2",
+            "stg_scale_values": "6, 6, 5, 4, 2, 0",
+            "stg_rescale_values": "1, 1, 1, 1, 1, 1",
+            "stg_layers_indices": "[29], [29], [29], [29], [29], [29]",
+            "start_frame_strength": 0.9,
+            "end_frame_strength": 0.9,
         },
     }
 
-    def __init__(
-        self,
-        quality: str = "standard",
-        denoise_strength: Optional[float] = None,
-        conditioning_scale: Optional[float] = None,
-        guidance_scale: Optional[float] = None,
-        steps: Optional[int] = None,
-    ):
-        """Initialize LTX-2 video generator.
+    def __init__(self, quality: str = "caricature"):
+        from app.services.comfyui_client import ComfyUIClient
 
-        Args:
-            quality: Preset name (draft/standard/high/caricature)
-            denoise_strength: Override preset (0.0-1.0, lower = preserve more)
-            conditioning_scale: Override preset (0.0-1.0, higher = more faithful)
-            guidance_scale: Override preset
-            steps: Override preset
-        """
-        self.comfyui_url = settings.comfyui_url
-        self.timeout = settings.COMFYUI_TIMEOUT_SECONDS
-        self.output_dir = Path("/tmp/ltx2-videos")
+        self.client = ComfyUIClient(
+            poll_timeout=float(settings.COMFYUI_TIMEOUT_SECONDS),
+        )
+        self.output_dir = Path("/tmp/f1-videos")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Load preset
-        preset = self.PRESETS.get(quality, self.PRESETS["standard"])
+        preset = self.PRESETS.get(quality, self.PRESETS["caricature"])
+        self.steps = preset["steps"]
+        self.stg_block_indices = preset["stg_block_indices"]
+        self.sigmas = preset["sigmas"]
+        self.cfg_values = preset["cfg_values"]
+        self.stg_scale_values = preset["stg_scale_values"]
+        self.stg_rescale_values = preset["stg_rescale_values"]
+        self.stg_layers_indices = preset["stg_layers_indices"]
+        self.start_frame_strength = preset["start_frame_strength"]
+        self.end_frame_strength = preset["end_frame_strength"]
 
-        self.denoise_strength = denoise_strength or settings.LTX2_DENOISE_STRENGTH
-        self.conditioning_scale = conditioning_scale or settings.LTX2_CONDITIONING_SCALE
-        self.guidance_scale = guidance_scale or settings.LTX2_GUIDANCE_SCALE
-        self.steps = steps or settings.LTX2_STEPS
-        self.frame_count = settings.LTX2_FRAME_COUNT
-        self.width = settings.LTX2_WIDTH
-        self.height = settings.LTX2_HEIGHT
-        self.fps = settings.LTX2_FPS
-        self.seed = settings.LTX2_SEED
+        # Allow settings overrides - if a config value differs from the
+        # default, it means the operator explicitly set it, so honour it.
+        if settings.LTX23_STEPS != 20:
+            self.steps = settings.LTX23_STEPS
+        if settings.LTX23_STG_BLOCK_INDICES != "14, 19":
+            self.stg_block_indices = settings.LTX23_STG_BLOCK_INDICES
+        if settings.LTX23_STG_SIGMAS != "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180":
+            self.sigmas = settings.LTX23_STG_SIGMAS
+        if settings.LTX23_STG_CFG_VALUES != "8, 6, 6, 4, 3, 1":
+            self.cfg_values = settings.LTX23_STG_CFG_VALUES
+        if settings.LTX23_STG_SCALE_VALUES != "4, 4, 3, 2, 1, 0":
+            self.stg_scale_values = settings.LTX23_STG_SCALE_VALUES
+        if settings.LTX23_STG_RESCALE_VALUES != "1, 1, 1, 1, 1, 1":
+            self.stg_rescale_values = settings.LTX23_STG_RESCALE_VALUES
+        if settings.LTX23_STG_LAYERS_INDICES != "[29], [29], [29], [29], [29], [29]":
+            self.stg_layers_indices = settings.LTX23_STG_LAYERS_INDICES
+        if settings.LTX23_START_FRAME_STRENGTH != 1.0:
+            self.start_frame_strength = settings.LTX23_START_FRAME_STRENGTH
+        if settings.LTX23_END_FRAME_STRENGTH != 1.0:
+            self.end_frame_strength = settings.LTX23_END_FRAME_STRENGTH
 
-        # If no explicit overrides were given, use preset values
-        if denoise_strength is None and quality in self.PRESETS:
-            self.denoise_strength = preset["denoise_strength"]
-        if conditioning_scale is None and quality in self.PRESETS:
-            self.conditioning_scale = preset["conditioning_scale"]
-        if guidance_scale is None and quality in self.PRESETS:
-            self.guidance_scale = preset["guidance_scale"]
-        if steps is None and quality in self.PRESETS:
-            self.steps = preset["steps"]
-
-        logger.info(
-            f"LTX2VideoGenerator initialized: quality={quality}, "
-            f"denoise={self.denoise_strength:.2f}, "
-            f"conditioning={self.conditioning_scale:.2f}, "
-            f"guidance={self.guidance_scale:.1f}, "
-            f"steps={self.steps}"
-        )
+    # ------------------------------------------------------------------
+    # Workflow builder
+    # ------------------------------------------------------------------
 
     def _build_workflow(
         self,
-        image_filename: str,
-        prompt: str,
-        seed: Optional[int] = None,
-    ) -> dict:
-        """Build ComfyUI workflow for LTX-2 image-to-video.
+        start_frame_filename: str,
+        end_frame_filename: str,
+        video_prompt: str,
+        seed: int,
+        width: int | None = None,
+        height: int | None = None,
+        frame_count: int | None = None,
+    ) -> dict[str, Any]:
+        """Build ComfyUI workflow for LTX 2.3 image-to-video with first/last frame.
 
-        The workflow uses image conditioning to anchor the video generation
-        to the source caricature image. Key nodes:
-
-        - LTXVLoader: Loads the LTX-2 19B model
-        - LTXVTextEncode: Encodes text with Gemma 3 12B
-        - LTXVImageEncode: Encodes the source image for conditioning
-        - LTXVConditioning: Combines text + image conditioning
-        - LTXVSampler: Generates video frames with controlled denoise
-        - LTXVDecode: Decodes latents to video frames
-        - VHS_VideoCombine: Saves as MP4
-
-        Args:
-            image_filename: Filename of the source image (already uploaded to ComfyUI)
-            prompt: Text description of desired motion
-            seed: Random seed (-1 for random)
+        Constructs a 17-node workflow using verified ComfyUI node class_types:
+        CheckpointLoaderSimple, LoadImage, CLIPTextEncode, LTXVConditioning,
+        EmptyLTXVLatentVideo, LTXVAddGuide, LTXVApplySTG, STGGuiderAdvanced,
+        LTXVScheduler, KSamplerSelect, RandomNoise, SamplerCustomAdvanced,
+        LTXVSpatioTemporalTiledVAEDecode, SaveWEBM.
         """
-        effective_seed = seed if seed is not None else self.seed
-        if effective_seed == -1:
-            import random
-            effective_seed = random.randint(0, 2**32 - 1)
+        w = width or settings.LTX23_WIDTH
+        h = height or settings.LTX23_HEIGHT
+        frames = frame_count or settings.LTX23_FRAME_COUNT
+        fps = settings.LTX23_FPS
 
-        return {
-            # Load LTX-2 model (19B FP8)
-            "1": {
-                "class_type": "LTXVLoader",
-                "inputs": {
-                    "model_name": "ltxv-2b-0.9.6-distilled-fp8.safetensors",
-                    "dtype": "fp8_e4m3fn",
-                },
-            },
-            # Load text encoder (Gemma 3 12B FP8)
-            "2": {
-                "class_type": "LTXVTextEncode",
-                "inputs": {
-                    "positive_prompt": prompt,
-                    "negative_prompt": (
-                        "blurry, distorted, deformed, ugly, low quality, "
-                        "photorealistic, different art style, style change, "
-                        "morphing, melting face, horror, grotesque"
-                    ),
-                    "model": ["1", 0],
-                },
-            },
-            # Load source image
-            "3": {
-                "class_type": "LoadImage",
-                "inputs": {
-                    "image": image_filename,
-                },
-            },
-            # Resize image to video dimensions
-            "4": {
-                "class_type": "ImageResize+",
-                "inputs": {
-                    "image": ["3", 0],
-                    "width": self.width,
-                    "height": self.height,
-                    "interpolation": "lanczos",
-                    "method": "fill / crop",
-                    "condition": "always",
-                    "multiple_of": 32,
-                },
-            },
-            # Encode source image for conditioning
-            "5": {
-                "class_type": "LTXVImageEncode",
-                "inputs": {
-                    "image": ["4", 0],
-                    "model": ["1", 0],
-                    "image_conditioning_scale": self.conditioning_scale,
-                },
-            },
-            # Set up conditioning (text + image)
-            "6": {
-                "class_type": "LTXVConditioning",
-                "inputs": {
-                    "positive": ["2", 0],
-                    "negative": ["2", 1],
-                    "latent": ["5", 0],
-                    "frame_count": self.frame_count,
-                    "width": self.width,
-                    "height": self.height,
-                },
-            },
-            # Sample video frames
-            "7": {
-                "class_type": "LTXVSampler",
-                "inputs": {
-                    "model": ["1", 0],
-                    "positive": ["6", 0],
-                    "negative": ["6", 1],
-                    "latent": ["6", 2],
-                    "seed": effective_seed,
-                    "steps": self.steps,
-                    "cfg": self.guidance_scale,
-                    "denoise": self.denoise_strength,
-                    "scheduler": "normal",
-                },
-            },
-            # Decode latents to video
-            "8": {
-                "class_type": "LTXVDecode",
-                "inputs": {
-                    "model": ["1", 0],
-                    "samples": ["7", 0],
-                },
-            },
-            # Save as video file
-            "9": {
-                "class_type": "VHS_VideoCombine",
-                "inputs": {
-                    "images": ["8", 0],
-                    "frame_rate": self.fps,
-                    "loop_count": 0,
-                    "filename_prefix": "ltx2_video",
-                    "format": "video/h264-mp4",
-                    "pingpong": False,
-                    "save_output": True,
-                },
+        workflow: dict[str, Any] = {}
+
+        # --- Node 1: CheckpointLoaderSimple (loads MODEL, CLIP, VAE) ---
+        workflow["1"] = {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": settings.LTX23_MODEL_NAME,
             },
         }
 
-    async def upload_image(self, image_path: str) -> str:
-        """Upload source image to ComfyUI input directory.
+        # --- Node 2: LoadImage (start frame) ---
+        workflow["2"] = {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": start_frame_filename,
+            },
+        }
 
-        Args:
-            image_path: Local path to the image file
+        # --- Node 3: LoadImage (end frame) ---
+        workflow["3"] = {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": end_frame_filename,
+            },
+        }
 
-        Returns:
-            Filename as it appears in ComfyUI's input directory
-        """
-        filename = Path(image_path).name
+        # --- Node 4: CLIPTextEncode (positive prompt) ---
+        workflow["4"] = {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": video_prompt,
+                "clip": ["1", 1],  # CLIP from CheckpointLoaderSimple
+            },
+        }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            with open(image_path, "rb") as f:
-                files = {"image": (filename, f, "image/png")}
-                data = {"overwrite": "true"}
-                resp = await client.post(
-                    f"{self.comfyui_url}/upload/image",
-                    files=files,
-                    data=data,
-                )
+        # --- Node 5: CLIPTextEncode (negative prompt) ---
+        workflow["5"] = {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": "blurry, distorted, low quality, static, frozen",
+                "clip": ["1", 1],  # CLIP from CheckpointLoaderSimple
+            },
+        }
 
-            if resp.status_code != 200:
-                raise VideoGenerationError(
-                    f"Failed to upload image to ComfyUI: {resp.status_code} {resp.text[:200]}"
-                )
+        # --- Node 6: LTXVConditioning (combine pos/neg + frame rate) ---
+        workflow["6"] = {
+            "class_type": "LTXVConditioning",
+            "inputs": {
+                "positive": ["4", 0],  # CONDITIONING from positive CLIPTextEncode
+                "negative": ["5", 0],  # CONDITIONING from negative CLIPTextEncode
+                "frame_rate": float(fps),
+            },
+        }
 
-            result = resp.json()
-            uploaded_name = result.get("name", filename)
-            logger.info(f"Uploaded image to ComfyUI: {uploaded_name}")
-            return uploaded_name
+        # --- Node 7: EmptyLTXVLatentVideo (initial latent) ---
+        workflow["7"] = {
+            "class_type": "EmptyLTXVLatentVideo",
+            "inputs": {
+                "width": w,
+                "height": h,
+                "length": frames,
+                "batch_size": 1,
+            },
+        }
 
-    async def _queue_prompt(self, workflow: dict) -> str:
-        """Send workflow to ComfyUI and return prompt ID."""
-        client_id = str(uuid.uuid4())
-        payload = {"prompt": workflow, "client_id": client_id}
+        # --- Node 8: LTXVAddGuide (start frame at frame_idx=0) ---
+        workflow["8"] = {
+            "class_type": "LTXVAddGuide",
+            "inputs": {
+                "positive": ["6", 0],   # positive from LTXVConditioning
+                "negative": ["6", 1],   # negative from LTXVConditioning
+                "vae": ["1", 2],        # VAE from CheckpointLoaderSimple
+                "latent": ["7", 0],     # LATENT from EmptyLTXVLatentVideo
+                "image": ["2", 0],      # IMAGE from LoadImage (start frame)
+                "frame_idx": 0,
+                "strength": self.start_frame_strength,
+            },
+        }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{self.comfyui_url}/prompt",
-                json=payload,
-            )
+        # --- Node 9: LTXVAddGuide (end frame at frame_idx=-1) ---
+        workflow["9"] = {
+            "class_type": "LTXVAddGuide",
+            "inputs": {
+                "positive": ["8", 0],   # positive from first LTXVAddGuide
+                "negative": ["8", 1],   # negative from first LTXVAddGuide
+                "vae": ["1", 2],        # VAE from CheckpointLoaderSimple
+                "latent": ["8", 2],     # latent from first LTXVAddGuide
+                "image": ["3", 0],      # IMAGE from LoadImage (end frame)
+                "frame_idx": -1,
+                "strength": self.end_frame_strength,
+            },
+        }
 
-        if resp.status_code != 200:
-            raise VideoGenerationError(
-                f"Failed to queue ComfyUI prompt: {resp.status_code} {resp.text[:300]}"
-            )
+        # --- Node 10: LTXVApplySTG (apply STG to model) ---
+        workflow["10"] = {
+            "class_type": "LTXVApplySTG",
+            "inputs": {
+                "model": ["1", 0],  # MODEL from CheckpointLoaderSimple
+                "block_indices": self.stg_block_indices,
+            },
+        }
 
-        data = resp.json()
-        prompt_id = data.get("prompt_id")
-        logger.info(f"Queued ComfyUI prompt: {prompt_id}")
-        return prompt_id
+        # --- Node 11: STGGuiderAdvanced (advanced guider with sigma schedule) ---
+        workflow["11"] = {
+            "class_type": "STGGuiderAdvanced",
+            "inputs": {
+                "model": ["10", 0],     # model from LTXVApplySTG
+                "positive": ["9", 0],   # positive from second LTXVAddGuide
+                "negative": ["9", 1],   # negative from second LTXVAddGuide
+                "skip_steps_sigma_threshold": settings.LTX23_STG_SKIP_STEPS_SIGMA_THRESHOLD,
+                "cfg_star_rescale": settings.LTX23_STG_CFG_STAR_RESCALE,
+                "sigmas": self.sigmas,
+                "cfg_values": self.cfg_values,
+                "stg_scale_values": self.stg_scale_values,
+                "stg_rescale_values": self.stg_rescale_values,
+                "stg_layers_indices": self.stg_layers_indices,
+            },
+        }
 
-    async def _wait_for_completion(self, prompt_id: str) -> dict:
-        """Poll ComfyUI until the prompt completes."""
-        start = time.time()
+        # --- Node 12: LTXVScheduler (frame-aware sigma schedule) ---
+        workflow["12"] = {
+            "class_type": "LTXVScheduler",
+            "inputs": {
+                "steps": self.steps,
+                "max_shift": settings.LTX23_SCHEDULER_MAX_SHIFT,
+                "base_shift": settings.LTX23_SCHEDULER_BASE_SHIFT,
+                "stretch": settings.LTX23_SCHEDULER_STRETCH,
+                "terminal": settings.LTX23_SCHEDULER_TERMINAL,
+                "latent": ["9", 2],  # latent from second LTXVAddGuide
+            },
+        }
 
-        while (time.time() - start) < self.timeout:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{self.comfyui_url}/history/{prompt_id}")
+        # --- Node 13: KSamplerSelect (sampler algorithm) ---
+        workflow["13"] = {
+            "class_type": "KSamplerSelect",
+            "inputs": {
+                "sampler_name": "euler",
+            },
+        }
 
-            if resp.status_code == 200:
-                data = resp.json()
-                if prompt_id in data:
-                    result = data[prompt_id]
-                    status = result.get("status", {}).get("status_str", "unknown")
-                    if status == "success":
-                        return result
-                    elif status == "error":
-                        error_msg = str(result.get("status", {}))[:500]
-                        raise VideoGenerationError(
-                            f"ComfyUI workflow failed: {error_msg}"
-                        )
+        # --- Node 14: RandomNoise (noise seed) ---
+        workflow["14"] = {
+            "class_type": "RandomNoise",
+            "inputs": {
+                "noise_seed": seed,
+            },
+        }
 
-            elapsed = int(time.time() - start)
-            if elapsed % 10 == 0:
-                logger.debug(f"Waiting for ComfyUI... ({elapsed}s)")
+        # --- Node 15: SamplerCustomAdvanced (run the sampling) ---
+        workflow["15"] = {
+            "class_type": "SamplerCustomAdvanced",
+            "inputs": {
+                "noise": ["14", 0],         # NOISE from RandomNoise
+                "guider": ["11", 0],        # GUIDER from STGGuiderAdvanced
+                "sampler": ["13", 0],       # SAMPLER from KSamplerSelect
+                "sigmas": ["12", 0],        # SIGMAS from LTXVScheduler
+                "latent_image": ["9", 2],   # LATENT from second LTXVAddGuide
+            },
+        }
 
-            await asyncio.sleep(2)
+        # --- Node 16: LTXVSpatioTemporalTiledVAEDecode (decode latent to images) ---
+        workflow["16"] = {
+            "class_type": "LTXVSpatioTemporalTiledVAEDecode",
+            "inputs": {
+                "vae": ["1", 2],            # VAE from CheckpointLoaderSimple
+                "latents": ["15", 1],       # denoised_output from SamplerCustomAdvanced
+                "spatial_tiles": settings.LTX23_VAE_SPATIAL_TILES,
+                "spatial_overlap": settings.LTX23_VAE_SPATIAL_OVERLAP,
+                "temporal_tile_length": settings.LTX23_VAE_TEMPORAL_TILE_LENGTH,
+                "temporal_overlap": settings.LTX23_VAE_TEMPORAL_OVERLAP,
+                "last_frame_fix": False,
+                "working_device": "auto",
+                "working_dtype": "auto",
+            },
+        }
 
-        raise VideoGenerationError(
-            f"ComfyUI timeout after {self.timeout}s for prompt {prompt_id}"
-        )
+        # --- Node 17: SaveWEBM (output video file) ---
+        workflow["17"] = {
+            "class_type": "SaveWEBM",
+            "inputs": {
+                "images": ["16", 0],    # IMAGE from VAE decode
+                "filename_prefix": "ltx23",
+                "codec": settings.LTX23_OUTPUT_CODEC,
+                "fps": float(fps),
+                "crf": settings.LTX23_OUTPUT_CRF,
+            },
+        }
 
-    async def _download_video(self, result: dict, output_path: str) -> str:
-        """Download generated video from ComfyUI output."""
-        outputs = result.get("outputs", {})
+        return workflow
 
-        for node_id, node_output in outputs.items():
-            # VHS_VideoCombine outputs gifs/videos
-            gifs = node_output.get("gifs", [])
-            for vid in gifs:
-                vid_filename = vid["filename"]
-                subfolder = vid.get("subfolder", "")
-                vid_type = vid.get("type", "output")
-
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.get(
-                        f"{self.comfyui_url}/view",
-                        params={
-                            "filename": vid_filename,
-                            "subfolder": subfolder,
-                            "type": vid_type,
-                        },
-                    )
-
-                if resp.status_code == 200:
-                    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-                    Path(output_path).write_bytes(resp.content)
-                    size_kb = len(resp.content) / 1024
-                    logger.info(f"Downloaded video: {output_path} ({size_kb:.0f} KB)")
-                    return output_path
-
-            # Also check for video key (some nodes use this)
-            videos = node_output.get("videos", [])
-            for vid in videos:
-                vid_filename = vid["filename"]
-                subfolder = vid.get("subfolder", "")
-
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.get(
-                        f"{self.comfyui_url}/view",
-                        params={
-                            "filename": vid_filename,
-                            "subfolder": subfolder,
-                            "type": "output",
-                        },
-                    )
-
-                if resp.status_code == 200:
-                    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-                    Path(output_path).write_bytes(resp.content)
-                    size_kb = len(resp.content) / 1024
-                    logger.info(f"Downloaded video: {output_path} ({size_kb:.0f} KB)")
-                    return output_path
-
-        raise VideoGenerationError("No video found in ComfyUI output")
+    # ------------------------------------------------------------------
+    # Public generation method
+    # ------------------------------------------------------------------
 
     async def generate_clip(
         self,
         scene_number: int,
-        image_path: str,
-        action: str,
-        dialogue: Optional[str] = None,
-        audio_description: Optional[str] = None,
-    ) -> LTX2VideoClip:
-        """Generate a video clip from a caricature image using LTX-2.
+        start_frame_path: str,
+        end_frame_path: str,
+        video_prompt: str,
+        dialogue: str | None = None,
+        audio_description: str | None = None,
+        seed: int | None = None,
+    ) -> LTXVideoClip:
+        """Generate a 5-second video clip from start and end frame images.
 
         Args:
-            scene_number: Scene number (1-24)
-            image_path: Local path to the source caricature image
-            action: Description of what happens in the scene
-            dialogue: Speech content (optional, used in prompt)
-            audio_description: Background audio description (optional)
+            scene_number: Scene number (1-24).
+            start_frame_path: Local path to the start frame image.
+            end_frame_path: Local path to the end frame image.
+            video_prompt: Text prompt describing camera movement and action.
+            dialogue: Optional dialogue (for future audio sync).
+            audio_description: Optional audio description (for future audio).
+            seed: Optional seed for reproducibility. -1 or None = random.
 
         Returns:
-            LTX2VideoClip with path to generated video
+            LTXVideoClip with path to generated video and metadata.
         """
-        logger.info(
-            f"Scene {scene_number}: Starting LTX-2 video generation "
-            f"(denoise={self.denoise_strength:.2f}, "
-            f"conditioning={self.conditioning_scale:.2f}, "
-            f"steps={self.steps})"
+        logger.info(f"Scene {scene_number}: Starting LTX 2.3 video generation")
+
+        # Determine seed
+        if seed is None or seed == -1:
+            actual_seed = random.randint(0, 2**32 - 1)
+        else:
+            actual_seed = seed
+
+        # Build prompt with style preservation note
+        full_prompt = (
+            f"{video_prompt} "
+            "Maintain caricature art style throughout, subtle animation only."
         )
 
         start_time = time.time()
 
-        try:
-            # Upload source image to ComfyUI
-            image_filename = await self.upload_image(image_path)
+        # Upload both frames to ComfyUI
+        start_filename = f"ltx23_scene{scene_number:02d}_start.png"
+        end_filename = f"ltx23_scene{scene_number:02d}_end.png"
 
-            # Build style-preserving prompt
-            prompt = self._build_prompt(action, dialogue, audio_description)
-            logger.debug(f"Scene {scene_number}: Prompt: {prompt}")
-
-            # Build and queue workflow
-            workflow = self._build_workflow(image_filename, prompt)
-            prompt_id = await self._queue_prompt(workflow)
-
-            # Wait for completion
-            result = await self._wait_for_completion(prompt_id)
-
-            # Download video
-            output_path = str(
-                self.output_dir / f"scene_{scene_number:02d}_{int(time.time())}.mp4"
-            )
-            video_path = await self._download_video(result, output_path)
-
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            logger.info(f"Scene {scene_number}: LTX-2 generated in {elapsed_ms}ms")
-
-            return LTX2VideoClip(
-                scene_number=scene_number,
-                video_path=video_path,
-                generation_time_ms=elapsed_ms,
-            )
-
-        except Exception as e:
-            logger.error(f"Scene {scene_number}: LTX-2 video generation failed - {e}")
-            raise VideoGenerationError(f"Scene {scene_number} (LTX-2): {e}")
-
-    def _build_prompt(
-        self,
-        action: str,
-        dialogue: Optional[str] = None,
-        audio_description: Optional[str] = None,
-    ) -> str:
-        """Build a style-preserving prompt for LTX-2.
-
-        Unlike Ovi, LTX-2 doesn't use special tokens for speech/audio.
-        Instead, we describe the desired subtle animation while explicitly
-        instructing the model to preserve the source art style.
-        """
-        parts = [
-            "Animate this stylized caricature illustration with subtle, gentle motion.",
-            "Maintain the EXACT art style, colors, lighting, and character proportions.",
-            "Do NOT change the art style or make it more realistic.",
-            "Add only subtle movement:",
-        ]
-
-        # Describe the motion
-        parts.append(action)
-
-        if dialogue:
-            parts.append(f"The character speaks: \"{dialogue}\"")
-            parts.append("Show subtle mouth movement for speech.")
-
-        if audio_description:
-            parts.append(f"Background atmosphere: {audio_description}")
-
-        parts.append(
-            "Keep all motion minimal and subtle. "
-            "The character should look like a gently animated illustration, "
-            "not a re-drawn or reinterpreted image."
+        logger.info(f"Scene {scene_number}: Uploading start frame...")
+        start_stored = await self.client.upload_image(
+            start_frame_path, start_filename
         )
 
-        return " ".join(parts)
+        logger.info(f"Scene {scene_number}: Uploading end frame...")
+        end_stored = await self.client.upload_image(
+            end_frame_path, end_filename
+        )
 
-    async def check_health(self) -> bool:
-        """Check if ComfyUI is reachable and responsive."""
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{self.comfyui_url}/system_stats")
-            return resp.status_code == 200
-        except Exception as e:
-            logger.warning(f"ComfyUI health check failed: {e}")
-            return False
+        # Build and queue workflow
+        workflow = self._build_workflow(
+            start_frame_filename=start_stored,
+            end_frame_filename=end_stored,
+            video_prompt=full_prompt,
+            seed=actual_seed,
+        )
+
+        prompt_id = await self.client.queue_prompt(workflow)
+        logger.info(f"Scene {scene_number}: ComfyUI prompt queued: {prompt_id}")
+
+        # Poll for completion
+        outputs = await self.client.poll_for_completion(
+            prompt_id,
+            timeout=float(settings.COMFYUI_TIMEOUT_SECONDS),
+        )
+
+        # Find the video output
+        video_bytes = await self._extract_video_output(outputs, scene_number)
+
+        # Save to local file
+        output_path = (
+            self.output_dir / f"ltx23_scene_{scene_number:02d}_{actual_seed}.webm"
+        )
+        output_path.write_bytes(video_bytes)
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        logger.info(
+            f"Scene {scene_number}: LTX 2.3 video generated in {elapsed_ms}ms "
+            f"(seed={actual_seed}, {len(video_bytes)} bytes)"
+        )
+
+        return LTXVideoClip(
+            scene_number=scene_number,
+            video_path=str(output_path),
+            generation_time_ms=elapsed_ms,
+            prompt_used=full_prompt,
+            seed_used=actual_seed,
+        )
+
+    # ------------------------------------------------------------------
+    # Output extraction
+    # ------------------------------------------------------------------
+
+    async def _extract_video_output(
+        self,
+        outputs: dict[str, Any],
+        scene_number: int,
+    ) -> bytes:
+        """Extract video bytes from ComfyUI workflow outputs.
+
+        Tries node "17" (SaveWEBM) first, then falls back to searching
+        all nodes for video/image output.
+        """
+        # Try the expected output node (SaveWEBM at node 17)
+        video_node = outputs.get("17")
+        if video_node:
+            # SaveWEBM outputs in "videos" key
+            videos = video_node.get("videos", [])
+            if videos:
+                info = videos[0]
+                return await self.client.download_file(
+                    filename=info["filename"],
+                    subfolder=info.get("subfolder", ""),
+                    file_type=info.get("type", "output"),
+                )
+
+            # Some output nodes use "images" key for video frames
+            images = video_node.get("images", [])
+            if images:
+                info = images[0]
+                return await self.client.download_file(
+                    filename=info["filename"],
+                    subfolder=info.get("subfolder", ""),
+                    file_type=info.get("type", "output"),
+                )
+
+            # Also check "gifs" key (VHS compat)
+            gifs = video_node.get("gifs", [])
+            if gifs:
+                info = gifs[0]
+                return await self.client.download_file(
+                    filename=info["filename"],
+                    subfolder=info.get("subfolder", ""),
+                    file_type=info.get("type", "output"),
+                )
+
+        # Fallback: search all output nodes for video content
+        for node_id, node_output in outputs.items():
+            for key in ("videos", "gifs", "images"):
+                items = node_output.get(key, [])
+                if items:
+                    info = items[0]
+                    # For images key, only accept video-like formats
+                    if key == "images" and not any(
+                        info.get("filename", "").endswith(ext)
+                        for ext in (".webm", ".webp", ".gif", ".mp4")
+                    ):
+                        continue
+                    return await self.client.download_file(
+                        filename=info["filename"],
+                        subfolder=info.get("subfolder", ""),
+                        file_type=info.get("type", "output"),
+                    )
+
+        raise LTXVideoGenerationError(
+            f"Scene {scene_number}: No video output found in ComfyUI response. "
+            f"Output keys: {list(outputs.keys())}"
+        )
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    async def close(self) -> None:
+        """Close the ComfyUI client."""
+        await self.client.close()

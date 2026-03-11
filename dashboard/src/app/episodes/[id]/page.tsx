@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, Episode } from "@/lib/api";
+import { api, Episode, Scene } from "@/lib/api";
 import { formatDateTime, formatDuration, formatCurrency, cn } from "@/lib/utils";
 import { Header } from "@/components/layout/Header";
 import { Button, StatusBadge, GenerationProgress, LoadingPage, Card, CardContent } from "@/components/ui";
 import { SceneCard } from "@/components/episodes/SceneCard";
+import { SceneDetailModal } from "@/components/episodes/SceneDetailModal";
 
 export default function EpisodeDetailPage() {
   const params = useParams();
@@ -18,6 +19,7 @@ export default function EpisodeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
 
   const fetchEpisode = async () => {
     try {
@@ -204,6 +206,7 @@ export default function EpisodeDetailPage() {
                   key={scene.id}
                   scene={scene}
                   onRegenerate={(sceneId) => handleRetry([sceneId])}
+                  onView={(scene) => setSelectedScene(scene)}
                 />
               ))}
           </div>
@@ -213,6 +216,14 @@ export default function EpisodeDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Scene Detail Modal */}
+      {selectedScene && (
+        <SceneDetailModal
+          scene={selectedScene}
+          onClose={() => setSelectedScene(null)}
+        />
+      )}
     </div>
   );
 }

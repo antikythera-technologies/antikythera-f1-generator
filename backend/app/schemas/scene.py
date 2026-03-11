@@ -46,3 +46,26 @@ class SceneDetailResponse(SceneResponse):
     character_image_id: Optional[int]
     generation_started_at: Optional[datetime]
     generation_completed_at: Optional[datetime]
+
+    # Dual-frame prompts
+    start_frame_prompt: Optional[str] = None
+    end_frame_prompt: Optional[str] = None
+    start_frame_prompt_final: Optional[str] = None
+    end_frame_prompt_final: Optional[str] = None
+
+    # Dual-frame outputs
+    start_frame_path: Optional[str] = None
+    end_frame_path: Optional[str] = None
+
+    # Video generation
+    video_prompt: Optional[str] = None
+    video_generator: Optional[str] = None
+    camera_direction: Optional[str] = None
+
+
+class ScenePromptUpdate(BaseModel):
+    """Schema for updating scene prompts."""
+    start_frame_prompt: Optional[str] = None
+    end_frame_prompt: Optional[str] = None
+    camera_direction: Optional[str] = None
+    video_prompt: Optional[str] = None

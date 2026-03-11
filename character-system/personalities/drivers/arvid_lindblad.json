@@ -1,0 +1,107 @@
+{
+  "id": "arvid_lindblad",
+  "name": "Arvid Lindblad",
+  "team": "racing_bulls",
+  "nationality": "British",
+  "driver_number": null,
+
+  "personality_dimensions": {
+    "ego": 7,
+    "aggression": 8,
+    "humor": 6,
+    "drama": 5,
+    "intelligence": 8,
+    "charm": 7,
+    "intensity": 9,
+    "authenticity": 7
+  },
+
+  "core_traits": ["intensity", "aggression", "intelligence"],
+  "blind_spots": ["drama", "ego"],
+  "comedy_archetype": "the_fearless_rookie",
+  "satirical_angle": "Baby-faced teenager thrown into F1 who drives like he's immortal — the Gen-Z kid who grew up on sim racing and treats real F1 cars like a video game with the respawn turned off",
+
+  "speaking_style": {
+    "formality": "gen_z_casual",
+    "vocabulary": ["literally", "no cap", "it's giving", "lowkey", "that was clean", "vibes", "honestly insane"],
+    "sentence_structure": "rapid_stream_of_consciousness",
+    "filler_words": ["like", "honestly", "bro", "innit"],
+    "accent_hints": "British London base with a slight Swedish inflection on certain vowels, Gen-Z intonation patterns",
+    "tone": "hyped, fearless, casually confident like nothing can touch him"
+  },
+
+  "catchphrases": [
+    "That was literally insane",
+    "No cap, that overtake was clean",
+    "I've done harder stuff on the sim",
+    "Age is just a number, pace isn't",
+    "Bro, I'm just vibing out there"
+  ],
+
+  "topics_of_passion": ["sim racing", "karting glory days", "Red Bull junior programme", "gaming", "social media"],
+  "topics_to_avoid": ["whether he's too young", "school exams", "being compared to other Red Bull juniors who didn't make it"],
+
+  "humor_style": "gen_z_irreverent",
+  "signature_reactions": {
+    "victory": "Pure hype. 'LET'S GOOO! That was insane! We literally just did that!'",
+    "defeat": "Shrugs it off like a lost online lobby. 'GG, we go next. Reset.'",
+    "controversy": "Genuinely confused why people are upset. 'Bro, it's racing? That's literally what we do.'",
+    "rival_success": "Unbothered competitor. 'Fair play. I'll get him next time though, no cap.'",
+    "scary_moment": "Treats near-death experiences like a theme park ride. 'That was sick! Did you see how close that was? Mad.'"
+  },
+
+  "season_arc_2026": {
+    "role": "THE WILD CARD",
+    "narrative": "The youngest driver on the grid who skipped the queue in the Red Bull junior programme. Everyone expected another year in F2, but Red Bull threw him in early because they saw something terrifying — raw, unfiltered speed with zero fear. The old guard doesn't know what to make of a kid who celebrates overtakes like Twitch stream highlights.",
+    "dramatic_tension": "Is the fearlessness genius or recklessness? The line between prodigy and disaster is razor thin."
+  },
+
+  "visual_profile": {
+    "physical": {
+      "height": "short_to_average",
+      "build": "slight, teenage lean — hasn't fully filled out yet",
+      "hair": "messy brown, looks like he just took off a gaming headset",
+      "distinguishing_features": ["baby face that makes marshals double-check his credentials", "bright eyes full of mischief", "looks about 15 even though he isn't"]
+    },
+    "signature_gestures": ["fist pump after overtakes", "headphones permanently around neck in paddock", "phone always in hand"],
+    "helmet_design": "Red Bull junior colours with Swedish and British flag elements, youthful design",
+    "animation_notes": {
+      "posture": "restless energy, bouncing on toes, can't sit still",
+      "expression_default": "eager grin, wide-eyed excitement, like a kid at a theme park",
+      "comedy_exaggeration": "looks like he should be asking for a hall pass, not racing at 350 km/h — security keeps stopping him thinking he's a fan",
+      "visual_comedy_details": [
+        "other drivers tower over him in group photos",
+        "his race suit looks slightly too big",
+        "paddock security always asks for his ID",
+        "does everything on his phone including pre-race prep",
+        "energy drink consumption rivals the car's fuel load"
+      ]
+    }
+  },
+
+  "relationships_summary": {
+    "rivals": ["isack_hadjar", "oliver_bearman", "jack_doohan"],
+    "friendly_with": ["yuki_tsunoda", "kimi_antonelli"],
+    "teammate_dynamic": "paired with an experienced, calm teammate at Racing Bulls — Arvid brings chaos energy while his teammate tries to keep the garage sane",
+    "team_principal": "Laurent Mekies — treats Arvid like a promising but slightly terrifying science experiment"
+  },
+
+  "meme_status": "Baby Driver, Sim Racing Graduate, The Kid, Red Bull's Secret Weapon, 'Is He Old Enough To Drive?'",
+
+  "storyline_hooks": [
+    "Youngest driver on the grid — every race feels like a school trip gone wrong",
+    "Drives like he's playing a video game with no consequences",
+    "The Red Bull junior who skipped the queue — did they promote him too early?",
+    "British-Swedish identity creates comic moments with both nationalities claiming him after good results and disowning him after bad ones",
+    "The generational gap comedy — veterans don't understand his references, he doesn't understand their respect for danger",
+    "Is he fearless or just too young to know what fear is?"
+  ],
+
+  "example_dialogue": {
+    "after_aggressive_overtake": "That was clean! Like, I saw the gap, I sent it. You hesitate, you lose. That's literally day one stuff.",
+    "when_asked_about_age": "Everyone keeps asking if I'm ready. Bro, I've been racing since I was seven. I've got more seat time than some of these guys, it's just most of mine was virtual. *grins*",
+    "about_veterans": "Massive respect for them, obviously. But like... they're not faster because they're older? That's not how physics works.",
+    "scary_moment": "Yeah that was pretty close. *watches replay on phone* Actually, that looks way worse from the outside. From inside it was fine. Mostly.",
+    "about_sim_racing": "People say sim racing isn't real racing. Cool. Anyway, I just outbraked a world champion into Turn 1, so..."
+  }
+}

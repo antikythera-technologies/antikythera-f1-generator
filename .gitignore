@@ -148,14 +148,36 @@ Thumbs.db
 *.mp4
 *.mp3
 *.wav
+*.webm
 /tmp/
 /temp/
 credentials/
 *.credentials.json
 youtube_client_secret.json
 
+# Generated test output (images, videos)
+test-output/episode-*/
+test-output/archive/
+
+# Large binary assets (stored in MinIO, not git)
+generated-characters/*.png
+face-references/
+models/lora/*.safetensors
+
+# LoRA training artifacts
+*.safetensors
+!models/lora/antkf1style_v1_config.json
+
 # Docker
 docker-compose.override.yml
 
 # Alembic
 alembic.ini.local
+
+# Local tool configs
+.axon/
+.mcp.json
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+*.tsbuildinfo

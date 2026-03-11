@@ -23,8 +23,9 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
     <Card
       hover
       glow={isActive ? "cyan" : isFailed ? "red" : null}
+      onClick={() => onView?.(scene)}
       className={cn(
-        "relative overflow-hidden",
+        "group relative overflow-hidden",
         isActive && "ring-1 ring-neon-cyan/50"
       )}
     >
@@ -59,18 +60,15 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
           </div>
         )}
 
-        {/* Play button for completed scenes */}
+        {/* Play icon overlay for completed scenes */}
         {isComplete && scene.video_clip_path && (
-          <button
-            onClick={() => onView?.(scene)}
-            className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors hover:bg-black/50 group"
-          >
+          <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30 pointer-events-none">
             <div className="rounded-full bg-white/20 p-3 opacity-0 transition-opacity group-hover:opacity-100">
               <svg className="h-8 w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
-          </button>
+          </div>
         )}
       </div>
 
@@ -116,6 +114,7 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
             className="w-full"
             onClick={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               onRegenerate(scene.id);
             }}
           >

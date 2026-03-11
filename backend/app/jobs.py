@@ -98,13 +98,43 @@ def _run_pipeline(episode_id: int) -> str:
     Synchronous wrapper executed by the RQ worker.
 
     Bridges into the async VideoPipeline via ``asyncio.run()``.
-    Returns the YouTube URL on success, or re-raises on failure.
+    Creates a fresh DB engine to avoid issues with forked asyncpg
+    connections from the parent process.
     """
     import asyncio
+    import sys
 
-    from app.pipeline.video_pipeline import VideoPipeline
+    # Ensure child process logs go to stdout (captured by docker)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
 
     logger.info(f"RQ worker starting pipeline for episode {episode_id}")
+
+    # Replace the module-level engine with a fresh one.
+    # The forked child inherits stale asyncpg connections that deadlock
+    # when disposed. Creating a fresh engine is safer.
+    import app.database as db_module
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.config import settings
+
+    db_module.engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+    )
+    db_module.async_session_maker = async_sessionmaker(
+        db_module.engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    from app.pipeline.video_pipeline import VideoPipeline
 
     pipeline = VideoPipeline(episode_id)
     result = asyncio.run(pipeline.run())

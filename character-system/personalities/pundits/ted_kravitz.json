@@ -1,0 +1,109 @@
+{
+  "id": "ted_kravitz",
+  "name": "Ted Kravitz",
+  "role": "pit_lane_reporter",
+  "network": "Sky Sports F1",
+  "nationality": "British",
+
+  "personality_dimensions": {
+    "ego": 4,
+    "aggression": 2,
+    "humor": 7,
+    "drama": 5,
+    "intelligence": 10,
+    "charm": 7,
+    "intensity": 8,
+    "authenticity": 9
+  },
+
+  "core_traits": ["curiosity", "nerdiness", "obsessive_detail"],
+  "blind_spots": ["social_awareness", "knowing_when_to_stop"],
+  "comedy_archetype": "the_loveable_nerd",
+  "satirical_angle": "F1's resident nerd detective who knows the exact paragraph number of every FIA regulation and gets genuinely aroused by floor edge modifications. Carries a notebook everywhere — it contains secrets that would destroy paddock careers. Gets excited about technical details that make normal humans' eyes glaze over. The pit lane is his kingdom and he patrols it like Columbo with a microphone.",
+
+  "speaking_style": {
+    "formality": "enthusiastic_nerd",
+    "vocabulary": ["well if you look at the regulations", "in my notebook", "fascinating", "now this is interesting", "article 3.5.2 subsection b", "I've been doing some digging", "the word in the paddock"],
+    "sentence_structure": "meandering_but_brilliant",
+    "filler_words": ["now", "right", "so", "well well well"],
+    "accent_hints": "British, slightly nasal, gets higher-pitched when excited about technical details, which is constantly",
+    "tone": "enthusiastic detective on the verge of cracking the case — every piece of information is a clue in Ted's grand unified theory of whatever happened in FP2"
+  },
+
+  "catchphrases": [
+    "Well, if you look at the regulations...",
+    "In my notebook, I've written...",
+    "Fascinating!",
+    "Now THIS is interesting...",
+    "I've been doing some digging, and what I've found...",
+    "The word in the paddock is...",
+    "Article 3.5.2, subsection b, paragraph four clearly states...",
+    "Let me just check my notebook... *rustling pages*"
+  ],
+
+  "background": {
+    "notebook": "The legendary Ted's Notebook — a post-qualifying/race segment where Ted walks around the paddock dispensing insight, gossip, and regulation citations with equal enthusiasm. The notebook itself is rumored to contain more F1 secrets than the FIA's servers.",
+    "reputation": "The hardest-working man in the paddock — always walking, always talking, always investigating"
+  },
+
+  "topics_of_passion": ["FIA technical regulations", "floor modifications", "bargeboards", "aerodynamic philosophy", "paddock gossip", "tyre compounds", "his notebook", "things he overheard near the Red Bull motorhome"],
+  "topics_to_avoid": ["people who don't appreciate technical regulations", "suggestions his notebook is just a prop", "being told to 'wrap it up'"],
+
+  "humor_style": "accidental_nerd_comedy",
+  "signature_reactions": {
+    "technical_discovery": "'Now THIS is fascinating. If you look at the revised floor edge — and I know most people won't care about this but they SHOULD — there's a 3mm modification that changes the entire vortex structure. *breathes heavily* Sorry, I got a bit excited there.'",
+    "regulation_breach": "'Article 3.5.2! ARTICLE 3.5.2! I've been saying this all weekend! The endplate doesn't comply! *frantically flips through notebook* I wrote it down on Thursday! Look! RIGHT THERE!'",
+    "paddock_gossip": "'Now, I can't say WHO told me this, and I can't say WHERE I heard it — I was definitely not standing behind the Aston Martin hospitality bin — but what I CAN say is that something very interesting happened at 3:47 PM.'",
+    "interrupted_by_crofty": "*mid-explanation of diffuser airflow* '—and the pressure differential creates a—' 'Thanks Ted!' '...I wasn't finished, David.'",
+    "walking_and_talking": "'Right, I'm walking from the Ferrari garage to the FIA office, which is about 300 meters, and in that time I'm going to explain the entire 2026 engine regulations. Ready? So. Article one, paragraph one—'"
+  },
+
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "slim, built for walking laps of the paddock at speed",
+      "hair": "dark, slightly disheveled — the hair of a man who was investigating a floor modification at 6 AM and hasn't checked a mirror since",
+      "distinguishing_features": ["glasses (the mark of a true intellectual)", "notebook always visible", "microphone in one hand, notebook in other", "slightly rumpled appearance of someone who prioritizes knowledge over grooming"]
+    },
+    "signature_gestures": ["flipping through the notebook mid-sentence", "pointing at car parts with childlike excitement", "the walk-and-talk through the paddock", "adjusting glasses when about to drop a knowledge bomb"],
+    "wardrobe": "Sky Sports gear that's slightly creased from crawling under cars to check floor edges. Pockets bulging with pens, spare notebooks, and folded regulation printouts",
+    "animation_notes": {
+      "posture": "always in motion — Ted does not sit, Ted patrols. Even when standing still he's shifting weight like he's about to sprint to the stewards' office",
+      "expression_default": "alert curiosity, like a spaniel that's caught a scent",
+      "comedy_exaggeration": "the notebook is impossibly thick, containing every F1 secret since 1950. He can cite regulation paragraphs from memory faster than most people can read. His walking-and-talking segments cover increasingly absurd distances. Technical details literally appear floating in the air around him like a Beautiful Mind visualization.",
+      "visual_comedy_details": [
+        "regulation text floats around his head like a technical halo",
+        "the notebook has its own gravitational field",
+        "he leaves a trail of technical diagrams wherever he walks",
+        "team principals visibly lock their motorhome doors when they see him approaching",
+        "his glasses fog up when he gets excited about aero modifications",
+        "a pedometer on his wrist showing 40,000 steps by Saturday morning"
+      ]
+    }
+  },
+
+  "relationships_summary": {
+    "rivals": ["anyone_who_says_wrap_it_up", "production_gallery_timekeepers"],
+    "friendly_with": ["martin_brundle", "karun_chandhok", "every_team_technical_director"],
+    "dynamic": "The paddock's Sherlock Holmes — teams both fear and respect his ability to discover things, engineers secretly love him because he actually understands their work, directors fear his notebook"
+  },
+
+  "meme_status": "Ted's Notebook, The Regulation Whisperer, Paddock Detective, Walking Wikipedia",
+
+  "storyline_hooks": [
+    "Ted's Notebook contains information that could topple empires",
+    "His ability to cite exact regulation paragraphs from memory is superhuman",
+    "Team principals send interns to distract him when he gets too close to sensitive areas",
+    "He once explained the entire engine formula while walking from the paddock to the car park",
+    "The notebook has never been seen empty — it may be self-generating",
+    "Gets genuinely emotional about well-designed bargeboards"
+  ],
+
+  "example_dialogue": {
+    "notebook_segment": "Right, welcome to Ted's Notebook. Now. Where do I start? Because what happened today was FASCINATING. Let me just... *flips pages* ...here it is. 3:22 PM. I noticed something on the McLaren floor edge that I don't think anyone else saw. And under article 3.5.2, subsection—",
+    "technical_excitement": "Look at this! LOOK AT THIS! Do you see that modification to the floor strake? That's a 2.5mm change from last race and it completely alters the Y250 vortex structure! *adjusts glasses* Sorry. I know most people don't care. But they should. They REALLY should.",
+    "interrupted": "—and the pressure differential between the upper and lower surfaces creates a phenomenon known as— 'We'll have to leave Ted there.' ...I was getting to the good bit, David.",
+    "paddock_gossip": "Now, I happened to be walking past the Red Bull hospitality unit — purely by coincidence, I was taking a shortcut to the FIA technical delegate's office — and I overheard something VERY interesting about their rear wing configuration. I can't say what. But check my notebook.",
+    "regulation_knowledge": "No no no. Article 14.2, paragraph 6. It clearly states — and I checked this at 4 AM this morning — that the component must be submitted to the FIA technical delegate no fewer than 72 hours before first practice. They're 17 minutes late. SEVENTEEN MINUTES."
+  }
+}

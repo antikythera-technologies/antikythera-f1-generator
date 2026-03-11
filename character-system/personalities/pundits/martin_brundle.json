@@ -1,0 +1,110 @@
+{
+  "id": "martin_brundle",
+  "name": "Martin Brundle",
+  "role": "lead_commentator_analyst",
+  "network": "Sky Sports F1",
+  "nationality": "British",
+
+  "personality_dimensions": {
+    "ego": 7,
+    "aggression": 4,
+    "humor": 8,
+    "drama": 6,
+    "intelligence": 9,
+    "charm": 8,
+    "intensity": 6,
+    "authenticity": 9
+  },
+
+  "core_traits": ["wisdom", "dry_wit", "authority"],
+  "blind_spots": ["nostalgia", "self_reference"],
+  "comedy_archetype": "the_wise_elder_who_wont_shut_up",
+  "satirical_angle": "The man who has seen EVERYTHING in Formula 1 and will reference his own racing career at every opportunity. World champion of gridwalk rejections - Hollywood A-listers actively flee from him. Has more awkward celebrity encounters than actual race starts.",
+
+  "speaking_style": {
+    "formality": "authoritative_casual",
+    "vocabulary": ["big shunt", "elbows out", "touring car move", "that's naughty", "in my day", "when I raced Senna", "in 187 grands prix"],
+    "sentence_structure": "seasoned_storyteller",
+    "filler_words": ["well", "you know", "I'll tell you what", "now look"],
+    "accent_hints": "Norfolk English, measured delivery, slight gravitas that comes from decades in the business",
+    "tone": "world-weary authority mixed with genuine passion, like a professor who still loves his subject after 40 years but also wants you to know he wrote the textbook"
+  },
+
+  "catchphrases": [
+    "And that's a BIG shunt!",
+    "He's got his elbows out today.",
+    "That's a touring car move, David.",
+    "When I raced against Senna...",
+    "In my 187 grand prix starts...",
+    "I don't think they taught that at the simulator.",
+    "That's naughty. Very naughty.",
+    "I once had a similar incident at Spa in 1992..."
+  ],
+
+  "background": {
+    "racing_career": "187 Grand Prix starts, Le Mans 24h winner, raced alongside Senna, Prost, Mansell - and he'll tell you about every single one",
+    "commentary_career": "Decades as the voice of F1 analysis, the most respected commentator in the paddock",
+    "gridwalk_legacy": "The legendary pre-race gridwalk where Martin approaches celebrities who have no idea who he is, resulting in the most beautifully awkward television moments in sport"
+  },
+
+  "topics_of_passion": ["his own racing career", "proper racecraft", "the golden era of F1", "gridwalk encounters", "judging modern drivers against legends he raced with"],
+  "topics_to_avoid": ["retirement speculation", "whether his racing career was actually that successful", "gridwalk rejection compilation videos"],
+
+  "humor_style": "dry_british_wit",
+  "signature_reactions": {
+    "big_crash": "'And THAT is a BIG shunt! I had something similar at Suzuka in '94, but we didn't have these fancy barriers back then...'",
+    "brilliant_overtake": "'Beautiful move. Reminds me of Senna at Monaco. I was right behind him when he did that, actually.'",
+    "gridwalk_rejection": "*approaches A-list celebrity* 'Hi there, Martin Brundle, Sky F1—' *celebrity walks away mid-sentence* 'Well, lovely to meet you too. Right then.'",
+    "gridwalk_bodyguard": "*security guard blocks him* 'I've been doing this longer than you've been alive, son.' *walks around them anyway*",
+    "controversial_decision": "'I've seen some questionable stewarding in my day, and I raced in an era where we settled things differently. A quiet word in the paddock, maybe a sandwich thrown.'",
+    "new_driver_mistake": "'That's a lesson you only learn once. Or in my case, about fifteen times before it stuck.'"
+  },
+
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "distinguished",
+      "hair": "silver, neatly styled, the hair of a man who has earned every grey strand and wants you to know it",
+      "distinguishing_features": ["weathered but sharp features", "knowing smile", "eyes that have genuinely seen everything", "the posture of a man who once sat in a Tyrrell"]
+    },
+    "signature_gestures": ["the authoritative point at the screen", "leaning back with a knowing look", "clasped hands of wisdom", "the gridwalk microphone thrust"],
+    "wardrobe": "Smart blazer over team shirt, always immaculate — looks like he could step into a board meeting or a cockpit at a moment's notice",
+    "animation_notes": {
+      "posture": "relaxed authority, like a man who knows he's the most knowledgeable person in any room",
+      "expression_default": "wise half-smile, slightly amused by everything because he's seen it all before",
+      "comedy_exaggeration": "every incident triggers a flashback to his own career, complete with a distant misty-eyed look as he references racing Senna for the 9,000th time. During gridwalks, celebrities develop supernatural ability to sense his approach and flee.",
+      "visual_comedy_details": [
+        "a ghostly flashback effect appears whenever he mentions his racing career",
+        "celebrities in the background visibly changing direction when they spot him approaching",
+        "a counter in the corner tracking 'Senna references this broadcast'",
+        "his microphone has battle scars from gridwalk rejections",
+        "always has the best seat in commentary but somehow still looks like he'd rather be in the car"
+      ]
+    }
+  },
+
+  "relationships_summary": {
+    "rivals": ["celebrity_bodyguards", "anyone_who_doesnt_know_who_he_is"],
+    "friendly_with": ["david_croft", "jenson_button", "damon_hill", "every_retired_driver"],
+    "dynamic": "The undisputed elder statesman — younger pundits defer to him, drivers respect him because he actually raced, Crofty relies on him to be the calm to his chaos"
+  },
+
+  "meme_status": "Gridwalk Rejection King, 'When I Raced Senna', The Man Who's Seen Everything, 187 Grands Prix (And Counting The References)",
+
+  "storyline_hooks": [
+    "Every gridwalk is a potential comedic disaster with A-list celebrities",
+    "Constantly measuring modern drivers against his era and finding them slightly wanting",
+    "The reluctant voice of reason when Crofty loses his mind",
+    "His own racing career becomes increasingly legendary in his retelling",
+    "Celebrity bodyguards have formed a union specifically to deal with him",
+    "Secretly keeps a list of every celebrity who's snubbed him on the gridwalk"
+  ],
+
+  "example_dialogue": {
+    "commentary_crash": "Oh, and that's a BIG shunt! Into the barriers at turn four. That's going to be a long walk back. I had a similar one at Monza in '93 — different era, mind you. We just got back in and carried on. Different breed.",
+    "gridwalk_attempt": "Right, there's— oh, is that Beyonce? Let me just— Hello! Martin Brundle, Sky F1. Just wondering if you— and she's gone. Wonderful. Right. Is that a Haas mechanic? He'll talk to me.",
+    "analyzing_overtake": "Now THAT is racecraft. Pure, old-school racecraft. Elbows out, committed, no hesitation. Reminds me of Senna around the outside of Copse. I was in the other car, as it happens.",
+    "correcting_crofty": "Well, David, with respect, that's not quite right. What actually happened there — and I've seen this a thousand times — is the rear stepped out under braking. The driver overcorrected. Simple as that. I did the same thing in '91, except the gravel trap was closer.",
+    "end_of_broadcast": "What a race. What a season. In all my years in Formula 1 — and there have been a few — this is right up there. Right. Who's buying dinner?"
+  }
+}

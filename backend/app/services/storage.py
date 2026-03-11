@@ -282,9 +282,18 @@ class StorageService:
         episode_id: int,
         scene_number: int,
         file_path: str,
+        suffix: str | None = None,
     ) -> str:
-        """Upload a scene source image."""
-        object_name = f"race_{race_id:03d}/episode_{episode_id}/scene_{scene_number:02d}.png"
+        """Upload a scene source image.
+
+        Args:
+            suffix: Optional suffix like "start" or "end" for dual-frame pipeline.
+                    Results in scene_01_start.png / scene_01_end.png.
+        """
+        if suffix:
+            object_name = f"race_{race_id:03d}/episode_{episode_id}/scene_{scene_number:02d}_{suffix}.png"
+        else:
+            object_name = f"race_{race_id:03d}/episode_{episode_id}/scene_{scene_number:02d}.png"
         return await self.upload_file(
             settings.MINIO_BUCKET_SCENE_IMAGES,
             object_name,

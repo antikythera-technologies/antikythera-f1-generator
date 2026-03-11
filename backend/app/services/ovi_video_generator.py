@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class VideoClip:
+class OviVideoClip:
     """Generated video clip."""
     scene_number: int
     video_path: str
@@ -34,7 +34,7 @@ class VideoClip:
 
 
 @dataclass
-class VideoPreset:
+class OviVideoPreset:
     """Preset configuration for video generation quality and style preservation."""
     sample_steps: int
     image_conditioning_strength: float
@@ -42,7 +42,7 @@ class VideoPreset:
     guidance_scale: float
 
 
-class VideoGenerator:
+class OviVideoGenerator:
     """Service for generating video clips using Ovi with style preservation.
 
     The caricature preset is specifically tuned to preserve the art style
@@ -52,33 +52,33 @@ class VideoGenerator:
     # Quality presets: balance between quality and style preservation
     # Lower steps + higher conditioning = better style preservation
     QUALITY_PRESETS = {
-        "draft": VideoPreset(
-            sample_steps=10,
+        "draft": OviVideoPreset(
+            sample_steps=20,
             image_conditioning_strength=0.90,
             denoise_strength=0.40,
             guidance_scale=1.5,
         ),
-        "standard": VideoPreset(
+        "standard": OviVideoPreset(
             sample_steps=20,
             image_conditioning_strength=0.85,
             denoise_strength=0.55,
             guidance_scale=2.0,
         ),
-        "high": VideoPreset(
+        "high": OviVideoPreset(
             sample_steps=30,
             image_conditioning_strength=0.80,
             denoise_strength=0.60,
             guidance_scale=2.5,
         ),
-        "ultra": VideoPreset(
+        "ultra": OviVideoPreset(
             sample_steps=40,
             image_conditioning_strength=0.75,
             denoise_strength=0.65,
             guidance_scale=3.0,
         ),
         # Optimized for our caricature art style — minimal re-interpretation
-        "caricature": VideoPreset(
-            sample_steps=15,
+        "caricature": OviVideoPreset(
+            sample_steps=20,
             image_conditioning_strength=0.92,
             denoise_strength=0.35,
             guidance_scale=1.5,
@@ -133,9 +133,9 @@ class VideoGenerator:
         self._client: Optional[Client] = None
 
         # Video generation defaults (configurable via settings)
-        self.frame_height: float = getattr(settings, "OVI_FRAME_HEIGHT", 512)
-        self.frame_width: float = getattr(settings, "OVI_FRAME_WIDTH", 992)
-        self.video_seed: float = getattr(settings, "OVI_VIDEO_SEED", 100)
+        self.frame_height: int = getattr(settings, "OVI_FRAME_HEIGHT", 512)
+        self.frame_width: int = getattr(settings, "OVI_FRAME_WIDTH", 992)
+        self.video_seed: int = getattr(settings, "OVI_VIDEO_SEED", 100)
         self.solver_name: Literal["unipc", "euler", "dpm++"] = getattr(
             settings, "OVI_SOLVER_NAME", "unipc"
         )
@@ -213,7 +213,7 @@ class VideoGenerator:
         action: str,
         dialogue: Optional[str] = None,
         audio_description: Optional[str] = None,
-    ) -> VideoClip:
+    ) -> OviVideoClip:
         """
         Generate a 5-second video clip from an image.
 
@@ -251,7 +251,7 @@ class VideoGenerator:
             logger.info(f"Scene {scene_number}: Generated in {elapsed_ms}ms")
             logger.debug(f"Scene {scene_number}: Output: {video_path}")
 
-            return VideoClip(
+            return OviVideoClip(
                 scene_number=scene_number,
                 video_path=video_path,
                 generation_time_ms=elapsed_ms,

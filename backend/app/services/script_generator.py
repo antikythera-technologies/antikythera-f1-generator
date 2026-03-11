@@ -16,12 +16,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SceneScript:
-    """Generated script for a single scene."""
+    """Generated script for a single scene with full cinematographic direction."""
     scene_number: int
     character: str
-    action: str
     dialogue: Optional[str]
     audio_description: Optional[str]
+    start_frame_prompt: str
+    end_frame_prompt: str
+    camera_direction: str
+    video_prompt: str
+    # Keep action for backward compatibility (derived from camera_direction)
+    action: Optional[str] = None
 
 
 @dataclass
@@ -35,17 +40,46 @@ class EpisodeScript:
     gags_referenced: List[str] = field(default_factory=list)
 
 
-SCRIPT_SYSTEM_PROMPT = """You are a satirical F1 commentator creating scripts for animated videos.
+SCRIPT_SYSTEM_PROMPT = """You are a professional TV director and satirical comedy writer creating an animated F1 show.
 
 Your style:
-- Witty, sarcastic humor
-- Deep F1 knowledge
-- Character-driven comedy
-- Pop culture references when appropriate
-- Real F1 events and drama become the fuel for satirical comedy
+- Witty, sarcastic humor with deep F1 knowledge
+- Character-driven comedy with pop culture references
+- Real F1 events and drama become fuel for satirical comedy
+
+For each scene you must provide FULL cinematographic direction as if briefing a director of photography. Every visual detail matters — shot type, camera angle, character position in frame, expression, clothing, setting, lighting, depth of field, background elements, props, and mood.
+
+You are generating TWO key frames per scene (start and end) and the camera/motion direction for the 5-second animation between them. Think of it like creating storyboard panels with detailed director's notes.
+
+CRITICAL RULES:
+- Start and end frames for the same scene must be SIMILAR ENOUGH for smooth animation (same setting, same character, shifted pose/framing). The video generator will interpolate between them.
+- Each scene MUST be completable in 5 seconds
+- Dialogue must be SHORT and punchy (max 15 words)
+- Use no more than 3-4 unique characters per episode, each appearing in 4-8 scenes
+- The 24 scenes tell a complete story arc: intro (1-3), first act (4-8), deep dive (9-14), comedy peak (15-19), resolution (20-23), sign-off (24)
+
+Shot type vocabulary: WIDE, MEDIUM WIDE, MEDIUM, MEDIUM CLOSE-UP, CLOSE-UP, EXTREME CLOSE-UP, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING SHOT, INSERT SHOT
+
+Camera movement vocabulary: STATIC, DOLLY PUSH-IN, DOLLY PULL-OUT, PAN LEFT/RIGHT, TILT UP/DOWN, CRANE UP/DOWN, TRACKING SHOT, STEADICAM, HANDHELD (subtle), WHIP PAN, SLOW ZOOM
+
+For start_frame_prompt and end_frame_prompt, include:
+- Shot type and camera position
+- Character position in frame (rule of thirds), body orientation, pose, hand placement
+- Exact facial expression, eye direction
+- Clothing specific to the scene
+- Setting/location (broadcast studio, pit wall, paddock, press conference, podium, garage, grid)
+- Background details (screens, people, equipment, signage, weather)
+- Lighting direction, color temperature, mood
+- Depth of field (what's sharp, what's soft)
+- Props (microphones, headsets, data screens, trophies)
+
+For video_prompt, include:
+- Camera movement matching camera_direction
+- Character motion (gestures, head turns, expressions changing)
+- Background motion (screen changes, people moving)
+- Style note: "Maintain caricature art style throughout"
 
 You will create scripts with exactly 24 scenes, each 5 seconds long.
-Each scene features one character speaking or reacting.
 
 Output format (JSON):
 ```json
@@ -55,24 +89,22 @@ Output format (JSON):
     {
       "scene_number": 1,
       "character": "character_name",
-      "action": "What the character is physically doing",
-      "dialogue": "What they say (keep under 15 words)",
-      "audio_description": "Background sounds, voice tone"
+      "dialogue": "What they say (max 15 words)",
+      "audio_description": "Voice tone, background sounds, music, effects",
+      "start_frame_prompt": "Full cinematographic description of opening frame",
+      "end_frame_prompt": "Full cinematographic description of closing frame",
+      "camera_direction": "Professional camera movement instructions",
+      "video_prompt": "Motion and animation instructions for the 5-second clip"
     }
   ],
-  "gags_used": ["gag_title_1", "gag_title_2"]
+  "gags_used": ["gag_title_1"]
 }
 ```
 
 Rules:
-- Each scene MUST be completable in 5 seconds
-- Dialogue must be SHORT and punchy
-- Actions must be simple and animatable
-- Audio descriptions help set the mood
-- Create a coherent narrative across all 24 scenes
-- If recent news is provided, use it as comedy material — exaggerate, satirize, and lampoon real events
-- If running gags are provided, weave them in naturally where they fit (don't force every gag)
-- List all running gag titles you referenced in the "gags_used" array
+- If recent news is provided, use it as comedy material
+- If running gags are provided, weave them in naturally
+- List all running gag titles you referenced in "gags_used"
 """
 
 
@@ -153,9 +185,13 @@ class ScriptGenerator:
                 SceneScript(
                     scene_number=s["scene_number"],
                     character=s["character"],
-                    action=s["action"],
                     dialogue=s.get("dialogue"),
                     audio_description=s.get("audio_description"),
+                    start_frame_prompt=s.get("start_frame_prompt", ""),
+                    end_frame_prompt=s.get("end_frame_prompt", ""),
+                    camera_direction=s.get("camera_direction", ""),
+                    video_prompt=s.get("video_prompt", ""),
+                    action=s.get("action"),  # backward compat
                 )
                 for s in script_data["scenes"]
             ]
@@ -223,7 +259,8 @@ class ScriptGenerator:
             prompt_parts.append(f"\n{gags_section}")
 
         prompt_parts.append(
-            "\nGenerate a 24-scene satirical commentary script. "
+            "\nGenerate a 24-scene satirical commentary script with full cinematographic direction. "
+            "Each scene needs start_frame_prompt, end_frame_prompt, camera_direction, and video_prompt. "
             "Use the real news as comedy fuel — exaggerate and satirize real events. "
             "Weave in any running gags that fit naturally. "
             "Output valid JSON only."

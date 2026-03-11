@@ -389,6 +389,43 @@ class ImageGenerator:
 
         return " ".join(parts)
 
+    def build_scene_frame_prompt(
+        self,
+        frame_prompt: str,
+        character_name: str,
+        display_name: str,
+        role: str | None = None,
+        team: str | None = None,
+        nationality: str | None = None,
+        physical_features: str | None = None,
+        comedy_angle: str | None = None,
+    ) -> str:
+        """Combine LLM scene description with character visual traits for consistency.
+
+        Unlike build_character_prompt() which builds the entire prompt from traits,
+        this method uses the LLM's frame prompt as the PRIMARY description (setting,
+        camera, composition) and INJECTS character traits for visual consistency.
+        No more forced portrait framing — the scene dictates the shot.
+        """
+        team_slug = (team or "").lower().replace(" ", "_")
+
+        parts = [
+            "ANTKF1STYLE",
+            frame_prompt,  # Full cinematic description from Haiku
+        ]
+
+        # Inject character physical consistency
+        if physical_features:
+            parts.append(f"Character physical traits: {physical_features}")
+
+        # Core caricature style (appended, not overriding scene description)
+        parts.append(
+            "Satirical caricature style with oversized head, exaggerated facial features, "
+            "photorealistic skin with visible pores. Dramatic lighting with deep shadows."
+        )
+
+        return " ".join(parts)
+
     # ------------------------------------------------------------------
     # ComfyUI API interaction
     # ------------------------------------------------------------------
@@ -692,7 +729,9 @@ class ImageGenerator:
         scene_number: int,
         episode_id: int,
         character_name: str,
-        action_description: str,
+        action_description: str = "",
+        frame_prompt: str | None = None,
+        frame_type: str = "start",
         reference_image_path: Optional[str] = None,
         style_reference_paths: list[str] | None = None,
         character_traits: dict | None = None,
@@ -701,14 +740,19 @@ class ImageGenerator:
     ) -> GeneratedImage:
         """Generate a scene image with character consistency.
 
-        This is the scene-level generation used during the episode pipeline.
-        It combines character traits from DB with the action description.
+        Supports both legacy (action_description) and new (frame_prompt) modes:
+        - If frame_prompt is provided, uses build_scene_frame_prompt() for
+          cinematic scene-aware generation (new dual-frame pipeline).
+        - If frame_prompt is None, falls back to build_character_prompt()
+          for backward compatibility.
 
         Args:
             scene_number: Scene number (1-24).
             episode_id: Episode ID for file naming.
             character_name: Character key.
-            action_description: What the character is doing in this scene.
+            action_description: Legacy: what the character is doing.
+            frame_prompt: New: full cinematographic frame description from LLM.
+            frame_type: "start" or "end" (for filename and logging).
             reference_image_path: Accepted for API compatibility (not used).
             style_reference_paths: Accepted for API compatibility (not used).
             character_traits: Dict of character trait fields from DB.
@@ -718,32 +762,46 @@ class ImageGenerator:
         Returns:
             GeneratedImage with path and metadata.
         """
-        logger.info(f"Scene {scene_number}: Generating image for {character_name}")
+        logger.info(f"Scene {scene_number}: Generating {frame_type} frame for {character_name}")
 
-        # Build prompt from character traits if available
         traits = character_traits or {}
-        prompt = self.build_character_prompt(
-            character_name=character_name,
-            display_name=traits.get("display_name", character_name),
-            role=traits.get("role"),
-            team=traits.get("team"),
-            nationality=traits.get("nationality"),
-            physical_features=traits.get("physical_features"),
-            comedy_angle=traits.get("comedy_angle"),
-            signature_expression=traits.get("signature_expression"),
-            signature_pose=None,  # Scene has its own action
-            props=traits.get("props"),
-            background_type=traits.get("background_type"),
-            background_detail=traits.get("background_detail"),
-            clothing_description=traits.get("clothing_description"),
-            action_description=action_description,
-        )
 
-        logger.debug(f"Scene {scene_number}: Prompt: {prompt[:200]}...")
+        if frame_prompt:
+            # New dual-frame pipeline: LLM prompt is primary
+            prompt = self.build_scene_frame_prompt(
+                frame_prompt=frame_prompt,
+                character_name=character_name,
+                display_name=traits.get("display_name", character_name),
+                role=traits.get("role"),
+                team=traits.get("team"),
+                nationality=traits.get("nationality"),
+                physical_features=traits.get("physical_features"),
+                comedy_angle=traits.get("comedy_angle"),
+            )
+        else:
+            # Legacy fallback: build prompt from character traits
+            prompt = self.build_character_prompt(
+                character_name=character_name,
+                display_name=traits.get("display_name", character_name),
+                role=traits.get("role"),
+                team=traits.get("team"),
+                nationality=traits.get("nationality"),
+                physical_features=traits.get("physical_features"),
+                comedy_angle=traits.get("comedy_angle"),
+                signature_expression=traits.get("signature_expression"),
+                signature_pose=None,
+                props=traits.get("props"),
+                background_type=traits.get("background_type"),
+                background_detail=traits.get("background_detail"),
+                clothing_description=traits.get("clothing_description"),
+                action_description=action_description,
+            )
 
-        # Output filename
+        logger.debug(f"Scene {scene_number} {frame_type}: Prompt: {prompt[:200]}...")
+
+        # Output filename with frame type
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        filename = f"episode_{episode_id}_scene_{scene_number:02d}_{timestamp}.png"
+        filename = f"episode_{episode_id}_scene_{scene_number:02d}_{frame_type}_{timestamp}.png"
 
         return await self.generate_character_image(
             character_name=character_name,

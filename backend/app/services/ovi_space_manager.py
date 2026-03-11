@@ -79,7 +79,7 @@ class RunPodManager:
     DEFAULT_HEALTH_CHECK_RETRIES = 3
     POD_POLL_INTERVAL_SECONDS = 10
     GRADIO_POLL_INTERVAL_SECONDS = 15
-    GRADIO_READY_TIMEOUT_MINUTES = 6  # Model load takes ~4-5 min
+    GRADIO_READY_TIMEOUT_MINUTES = 15  # Model load takes ~4-5 min (longer with cpu_offload)
 
     # Quality presets: (sample_steps, image_conditioning, denoise, guidance)
     # Lower steps + higher conditioning + lower denoise = better style preservation
@@ -88,7 +88,7 @@ class RunPodManager:
         "standard": {"steps": 20, "conditioning": 0.85, "denoise": 0.55, "guidance": 2.0},
         "high": {"steps": 30, "conditioning": 0.80, "denoise": 0.60, "guidance": 2.5},
         "ultra": {"steps": 40, "conditioning": 0.75, "denoise": 0.65, "guidance": 3.0},
-        "caricature": {"steps": 15, "conditioning": 0.92, "denoise": 0.35, "guidance": 1.5},
+        "caricature": {"steps": 20, "conditioning": 0.92, "denoise": 0.35, "guidance": 1.5},
     }
 
     # GraphQL queries and mutations
@@ -137,7 +137,7 @@ class RunPodManager:
         api_key: Optional[str] = None,
         server_url: Optional[str] = None,
         quality: str = "standard",
-        auto_shutdown: bool = True,
+        auto_shutdown: bool = False,  # Pod runs ComfyUI too; don't kill it
         gpu_count: int = 1,
     ):
         """
@@ -423,12 +423,6 @@ class RunPodManager:
                     error_message=f"Gradio returned HTTP {response.status_code}",
                 )
 
-            # Connect the Gradio client and start a session
-            if not self._session_started:
-                self._reset_client()
-                self.gradio_client.predict(api_name="/start_session")
-                self._session_started = True
-
             return PodHealth(
                 status=status,
                 is_ready=True,
@@ -476,19 +470,24 @@ class RunPodManager:
                 if health.is_ready:
                     logger.info("Pod and Ovi Gradio are ready for video generation")
                     return True
-                else:
-                    logger.warning(
-                        f"Pod running but Gradio not ready: {health.error_message}"
-                    )
-                    # Wait for Gradio to come up (model still loading)
-                    if await self.wait_for_gradio_ready():
-                        health = await self.verify_healthy()
-                        if health.is_ready:
-                            return True
-                    # If still not ready, try stopping and resuming
-                    logger.warning("Gradio failed to become ready, restarting pod...")
-                    await self.stop_pod()
-                    await asyncio.sleep(10)
+
+                logger.warning(
+                    f"Pod running but Gradio not ready: {health.error_message}"
+                )
+                # Wait for Gradio to come up (model still loading)
+                if await self.wait_for_gradio_ready():
+                    health = await self.verify_healthy()
+                    if health.is_ready:
+                        return True
+
+                # Don't stop the pod — that kills ComfyUI too and Ovi
+                # doesn't auto-start on pod boot. Just fail fast.
+                logger.error(
+                    "Gradio failed to become ready after %d minutes. "
+                    "Ovi may not be running on the pod. "
+                    "Start it manually via RunPod web terminal.",
+                    self.GRADIO_READY_TIMEOUT_MINUTES,
+                )
 
             elif status in (PodStatus.EXITED, PodStatus.CREATED):
                 logger.info(f"Pod is {status.value}, resuming...")
@@ -498,22 +497,27 @@ class RunPodManager:
                         await asyncio.sleep((attempt + 1) * 30)
                     continue
 
+                # Wait for pod to reach RUNNING, then check Gradio
+                if await self.wait_for_pod_running(timeout_minutes):
+                    if await self.wait_for_gradio_ready():
+                        health = await self.verify_healthy()
+                        if health.is_ready:
+                            return True
+                        logger.warning(
+                            f"Gradio responded but health check failed: "
+                            f"{health.error_message}"
+                        )
+                    else:
+                        logger.warning("Gradio did not become ready in time")
+
             elif status == PodStatus.UNKNOWN:
                 logger.warning("Pod status unknown, attempting resume...")
                 await self.resume_pod()
-
-            # Wait for pod to reach RUNNING
-            if await self.wait_for_pod_running(timeout_minutes):
-                # Pod is running, now wait for Gradio/model to load
-                if await self.wait_for_gradio_ready():
-                    health = await self.verify_healthy()
-                    if health.is_ready:
-                        return True
-                    logger.warning(
-                        f"Gradio responded but health check failed: {health.error_message}"
-                    )
-                else:
-                    logger.warning("Gradio did not become ready in time")
+                if await self.wait_for_pod_running(timeout_minutes):
+                    if await self.wait_for_gradio_ready():
+                        health = await self.verify_healthy()
+                        if health.is_ready:
+                            return True
 
             # Exponential backoff before retry
             if attempt < max_retries - 1:
@@ -555,31 +559,51 @@ class RunPodManager:
         image_path: str,
         prompt: str,
     ) -> str:
-        """Synchronous video generation with style-preservation parameters."""
-        try:
-            result = self.gradio_client.predict(
-                text_prompt=prompt,
-                sample_steps=self.sample_steps,
-                image=handle_file(image_path),
-                image_conditioning_strength=self.image_conditioning_strength,
-                denoise_strength=self.denoise_strength,
-                guidance_scale=self.guidance_scale,
-                api_name="/generate_scene",
-            )
-        except TypeError:
-            logger.warning(
-                "Ovi does not support extended params, falling back to basic mode"
-            )
-            result = self.gradio_client.predict(
-                text_prompt=prompt,
-                sample_steps=self.sample_steps,
-                image=handle_file(image_path),
-                api_name="/generate_scene",
-            )
+        """Synchronous video generation via Ovi Gradio /generate_video endpoint."""
+        result = self.gradio_client.predict(
+            text_prompt=prompt,
+            image=handle_file(image_path),
+            video_frame_height=settings.OVI_FRAME_HEIGHT,
+            video_frame_width=settings.OVI_FRAME_WIDTH,
+            video_seed=settings.OVI_VIDEO_SEED,
+            solver_name=settings.OVI_SOLVER_NAME,
+            sample_steps=self.sample_steps,
+            shift=settings.OVI_SHIFT,
+            video_guidance_scale=settings.OVI_VIDEO_GUIDANCE_SCALE,
+            audio_guidance_scale=settings.OVI_AUDIO_GUIDANCE_SCALE,
+            slg_layer=settings.OVI_SLG_LAYER,
+            video_negative_prompt=settings.OVI_VIDEO_NEGATIVE_PROMPT,
+            audio_negative_prompt=settings.OVI_AUDIO_NEGATIVE_PROMPT,
+            api_name="/generate_video",
+        )
 
+        # Log the raw result for debugging
+        logger.info(f"Ovi raw result type={type(result).__name__}: {result}")
+
+        # Handle various Gradio result formats
+        if result is None:
+            raise VideoGenerationError("Ovi returned None — generation may have failed silently")
+
+        # Tuple: Ovi may return (video_path, subtitle_path) or similar
+        if isinstance(result, tuple):
+            result = result[0]
+
+        # FileData object with .path attribute
+        if hasattr(result, "path"):
+            return result.path
+
+        # Dict with 'path' or 'video' key
         if isinstance(result, dict):
-            return result.get("video", result)
-        return result
+            path = result.get("path") or result.get("video")
+            if path:
+                return str(path)
+            raise VideoGenerationError(f"Ovi result dict has no path: {result}")
+
+        # String path
+        if isinstance(result, str) and result:
+            return result
+
+        raise VideoGenerationError(f"Unexpected Ovi result: {result}")
 
     async def generate_video(
         self,

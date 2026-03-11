@@ -80,16 +80,60 @@ class Settings(BaseSettings):
     OVI_SERVER_URL: str = "https://tims42v3eaqrz7-8888.proxy.runpod.net"
     OVI_TIMEOUT_SECONDS: int = 300
     OVI_QUALITY: str = "standard"  # draft, standard, high, ultra
-    OVI_FRAME_HEIGHT: float = 512
-    OVI_FRAME_WIDTH: float = 992
-    OVI_VIDEO_SEED: float = 100
+    OVI_FRAME_HEIGHT: int = 512
+    OVI_FRAME_WIDTH: int = 992
+    OVI_VIDEO_SEED: int = 100
     OVI_SOLVER_NAME: str = "unipc"  # unipc, euler, dpm++
     OVI_SHIFT: float = 5.0
     OVI_VIDEO_GUIDANCE_SCALE: float = 4.0
     OVI_AUDIO_GUIDANCE_SCALE: float = 3.0
-    OVI_SLG_LAYER: float = 11
+    OVI_SLG_LAYER: int = 11
     OVI_VIDEO_NEGATIVE_PROMPT: str = ""
     OVI_AUDIO_NEGATIVE_PROMPT: str = ""
+    OVI_IMAGE_CONDITIONING_STRENGTH: float = 0.85
+    OVI_DENOISE_STRENGTH: float = 0.55
+    OVI_GUIDANCE_SCALE: float = 2.0
+
+    # LTX 2.3 Video Generation (via ComfyUI)
+    LTX23_ENABLED: bool = True
+    LTX23_MODEL_NAME: str = "ltx-2-19b-dev-fp8.safetensors"
+    LTX23_UPSCALER_MODEL: str = ""
+    LTX23_VAE_NAME: str = ""
+    LTX23_TEXT_ENCODER: str = "gemma_3_12B_it_fp8_scaled.safetensors"
+    LTX23_WIDTH: int = 768
+    LTX23_HEIGHT: int = 512
+    LTX23_FRAME_COUNT: int = 121
+    LTX23_FPS: int = 24
+    LTX23_STEPS: int = 20
+    LTX23_SEED: int = -1
+    LTX23_UPSCALE: bool = False
+    # STGGuiderAdvanced schedule parameters
+    LTX23_STG_BLOCK_INDICES: str = "14, 19"
+    LTX23_STG_SIGMAS: str = "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180"
+    LTX23_STG_CFG_VALUES: str = "8, 6, 6, 4, 3, 1"
+    LTX23_STG_SCALE_VALUES: str = "4, 4, 3, 2, 1, 0"
+    LTX23_STG_RESCALE_VALUES: str = "1, 1, 1, 1, 1, 1"
+    LTX23_STG_LAYERS_INDICES: str = "[29], [29], [29], [29], [29], [29]"
+    LTX23_STG_SKIP_STEPS_SIGMA_THRESHOLD: float = 0.998
+    LTX23_STG_CFG_STAR_RESCALE: bool = True
+    # LTXVScheduler parameters
+    LTX23_SCHEDULER_MAX_SHIFT: float = 2.05
+    LTX23_SCHEDULER_BASE_SHIFT: float = 0.95
+    LTX23_SCHEDULER_STRETCH: bool = True
+    LTX23_SCHEDULER_TERMINAL: float = 0.1
+    # LTXVAddGuide frame conditioning
+    LTX23_START_FRAME_STRENGTH: float = 1.0
+    LTX23_END_FRAME_STRENGTH: float = 1.0
+    # VAE decode tiling
+    LTX23_VAE_SPATIAL_TILES: int = 4
+    LTX23_VAE_SPATIAL_OVERLAP: int = 1
+    LTX23_VAE_TEMPORAL_TILE_LENGTH: int = 16
+    LTX23_VAE_TEMPORAL_OVERLAP: int = 1
+    # SaveWEBM output
+    LTX23_OUTPUT_CODEC: str = "vp9"
+    LTX23_OUTPUT_CRF: float = 32.0
+    COMFYUI_TIMEOUT_SECONDS: int = 600
+    VIDEO_GENERATOR_DEFAULT: str = "ltx"
 
     # YouTube API
     YOUTUBE_CLIENT_ID: str = ""

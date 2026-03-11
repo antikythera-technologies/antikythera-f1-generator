@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import episodes, characters, races, analytics, scheduler, news, gags, storylines
+from app.api import episodes, characters, races, analytics, scheduler, news, gags, storylines, scenes
 from app.config import settings
 from app.database import engine
 from app.models import Base
@@ -61,6 +61,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(episodes.router, prefix="/api/v1/episodes", tags=["Episodes"])
+app.include_router(scenes.router, prefix="/api/v1/episodes", tags=["Scenes"])
 app.include_router(characters.router, prefix="/api/v1/characters", tags=["Characters"])
 app.include_router(races.router, prefix="/api/v1/races", tags=["Races"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])

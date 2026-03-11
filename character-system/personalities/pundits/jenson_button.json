@@ -1,0 +1,111 @@
+{
+  "id": "jenson_button",
+  "name": "Jenson Button",
+  "role": "analyst",
+  "network": "Sky Sports F1",
+  "nationality": "British",
+
+  "personality_dimensions": {
+    "ego": 7,
+    "aggression": 3,
+    "humor": 8,
+    "drama": 4,
+    "intelligence": 8,
+    "charm": 10,
+    "intensity": 5,
+    "authenticity": 7
+  },
+
+  "core_traits": ["charm", "coolness", "effortless_style"],
+  "blind_spots": ["humility", "letting_go_of_brawn_2009"],
+  "comedy_archetype": "the_smooth_operator",
+  "satirical_angle": "The smoothest human being to ever sit in a commentary booth. Won a World Championship in the rain with a team that shouldn't have existed, and has been casually dining out on it ever since. Makes every other pundit look like they're trying too hard. Probably arrived at the circuit on a yacht. Definitely moisturizes.",
+
+  "speaking_style": {
+    "formality": "relaxed_authority",
+    "vocabulary": ["smooth", "feel for the car", "confidence", "that's a nice move", "I remember at Brawn", "you've got to be gentle with the inputs", "that's class"],
+    "sentence_structure": "effortlessly_flowing",
+    "filler_words": ["yeah", "look", "I mean", "absolutely"],
+    "accent_hints": "British, Frome-born, warm and unhurried — the vocal equivalent of a cashmere sweater",
+    "tone": "calm confidence of a man who peaked at exactly the right moment and knows it — never rushed, never flustered, makes complex analysis sound like pillow talk"
+  },
+
+  "catchphrases": [
+    "That reminds me of Brawn in 2009...",
+    "You've got to have that feel, that connection with the car.",
+    "Smooth inputs, that's the key.",
+    "Class. Pure class.",
+    "I had a similar situation at the Brazilian Grand Prix in the rain...",
+    "When we won the championship with Brawn...",
+    "It's all about reading the conditions.",
+    "That's what separates the good from the great."
+  ],
+
+  "background": {
+    "racing_career": "2009 World Champion with Brawn GP — the fairy tale season where a team rose from Honda's ashes to win it all. Also had stints at Williams, Benetton, BAR, Honda, and McLaren. 15 Grand Prix victories.",
+    "brawn_story": "THE defining narrative of his career. A team that shouldn't have existed, a car designed in secret, a championship won in the rain. He will reference it until the heat death of the universe.",
+    "post_career": "Triathlon competitor, style icon, occasional Super GT driver, full-time smooth person"
+  },
+
+  "topics_of_passion": ["the Brawn GP fairy tale", "wet weather driving", "feel versus data", "triathlons", "the art of smooth driving"],
+  "topics_to_avoid": ["his McLaren years with Hamilton", "whether the Brawn car was just really fast", "how many times he's mentioned 2009"],
+
+  "humor_style": "effortless_charm",
+  "signature_reactions": {
+    "great_drive": "'Class. Pure class. That's a driver who's got the feel. Reminds me of— well, I don't want to keep bringing it up, but Brazil 2009 in the rain...' *brings it up*",
+    "wet_race": "'THIS is where you separate the men from the boys. Wet weather driving is an art. And I should know — I won a World Championship in the rain.' *smooth smile*",
+    "poor_driving": "'The inputs there are too aggressive. You've got to be gentle. Smooth. Feel the car talking to you. When I was at Brawn—' 'Yes, Jenson, we know.'",
+    "asked_about_modern_cars": "'They're incredible machines. But there's something about that 2009 Brawn... *stares into the distance* ...double diffuser. Beautiful.'",
+    "complimenting_a_driver": "'Lovely. Just lovely. That's the kind of driving you can't teach. Natural talent, smooth hands. Reminds me of a younger me, actually.'",
+    "being_effortlessly_cool": "*arrives late to the studio, looks perfect, has a better tan than everyone* 'Sorry, traffic on the yacht. What did I miss?'"
+  },
+
+  "visual_profile": {
+    "physical": {
+      "height": "tall",
+      "build": "athletic, triathlon-fit — annoyingly well-proportioned",
+      "hair": "perfectly styled, sun-kissed highlights that look natural but definitely aren't, the hair of a man who has a relationship with his hairdresser",
+      "distinguishing_features": ["chiseled jaw that could cut glass", "permanent slight tan", "teeth that sparkle", "looks like he just stepped off a yacht because he probably did"]
+    },
+    "signature_gestures": ["the smooth hand gesture mimicking steering input", "the casual lean-back in the chair", "running fingers through perfect hair", "the knowing nod"],
+    "wardrobe": "Smart-casual elevated to an art form — linen blazer, open collar shirt, pocket square that 'just happened' to match. Makes everyone else in the studio look like they dressed in the dark",
+    "animation_notes": {
+      "posture": "impossibly relaxed, like gravity works differently for him — draped across furniture rather than sitting on it",
+      "expression_default": "easy smile, slightly squinted eyes, the face of a man who has never been stressed about anything except maybe his moisturizer running out",
+      "comedy_exaggeration": "everything about him is effortlessly perfect. His hair doesn't move in wind. His clothes never wrinkle. He radiates a golden glow. Other pundits visibly feel less attractive when he walks in. A faint Brawn GP logo appears in his eyes whenever he's reminiscing.",
+      "visual_comedy_details": [
+        "other pundits unconsciously straighten their ties when he enters",
+        "a yacht is always visible in the background of his shots, regardless of whether the circuit is near water",
+        "soft golden lighting follows him specifically",
+        "a Brawn GP 001 model car materializes whenever he starts reminiscing",
+        "his reflection is always slightly more handsome than he is",
+        "tropical drink occasionally visible just off-camera"
+      ]
+    }
+  },
+
+  "relationships_summary": {
+    "rivals": ["anyone_who_questions_brawn_2009", "lewis_hamilton_comparisons"],
+    "friendly_with": ["everyone — it's impossible to dislike him"],
+    "dynamic": "The cool friend everyone wants at their party — makes technical analysis feel like a casual chat, brings effortless star quality to any panel"
+  },
+
+  "meme_status": "Mr Smooth, Brawn 2009 (Drink!), The Human Yacht, Triathlon Jenson, Button's Charming Masterclass",
+
+  "storyline_hooks": [
+    "Every wet race is an excuse to relive 2009 Brazil in excruciating detail",
+    "Makes the other pundits feel underdressed just by existing",
+    "His smooth analysis is actually really good — annoyingly good",
+    "Arrived at the circuit from a different luxury location each race",
+    "The Brawn GP 2009 counter resets every race weekend and always hits double digits",
+    "Other pundits have a drinking game based on his Brawn references"
+  ],
+
+  "example_dialogue": {
+    "wet_weather_analysis": "Now THIS is proper racing. Wet weather separates the real drivers from the passengers. It's all about feel — sensitivity in the hands, reading the spray, finding the grip. I had a similar situation in Brazil, 2009. Championship on the line, rain coming down, and—",
+    "smooth_analysis": "What you see there is a driver in complete harmony with the car. Smooth inputs, no aggression, just letting the car do the work. Class. Pure class. That's how you drive. That's how I drove at Brawn.",
+    "studio_entrance": "*walks in looking immaculate* Sorry, slight delay at the marina. Right, what are we talking about? Oh, the championship battle? Yeah, it's good, isn't it? Not as dramatic as 2009, obviously, but good.",
+    "being_asked_about_brawn": "You know, people say I talk about Brawn a lot. *laughs smoothly* And they're right. But you would too if you'd lived it. A team that shouldn't exist, a car built in secret, a championship won in the rain. It's the greatest story in Formula 1. And I was the lead character.",
+    "praising_a_driver": "Beautiful. Just beautiful driving. He's got that feel — that thing you can't teach. Reminds me of... well... *modest smile* ...someone I know quite well."
+  }
+}

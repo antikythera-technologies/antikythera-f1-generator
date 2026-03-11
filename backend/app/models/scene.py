@@ -35,7 +35,19 @@ class Scene(Base):
     # Prompts (for traceability)
     script_prompt: Mapped[Optional[str]] = mapped_column(Text)
     script_response: Mapped[Optional[str]] = mapped_column(Text)
-    ovi_prompt: Mapped[Optional[str]] = mapped_column(Text)
+    ovi_prompt: Mapped[Optional[str]] = mapped_column(Text)  # Legacy: single-frame prompt
+
+    # Dual-frame prompts (LLM-generated scene descriptions)
+    start_frame_prompt: Mapped[Optional[str]] = mapped_column(Text)
+    end_frame_prompt: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Final enriched prompts (actually sent to ComfyUI)
+    start_frame_prompt_final: Mapped[Optional[str]] = mapped_column(Text)
+    end_frame_prompt_final: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Video generation prompts
+    video_prompt: Mapped[Optional[str]] = mapped_column(Text)
+    camera_direction: Mapped[Optional[str]] = mapped_column(Text)
 
     # Content
     dialogue: Mapped[Optional[str]] = mapped_column(Text)
@@ -47,8 +59,11 @@ class Scene(Base):
         Enum(SceneStatus, name="scene_status", create_type=False, values_callable=lambda x: [e.value for e in x]),
         default=SceneStatus.PENDING,
     )
-    source_image_path: Mapped[Optional[str]] = mapped_column(String(500))
+    source_image_path: Mapped[Optional[str]] = mapped_column(String(500))  # Legacy: single source image
+    start_frame_path: Mapped[Optional[str]] = mapped_column(String(500))
+    end_frame_path: Mapped[Optional[str]] = mapped_column(String(500))
     video_clip_path: Mapped[Optional[str]] = mapped_column(String(500))
+    video_generator: Mapped[Optional[str]] = mapped_column(String(50))  # "ovi" or "ltx23"
     duration_seconds: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=5.0)
 
     # Timing

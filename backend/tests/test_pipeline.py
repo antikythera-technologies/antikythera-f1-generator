@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.script_generator import ScriptGenerator, EpisodeScript, SceneScript
-from app.services.video_generator import VideoGenerator, VideoClip
+from app.services.ovi_video_generator import OviVideoGenerator, OviVideoClip
 
 
 class TestScriptGenerator:
@@ -49,12 +49,12 @@ class TestScriptGenerator:
         assert result["title"] == "Test"
 
 
-class TestVideoGenerator:
-    """Tests for video generation service."""
+class TestOviVideoGenerator:
+    """Tests for Ovi video generation service."""
 
     def test_build_prompt_with_all_fields(self):
         """Test prompt building with all fields."""
-        generator = VideoGenerator()
+        generator = OviVideoGenerator()
         prompt = generator._build_prompt(
             action="Character waves",
             dialogue="Hello world",
@@ -66,7 +66,7 @@ class TestVideoGenerator:
 
     def test_build_prompt_without_optional(self):
         """Test prompt building without optional fields."""
-        generator = VideoGenerator()
+        generator = OviVideoGenerator()
         prompt = generator._build_prompt(action="Character waves")
         assert "Character waves" in prompt
         assert "<S>" not in prompt
@@ -74,7 +74,7 @@ class TestVideoGenerator:
 
     def test_build_prompt_with_dialogue_only(self):
         """Test prompt with dialogue but no audio."""
-        generator = VideoGenerator()
+        generator = OviVideoGenerator()
         prompt = generator._build_prompt(
             action="Speaking",
             dialogue="Test dialogue",
@@ -110,9 +110,13 @@ class TestIntegration:
             SceneScript(
                 scene_number=s["scene_number"],
                 character=s["character"],
-                action=s["action"],
                 dialogue=s.get("dialogue"),
                 audio_description=s.get("audio_description"),
+                start_frame_prompt=s.get("start_frame_prompt", ""),
+                end_frame_prompt=s.get("end_frame_prompt", ""),
+                camera_direction=s.get("camera_direction", ""),
+                video_prompt=s.get("video_prompt", ""),
+                action=s.get("action"),
             )
             for s in scenes_data
         ]

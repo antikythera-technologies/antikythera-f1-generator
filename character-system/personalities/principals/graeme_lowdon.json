@@ -1,0 +1,91 @@
+{
+  "id": "graeme_lowdon",
+  "name": "Graeme Lowdon",
+  "team": "cadillac",
+  "nationality": "British",
+
+  "personality_dimensions": {
+    "ego": 5,
+    "aggression": 4,
+    "humor": 6,
+    "drama": 5,
+    "intelligence": 8,
+    "charm": 7,
+    "intensity": 7,
+    "authenticity": 9
+  },
+
+  "core_traits": ["determination", "diplomacy", "pragmatism"],
+  "blind_spots": ["defensiveness"],
+  "comedy_archetype": "the_ambitious_underdog",
+  "satirical_angle": "The new kid desperately trying to prove the 11th team belongs, constantly name-dropping Cadillac's Le Mans wins while navigating a paddock that voted against his existence",
+
+  "speaking_style": {
+    "formality": "measured_professional",
+    "vocabulary": ["building something special", "long-term vision", "we earned our place", "Cadillac heritage", "we're not here to make up the numbers"],
+    "sentence_structure": "diplomatic_with_steel",
+    "filler_words": ["look", "honestly", "the reality is"],
+    "accent_hints": "British, understated, occasionally lets a sharp edge slip through",
+    "tone": "calm and professional on the surface, simmering determination underneath, slight chip on shoulder"
+  },
+
+  "catchphrases": [
+    "We're building something special here.",
+    "We're here to stay. Full stop.",
+    "Cadillac has been racing since before most of these teams existed.",
+    "I've been through worse. Manor taught me that.",
+    "Eleventh team? We prefer 'newest championship contender'."
+  ],
+
+  "management_style": "Battle-hardened underdog leader who turns 'no' into motivation, runs a tight ship on a fraction of the budget",
+
+  "topics_of_passion": ["Cadillac racing heritage", "American motorsport culture", "proving doubters wrong", "the journey from Andretti bid to grid entry"],
+  "topics_to_avoid": ["Manor's collapse", "the FIA entry fee negotiations", "budget comparisons with top teams"],
+
+  "humor_style": "dry_underdog_self_deprecation",
+  "signature_reactions": {
+    "victory": "Quiet, emotional pride. 'This is what we came here to do. And we're just getting started.'",
+    "defeat": "Steely resolve. 'Rome wasn't built in a day. Neither was Ferrari, for that matter.'",
+    "controversy": "Measured response with an edge. 'We followed the regulations. Perhaps some teams aren't used to having eleven competitors.'",
+    "disrespect_from_big_teams": "*tight smile* 'They said the same things about every new team. We'll let the lap times do the talking.'"
+  },
+
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "lean",
+      "hair": "short greying hair, neat",
+      "distinguishing_features": ["thousand-yard Manor survivor stare", "Cadillac team polo always immaculate", "reading glasses perched on head"]
+    },
+    "signature_gestures": ["measured nod", "clasped hands on table", "looking into the distance when asked about Manor days"],
+    "animation_notes": {
+      "posture": "upright, disciplined, military-adjacent",
+      "expression_default": "polite determination, like a man who's heard 'no' a thousand times",
+      "comedy_exaggeration": "pulls out a tiny American flag whenever someone questions Cadillac's credentials"
+    }
+  },
+
+  "relationships_summary": {
+    "rivals": ["the_entire_established_order"],
+    "friendly_with": ["james_vowles", "ayao_komatsu"],
+    "team_dynamic": "Us-against-the-world mentality, bonded by being the outsiders",
+    "drivers": "Treats them like partners in a startup, not employees"
+  },
+
+  "meme_status": "The 11th Team Guy, American Muscle in an F1 Paddock, Manor Survivor, 'We're Here To Stay' Broken Record",
+
+  "storyline_hooks": [
+    "Every points finish is treated like a moon landing",
+    "Perpetual underdog arc: the team nobody wanted that refuses to leave",
+    "Culture clash: American corporate backing meets European racing establishment",
+    "The Manor parallels haunt him - will history repeat?",
+    "Constantly correcting people who call it 'Andretti'"
+  ],
+
+  "example_dialogue": {
+    "after_points_finish": "That's one small point for Cadillac, one giant leap for the eleventh team. We're building something special.",
+    "about_big_teams": "They had their vote. We had our conviction. Guess which one got us on the grid.",
+    "defending_the_team": "Call us the eleventh team all you like. Someone has to finish eleventh. But it won't always be us.",
+    "manor_reference": "Manor taught me what happens when you run out of fight. *pauses* I don't run out of fight anymore."
+  }
+}

@@ -223,6 +223,30 @@ export interface Scene {
   created_at: string;
 }
 
+export interface SceneDetail extends Scene {
+  script_response: string | null;
+  source_image_path: string | null;
+  character_image_id: number | null;
+  start_frame_prompt: string | null;
+  end_frame_prompt: string | null;
+  start_frame_prompt_final: string | null;
+  end_frame_prompt_final: string | null;
+  start_frame_path: string | null;
+  end_frame_path: string | null;
+  video_prompt: string | null;
+  video_generator: string | null;
+  camera_direction: string | null;
+  generation_started_at: string | null;
+  generation_completed_at: string | null;
+}
+
+export interface ScenePromptUpdateData {
+  start_frame_prompt?: string;
+  end_frame_prompt?: string;
+  camera_direction?: string;
+  video_prompt?: string;
+}
+
 export interface Episode {
   id: number;
   race_id: number | null;
@@ -580,6 +604,41 @@ export const gagsApi = {
   },
 };
 
+// Scenes API
+export const scenesApi = {
+  list: (episodeId: number) =>
+    request<SceneDetail[]>(`/episodes/${episodeId}/scenes`),
+
+  get: (episodeId: number, sceneNumber: number) =>
+    request<SceneDetail>(`/episodes/${episodeId}/scenes/${sceneNumber}`),
+
+  updatePrompts: (episodeId: number, sceneNumber: number, data: ScenePromptUpdateData) =>
+    request<SceneDetail>(`/episodes/${episodeId}/scenes/${sceneNumber}/prompts`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  regenerateStartFrame: (episodeId: number, sceneNumber: number) =>
+    request<{ status: string }>(`/episodes/${episodeId}/scenes/${sceneNumber}/regenerate-start-frame`, {
+      method: "POST",
+    }),
+
+  regenerateEndFrame: (episodeId: number, sceneNumber: number) =>
+    request<{ status: string }>(`/episodes/${episodeId}/scenes/${sceneNumber}/regenerate-end-frame`, {
+      method: "POST",
+    }),
+
+  regenerateVideo: (episodeId: number, sceneNumber: number) =>
+    request<{ status: string }>(`/episodes/${episodeId}/scenes/${sceneNumber}/regenerate-video`, {
+      method: "POST",
+    }),
+
+  regenerateAll: (episodeId: number, sceneNumber: number) =>
+    request<{ status: string }>(`/episodes/${episodeId}/scenes/${sceneNumber}/regenerate-all`, {
+      method: "POST",
+    }),
+};
+
 // Storyline types
 export type StorylineType = "rivalry" | "character_arc" | "running_joke" | "season_plot" | "event_reaction";
 export type StorylineStatus = "active" | "paused" | "completed" | "archived";
@@ -707,6 +766,7 @@ export const api = {
   scheduler: schedulerApi,
   news: newsApi,
   gags: gagsApi,
+  scenes: scenesApi,
   storylines: storylinesApi,
 };
 

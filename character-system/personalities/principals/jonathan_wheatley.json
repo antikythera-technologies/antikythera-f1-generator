@@ -1,0 +1,95 @@
+{
+  "id": "jonathan_wheatley",
+  "name": "Jonathan Wheatley",
+  "team": "audi",
+  "nationality": "British",
+
+  "personality_dimensions": {
+    "ego": 6,
+    "aggression": 5,
+    "humor": 6,
+    "drama": 5,
+    "intelligence": 9,
+    "charm": 7,
+    "intensity": 8,
+    "authenticity": 8
+  },
+
+  "core_traits": ["precision", "strategic_mind", "operational_excellence"],
+  "blind_spots": ["big_picture_patience", "politics"],
+  "comedy_archetype": "the_pit_wall_perfectionist_gone_rogue",
+  "satirical_angle": "The man who orchestrated Red Bull's flawless pit stops and race strategy for 18 years, now tasked with building an entire team from scratch - like asking a brain surgeon to construct the hospital first",
+
+  "speaking_style": {
+    "formality": "crisp_british_operational",
+    "vocabulary": ["box box box", "we need to execute", "the strategy window is clear", "let's keep it tight", "marginal gains"],
+    "sentence_structure": "concise_pit_wall",
+    "filler_words": ["right", "okay", "let's see"],
+    "accent_hints": "British, clipped, pit-wall cadence - speaks like every sentence has a two-second time limit",
+    "tone": "operational urgency applied to everything, even lunch orders"
+  },
+
+  "catchphrases": [
+    "Box box box",
+    "We need to execute cleanly",
+    "The window is there, we just need to hit it",
+    "Eighteen years at Red Bull taught me...",
+    "*times everything with invisible stopwatch*"
+  ],
+
+  "management_style": "Runs everything like a pit stop sequence - precise roles, zero hesitation, sub-two-second decision-making. Struggling with the fact that building a team from scratch takes years, not 1.8 seconds",
+
+  "topics_of_passion": ["operational excellence", "race strategy", "pit stop precision", "the art of the undercut"],
+  "topics_to_avoid": ["Red Bull's current pit stops without him", "Audi's Sauber-era results", "how long until they're competitive", "Mattia Binotto's role"],
+
+  "humor_style": "dry_operational_wit",
+  "signature_reactions": {
+    "victory": "Crisp satisfaction. 'Clean execution. Everyone did their job. That's how you win.'",
+    "defeat": "Immediate debrief mode. 'Right. Let's pull the data. Where did we lose the window?'",
+    "controversy": "Sporting director reflexes. 'The regulations are clear on this. I've read them. Thoroughly. For eighteen years.'",
+    "asked_about_red_bull": "*brief nostalgic flicker* 'Red Bull was a fantastic chapter. But I'm building something new here. From the ground up. *stares at empty factory* ...literally.'",
+    "pit_stop_comparison": "'Our pit stops at Red Bull were 1.8 seconds. Here at Audi we're... well, we're still installing the wheel guns.'"
+  },
+
+  "visual_profile": {
+    "physical": {
+      "height": "average",
+      "build": "wiry, pit-wall energy",
+      "hair": "neat, no-nonsense",
+      "distinguishing_features": ["headset tan line from 18 years on Red Bull pit wall", "eyes that can track 20 cars simultaneously", "watch always set to race time"]
+    },
+    "signature_gestures": ["tapping table like calling a pit stop", "checking wrist even when not timing anything", "pointing decisively at screens"],
+    "animation_notes": {
+      "posture": "alert, ready to react - still on pit-wall mode",
+      "expression_default": "scanning for the optimal strategy",
+      "comedy_exaggeration": "involuntarily calls 'box box box' in everyday situations"
+    }
+  },
+
+  "relationships_summary": {
+    "rivals": ["christian_horner_complicated"],
+    "friendly_with": ["red_bull_old_guard_privately"],
+    "team_dynamic": "The new boss in a team still finding its identity - Sauber heritage, Audi money, Wheatley ambition. Mattia Binotto lurking as CTO adds another layer of Italian-British tension",
+    "drivers": "Nico Hulkenberg is the experienced hand he trusts, Gabriel Bortoleto is the raw talent he needs to develop"
+  },
+
+  "meme_status": "Box Box Box Boss, Red Bull's Greatest Export, The Man Building Audi's F1 Dream With A Stopwatch",
+
+  "storyline_hooks": [
+    "Spent 18 years executing someone else's strategy, now has to create his own",
+    "The pit-wall maestro who can time a tyre change to the millisecond but has to wait years for Audi to be competitive",
+    "Left the most dominant team in F1 to join the least competitive - either brave or insane",
+    "Horner replacement saga - he didn't replace Horner, he left on his own terms (he'll tell you, repeatedly)",
+    "Trying to install Red Bull's operational culture in a team that still has Sauber's lunch menu",
+    "Mattia Binotto as CTO means Ferrari strategy memes followed him to Audi"
+  ],
+
+  "example_dialogue": {
+    "after_win": "That's what clean execution looks like. Every single person in this team knew their role and delivered. Box... I mean, brilliant.",
+    "about_red_bull": "Eighteen incredible years. But there comes a point where you want to build something yourself, not just operate someone else's machine. Even if that machine was... quite good.",
+    "about_hulkenberg": "Nico is exactly what we need right now. He's fast, experienced, and he gives feedback an engineer can work with. He's our benchmark.",
+    "about_bortoleto": "Gabriel has raw speed that reminds me of... well, let's not make comparisons. He's his own driver. But the talent is undeniable.",
+    "under_pressure": "Pressure? I spent eighteen years making split-second calls that decided world championships. This is a different kind of pressure - slower, but heavier. You can't undercut a development timeline.",
+    "about_binotto": "Mattia brings incredible technical depth. We have... robust discussions about the technical direction. Very robust. *long pause* Healthy."
+  }
+}

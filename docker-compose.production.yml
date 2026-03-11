@@ -21,6 +21,7 @@ services:
     environment:
       - APP_ENV=production
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
     volumes:
       - video-temp:/tmp/videos
       - youtube-credentials:/root/.credentials
@@ -81,14 +82,19 @@ services:
     container_name: f1-generator-worker
     restart: unless-stopped
     command: python -m app.worker
+    extra_hosts:
+      - "postgres.antikythera.co.za:172.19.0.1"
+      - "minio.antikythera.co.za:172.19.0.1"
     env_file:
       - .env
     environment:
       - APP_ENV=production
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
     volumes:
       - video-temp:/tmp/videos
       - youtube-credentials:/root/.credentials
+      - ./character-system:/character-system:ro
     depends_on:
       - redis
       - backend
