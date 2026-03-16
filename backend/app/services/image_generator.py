@@ -399,6 +399,7 @@ class ImageGenerator:
         nationality: str | None = None,
         physical_features: str | None = None,
         comedy_angle: str | None = None,
+        episode_appearance: str | None = None,
     ) -> str:
         """Combine LLM scene description with character visual traits for consistency.
 
@@ -406,6 +407,10 @@ class ImageGenerator:
         this method uses the LLM's frame prompt as the PRIMARY description (setting,
         camera, composition) and INJECTS character traits for visual consistency.
         No more forced portrait framing — the scene dictates the shot.
+
+        Args:
+            episode_appearance: Per-episode outfit/clothing description for this
+                character, ensuring consistent appearance across all scenes.
         """
         team_slug = (team or "").lower().replace(" ", "_")
 
@@ -414,14 +419,19 @@ class ImageGenerator:
             frame_prompt,  # Full cinematic description from Haiku
         ]
 
-        # Inject character physical consistency
-        if physical_features:
+        # Inject episode-level appearance for clothing consistency across scenes
+        if episode_appearance:
+            parts.append(f"Character appearance for this episode: {episode_appearance}")
+
+        # Inject character physical consistency (fallback if no episode appearance)
+        if physical_features and not episode_appearance:
             parts.append(f"Character physical traits: {physical_features}")
 
         # Core caricature style (appended, not overriding scene description)
         parts.append(
             "Satirical caricature style with oversized head, exaggerated facial features, "
-            "photorealistic skin with visible pores. Dramatic lighting with deep shadows."
+            "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
+            "No text, no words, no letters, no logos, no watermarks on clothing or background."
         )
 
         return " ".join(parts)
@@ -569,6 +579,7 @@ class ImageGenerator:
         width: int = 768,
         height: int = 1344,
         seed: int | None = None,
+        negative_prompt: str = "",
     ) -> bytes:
         """Build workflow, queue it, poll for completion, download the result.
 
@@ -579,12 +590,14 @@ class ImageGenerator:
             width: Output image width.
             height: Output image height.
             seed: Optional fixed seed for reproducibility.
+            negative_prompt: Things to avoid in the generation.
 
         Returns:
             Raw PNG image bytes.
         """
         workflow = _build_workflow(
             prompt_text=prompt_text,
+            negative_prompt=negative_prompt,
             face_image=face_image,
             width=width,
             height=height,
@@ -630,6 +643,8 @@ class ImageGenerator:
         style_reference_paths: list[str] | None = None,
         output_filename: str | None = None,
         face_image: str | None = None,
+        width: int = 768,
+        height: int = 1344,
     ) -> GeneratedImage:
         """Generate a character image using ComfyUI (Flux + LoRA + PuLID).
 
@@ -642,6 +657,8 @@ class ImageGenerator:
             face_image: Filename of face reference in ComfyUI's input dir.
                         When provided, PuLID is used for facial identity.
                         When None, LoRA-only workflow is used.
+            width: Output image width (default 768 for portraits).
+            height: Output image height (default 1344 for portraits).
 
         Returns:
             GeneratedImage with path and metadata.
@@ -670,9 +687,17 @@ class ImageGenerator:
 
         for attempt in range(max_retries):
             try:
+                # Suppress text generation in scene images
+                neg = (
+                    "text, words, letters, numbers, logos, watermarks, "
+                    "signatures, labels, captions, subtitles, UI elements"
+                )
                 image_bytes = await self._generate_via_comfyui(
                     prompt_text=prompt,
                     face_image=face_image,
+                    width=width,
+                    height=height,
+                    negative_prompt=neg,
                 )
 
                 # Save the image, converting to RGB PNG
@@ -777,6 +802,7 @@ class ImageGenerator:
                 nationality=traits.get("nationality"),
                 physical_features=traits.get("physical_features"),
                 comedy_angle=traits.get("comedy_angle"),
+                episode_appearance=traits.get("episode_appearance"),
             )
         else:
             # Legacy fallback: build prompt from character traits
@@ -803,12 +829,23 @@ class ImageGenerator:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         filename = f"episode_{episode_id}_scene_{scene_number:02d}_{frame_type}_{timestamp}.png"
 
+        # Scene images use landscape (1344x768) for cinematic framing.
+        # Character portraits (legacy fallback) stay portrait (768x1344).
+        if frame_prompt:
+            # Landscape 16:9 for YouTube video scenes
+            img_width, img_height = 1280, 720
+        else:
+            # Portrait for legacy character reference sheets
+            img_width, img_height = 768, 1344
+
         return await self.generate_character_image(
             character_name=character_name,
             prompt=prompt,
             style_reference_paths=style_reference_paths,
             output_filename=filename,
             face_image=face_image,
+            width=img_width,
+            height=img_height,
         )
 
     async def generate_character_reference(

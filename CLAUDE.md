@@ -16,7 +16,7 @@ backend/                 → FastAPI backend (API, models, services, pipeline)
 dashboard/               → Next.js 15 dashboard (React 19, Tailwind v4)
   src/app/               → App Router pages
   src/components/        → UI components
-  src/lib/api.ts         → Centralized API client (9 modules)
+  src/lib/api.ts         → Centralized API client (10 modules)
 character-system/        → Personality JSONs + face references
   personalities/         → drivers/, principals/, pundits/
 scripts/                 → Utility scripts (deploy, setup, batch ops)
@@ -80,7 +80,7 @@ npm run build && npm run lint
 
 ## Development State
 
-Currently testing the pipeline scene by scene. Image generation works. LTX video generation coded but not yet run. Stepping through each scene to validate quality before running the full pipeline.
+Testing the pipeline scene by scene. Image generation works. Ovi is the **active video engine** (scene_01 tested successfully). LTX 2.3 is BLOCKED (ComfyUI integration failed after 20h; under audit — see `docs/runpod-setup/ltx-audit.md`). TTS audio mux working. Stitching/YouTube upload not yet tested.
 
 ## Credentials
 
@@ -90,3 +90,4 @@ All secrets in `.env`. Production values in encrypted vault: `credential_get("se
 
 - Architecture: `brain_search("f1 generator architecture")`
 - Image gen: `brain_search("f1 image generation")`
+

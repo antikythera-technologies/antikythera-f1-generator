@@ -31,8 +31,25 @@ def find_personality_file(character_name: str) -> Path | None:
     return None
 
 
+def load_personality_traits_from_db(personality_json: str, role_hint: str | None = None) -> dict:
+    """Load personality traits from a DB JSON string.
+
+    Same extraction logic as load_personality_traits but reads from
+    the database personality column instead of a file on disk.
+
+    Args:
+        personality_json: JSON string from characters.personality column.
+        role_hint: Optional role hint (e.g., "driver", "team principal").
+    """
+    data = json.loads(personality_json)
+    return _extract_traits(data, role_hint)
+
+
 def load_personality_traits(personality_path: Path) -> dict:
-    """Load a personality JSON and extract image-generation traits.
+    """Load a personality JSON file and extract image-generation traits.
+
+    DEPRECATED: Use load_personality_traits_from_db() for new code.
+    Kept for backward compatibility with scripts that reference files.
 
     Maps the rich personality JSON structure to the flat dict expected by
     ``ImageGenerator.build_character_prompt()``.
@@ -43,20 +60,23 @@ def load_personality_traits(personality_path: Path) -> dict:
     with open(personality_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    parent_dir = personality_path.parent.name
+    role_map = {
+        "drivers": "driver",
+        "principals": "team principal",
+    }
+    return _extract_traits(data, role_map.get(parent_dir))
+
+
+def _extract_traits(data: dict, role_hint: str | None = None) -> dict:
+    """Shared trait extraction logic used by both file and DB loaders."""
     traits: dict = {}
 
     # --- identity ---
     traits["display_name"] = data.get("name", "")
     traits["team"] = data.get("team")
     traits["nationality"] = data.get("nationality")
-
-    # --- role (inferred from file path) ---
-    parent_dir = personality_path.parent.name
-    role_map = {
-        "drivers": "driver",
-        "principals": "team principal",
-    }
-    traits["role"] = role_map.get(parent_dir)
+    traits["role"] = role_hint
 
     # --- visual profile ---
     visual = data.get("visual_profile", {})

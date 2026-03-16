@@ -1,0 +1,122 @@
+"""Pipeline settings API — runtime-configurable pipeline parameters."""
+
+from typing import Literal, Optional
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+from app.config import settings
+
+router = APIRouter()
+
+
+class PipelineSettingsResponse(BaseModel):
+    """Current pipeline settings."""
+
+    video_generator: str  # ovi, ltx, fal-ovi, fal-ltx, fal-kling-std, fal-kling-std-audio, fal-kling-pro, fal-kling-pro-audio
+    tts_enabled: bool
+    video_scene_count: int
+    video_scene_duration_seconds: int
+    ovi_quality: str
+    ltx_enabled: bool
+
+
+class PipelineSettingsUpdate(BaseModel):
+    """Updatable pipeline settings."""
+
+    video_generator: Optional[str] = None  # Any valid backend ID
+    tts_enabled: Optional[bool] = None
+    ovi_quality: Optional[str] = None
+
+
+@router.get("", response_model=PipelineSettingsResponse)
+async def get_pipeline_settings():
+    """Get current pipeline settings."""
+    return PipelineSettingsResponse(
+        video_generator=settings.VIDEO_GENERATOR_DEFAULT,
+        tts_enabled=settings.TTS_ENABLED,
+        video_scene_count=settings.VIDEO_SCENE_COUNT,
+        video_scene_duration_seconds=settings.VIDEO_SCENE_DURATION_SECONDS,
+        ovi_quality=settings.OVI_QUALITY,
+        ltx_enabled=settings.LTX23_ENABLED,
+    )
+
+
+@router.put("", response_model=PipelineSettingsResponse)
+async def update_pipeline_settings(update: PipelineSettingsUpdate):
+    """Update pipeline settings at runtime.
+
+    Changes are applied immediately and persist until the backend restarts.
+    For permanent changes, update the .env file.
+    """
+    if update.video_generator is not None:
+        settings.VIDEO_GENERATOR_DEFAULT = update.video_generator
+    if update.tts_enabled is not None:
+        settings.TTS_ENABLED = update.tts_enabled
+    if update.ovi_quality is not None:
+        settings.OVI_QUALITY = update.ovi_quality
+
+    return PipelineSettingsResponse(
+        video_generator=settings.VIDEO_GENERATOR_DEFAULT,
+        tts_enabled=settings.TTS_ENABLED,
+        video_scene_count=settings.VIDEO_SCENE_COUNT,
+        video_scene_duration_seconds=settings.VIDEO_SCENE_DURATION_SECONDS,
+        ovi_quality=settings.OVI_QUALITY,
+        ltx_enabled=settings.LTX23_ENABLED,
+    )
+
+
+class ServiceBalances(BaseModel):
+    """External service account balances."""
+
+    runpod_balance: float | None = None
+    runpod_spend_per_hr: float | None = None
+    runpod_pod_status: str | None = None
+    fal_balance_url: str = "https://fal.ai/dashboard/billing"
+    fal_status: str = "unknown"
+
+
+@router.get("/balances", response_model=ServiceBalances)
+async def get_service_balances():
+    """Get current balances for external AI services."""
+    import httpx
+    import os
+
+    result = ServiceBalances()
+
+    # RunPod balance
+    runpod_key = settings.RUNPOD_API_KEY
+    if runpod_key:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    "https://api.runpod.io/graphql",
+                    headers={"Authorization": f"Bearer {runpod_key}", "Content-Type": "application/json"},
+                    json={"query": "{ myself { clientBalance currentSpendPerHr pods { id desiredStatus } } }"},
+                )
+                data = resp.json().get("data", {}).get("myself", {})
+                result.runpod_balance = data.get("clientBalance")
+                result.runpod_spend_per_hr = data.get("currentSpendPerHr")
+                pods = data.get("pods", [])
+                if pods:
+                    result.runpod_pod_status = pods[0].get("desiredStatus", "UNKNOWN")
+        except Exception:
+            pass
+
+    # fal.ai — no balance API, just check if key is set
+    fal_key = os.environ.get("FAL_KEY", "")
+    if fal_key:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                # Quick health check — submit a tiny request to see if auth works
+                resp = await client.get(
+                    "https://rest.alpha.fal.ai/",
+                    headers={"Authorization": f"Key {fal_key}"},
+                )
+                result.fal_status = "active" if resp.status_code != 401 else "invalid_key"
+        except Exception:
+            result.fal_status = "unreachable"
+    else:
+        result.fal_status = "no_key"
+
+    return result

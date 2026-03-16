@@ -84,7 +84,7 @@ async def create_race(
 
 @router.post("/sync")
 async def sync_races(
-    season: int = Query(default=2025),
+    season: int = Query(default=2026),
     db: AsyncSession = Depends(get_db),
 ):
     """

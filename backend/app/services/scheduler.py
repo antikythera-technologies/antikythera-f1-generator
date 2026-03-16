@@ -254,11 +254,13 @@ class SchedulerService:
 
     async def get_upcoming_jobs(self, days: int = 7) -> List[ScheduledJob]:
         """Get jobs scheduled for the next N days."""
+        from sqlalchemy.orm import selectinload
         now = datetime.utcnow()
         future = now + timedelta(days=days)
         
         result = await self.session.execute(
             select(ScheduledJob)
+            .options(selectinload(ScheduledJob.race))
             .where(
                 and_(
                     ScheduledJob.scheduled_for >= now,

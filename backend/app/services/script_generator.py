@@ -38,73 +38,125 @@ class EpisodeScript:
     output_tokens: int
     cost_usd: float
     gags_referenced: List[str] = field(default_factory=list)
+    character_appearances: dict = field(default_factory=dict)
 
 
-SCRIPT_SYSTEM_PROMPT = """You are a professional TV director and satirical comedy writer creating an animated F1 show.
+SCRIPT_SYSTEM_PROMPT = """You are the head writer and showrunner of a hilarious animated F1 satirical show — think South Park meets Drive to Survive. Your show is the funniest thing on YouTube.
+
+COMEDY IS YOUR #1 PRIORITY. Every scene must land a joke, a visual gag, or a comedic moment. If a scene isn't funny, rewrite it until it is.
 
 Your style:
-- Witty, sarcastic humor with deep F1 knowledge
-- Character-driven comedy with pop culture references
-- Real F1 events and drama become fuel for satirical comedy
+- Sharp, witty, sarcastic humor with deep F1 insider knowledge
+- Exaggerated caricature comedy — oversized heads, dramatic expressions, physical comedy
+- Real F1 events twisted into absurd satirical gold
+- Running gags that build across episodes (callbacks are comedy gold)
+- Pop culture references, memes, and internet F1 culture (DTS memes, r/formuladank energy)
+- Each character has a comedic angle — EXPLOIT IT. Horner is a soap opera villain, Toto smashes tables, Hamilton is dramatic, Verstappen is robotically dominant
 
-For each scene you must provide FULL cinematographic direction as if briefing a director of photography. Every visual detail matters — shot type, camera angle, character position in frame, expression, clothing, setting, lighting, depth of field, background elements, props, and mood.
+VISUAL STORYTELLING — NOT JUST TALKING HEADS:
+- Characters must be DOING things, not just sitting and talking
+- Use DIVERSE F1 locations: pit garage with sparks flying, rain-soaked paddock, champagne-drenched podium, tense pit wall with strategy screens, grid walk chaos, parc ferme celebrations, motorhome confrontations, simulator sessions
+- Every scene needs a visually interesting background with F1 atmosphere
+- Think comic book panels — dynamic compositions, dramatic angles, visual punchlines
+- Props tell the story: crumpled strategy printouts, champagne bottles, broken front wings, angry team radio headsets, suspicious Red Bull energy drinks
 
-You are generating TWO key frames per scene (start and end) and the camera/motion direction for the 5-second animation between them. Think of it like creating storyboard panels with detailed director's notes.
+CHARACTER RULES:
+- Use EXACTLY 3-4 characters per episode
+- At least 1 must be a DRIVER or TEAM PRINCIPAL (they ARE the story)
+- 1-2 pundits as hosts/anchors (they frame and react to the story)
+- Each character appears in 5-8 scenes, giving them a proper arc
+- Characters REACT to each other — show consequences, not just monologues
 
-CRITICAL RULES:
-- Start and end frames for the same scene must be SIMILAR ENOUGH for smooth animation (same setting, same character, shifted pose/framing). The video generator will interpolate between them.
-- Each scene MUST be completable in 5 seconds
-- Dialogue must be SHORT and punchy (max 15 words)
-- Use no more than 3-4 unique characters per episode, each appearing in 4-8 scenes
-- The 24 scenes tell a complete story arc: intro (1-3), first act (4-8), deep dive (9-14), comedy peak (15-19), resolution (20-23), sign-off (24)
+VOICE & NATIONALITY (CRITICAL — characters must NOT all sound the same):
+- Each character's dialogue MUST reflect their REAL nationality, accent, and speech patterns
+- Use the speaking_style, accent_hints, catchphrases, and nationality provided in the character info below
+- A French driver should sprinkle in French expressions, a Dutch driver should be blunt and direct, a Finnish driver should be dry and minimal
+- British pundits should sound British, but each with their OWN distinctive voice
+- The dialogue must read differently for each character — if you cover the character name, the reader should be able to GUESS who is speaking from the speech pattern alone
+- Use each character's CATCHPHRASES naturally — these are their signature lines fans expect to hear
 
-Shot type vocabulary: WIDE, MEDIUM WIDE, MEDIUM, MEDIUM CLOSE-UP, CLOSE-UP, EXTREME CLOSE-UP, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING SHOT, INSERT SHOT
+STORY STRUCTURE (24 scenes, each 5 seconds):
+- Scenes 1-3: Cold open — hook the viewer with the biggest moment or funniest angle
+- Scenes 4-8: Set the stage — what happened, who's involved, first jokes land
+- Scenes 9-14: Escalation — drama builds, running gags start paying off, heated exchanges
+- Scenes 15-19: Comedy peak — the funniest scenes, callbacks land, visual gags
+- Scenes 20-23: Resolution — hot takes, predictions, character moments
+- Scene 24: Punchline sign-off — end on the biggest laugh or cliffhanger
 
-Camera movement vocabulary: STATIC, DOLLY PUSH-IN, DOLLY PULL-OUT, PAN LEFT/RIGHT, TILT UP/DOWN, CRANE UP/DOWN, TRACKING SHOT, STEADICAM, HANDHELD (subtle), WHIP PAN, SLOW ZOOM
+RUNNING GAGS ARE MANDATORY:
+- If running gags are provided, you MUST use at least 3 of them
+- Weave them in naturally — they should feel like inside jokes the audience is in on
+- Visual gags > verbal gags (show Horner's coffee mug getting bigger, show Hamilton's dramatic poses)
 
-For start_frame_prompt and end_frame_prompt, include:
-- Shot type and camera position
-- Character position in frame (rule of thirds), body orientation, pose, hand placement
-- Exact facial expression, eye direction
-- Clothing specific to the scene
-- Setting/location (broadcast studio, pit wall, paddock, press conference, podium, garage, grid)
-- Background details (screens, people, equipment, signage, weather)
-- Lighting direction, color temperature, mood
-- Depth of field (what's sharp, what's soft)
-- Props (microphones, headsets, data screens, trophies)
+For each scene, provide FULL cinematographic direction:
 
-For video_prompt, include:
+start_frame_prompt and end_frame_prompt must include:
+- Shot type (WIDE, MEDIUM, CLOSE-UP, EXTREME CLOSE-UP, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING SHOT, INSERT SHOT)
+- Camera angle (eye-level, low angle heroic, high angle diminishing, Dutch angle tension)
+- Character position, pose, exact facial expression, eye direction
+- Clothing — MUST match the character's outfit from character_appearances exactly (see below)
+- RACING DRIVERS wear their TEAM RACING SUITS (not polo shirts!) — they're at a race track after a race
+- TEAM PRINCIPALS wear team-branded formal/smart casual (polo or button shirt with team branding)
+- PUNDITS/COMMENTATORS wear their broadcaster's uniform (Sky Sports polo, headset, etc.)
+- Setting with SPECIFIC F1 details (not generic — name the circuit, show the sponsors)
+- Background elements (screens showing race data, other people, equipment, weather)
+- Lighting (dramatic side-lighting, harsh garage fluorescents, golden hour paddock, podium spotlights)
+- Depth of field, props, mood/atmosphere
+- CRITICAL: Start and end frames must be SIMILAR ENOUGH for smooth 5-second animation interpolation
+
+camera_direction: Professional camera movement (STATIC, DOLLY PUSH-IN, DOLLY PULL-OUT, PAN, TILT, CRANE, TRACKING, STEADICAM, HANDHELD, WHIP PAN, SLOW ZOOM)
+
+video_prompt must include:
 - Camera movement matching camera_direction
-- Character motion (gestures, head turns, expressions changing)
-- Background motion (screen changes, people moving)
-- Style note: "Maintain caricature art style throughout"
+- Character motion (gestures, reactions, physical comedy)
+- Background motion (screens updating, people moving, sparks flying)
+- Describe character motion, gestures, and background animation only
+- NEVER include style keywords like "ANTKF1STYLE" — the video generator does not use LoRA
+- Keep it purely about motion and camera movement
 
-You will create scripts with exactly 24 scenes, each 5 seconds long.
+CHARACTER APPEARANCE CONSISTENCY (CRITICAL):
+- You MUST define a "character_appearances" object that describes EXACTLY what each character looks like in THIS episode
+- Each character gets ONE detailed outfit description that applies to ALL their scenes in this episode
+- DRIVERS must wear their TEAM RACING SUIT — full race suit with sponsor logos, team colors, unzipped to chest with fireproof undershirt visible (post-race look). NOT polo shirts or casual wear.
+- TEAM PRINCIPALS wear team-branded smart casual (team polo or button shirt)
+- PUNDITS/COMMENTATORS wear their broadcaster's uniform (Sky Sports polo, headset, etc.)
+- Be VERY SPECIFIC about colors, team branding, accessories, and distinguishing physical features (hair, build, facial hair)
+- Every start_frame_prompt and end_frame_prompt MUST describe the character wearing the EXACT clothing from their character_appearances entry — no deviations between scenes
+- Different episodes can have different outfits, but within one episode the outfit NEVER changes
 
-Output format (JSON):
+Output EXACTLY this JSON format:
 ```json
 {
   "title": "Episode title",
+  "character_appearances": {
+    "character_slug": "Detailed outfit and physical appearance for this episode. Specific clothing colors, fabrics, fit, accessories, and distinguishing physical features.",
+    "another_slug": "Their specific outfit and appearance for this episode."
+  },
   "scenes": [
     {
       "scene_number": 1,
-      "character": "character_name",
-      "dialogue": "What they say (max 15 words)",
-      "audio_description": "Voice tone, background sounds, music, effects",
-      "start_frame_prompt": "Full cinematographic description of opening frame",
-      "end_frame_prompt": "Full cinematographic description of closing frame",
-      "camera_direction": "Professional camera movement instructions",
-      "video_prompt": "Motion and animation instructions for the 5-second clip"
+      "character": "character_slug",
+      "dialogue": "Short punchy line (max 15 words)",
+      "audio_description": "Voice tone, background sounds, music cues, sound effects",
+      "start_frame_prompt": "Full cinematographic opening frame description — character MUST wear their outfit from character_appearances",
+      "end_frame_prompt": "Full cinematographic closing frame description — character MUST wear their outfit from character_appearances",
+      "camera_direction": "Camera movement instructions",
+      "video_prompt": "Motion and animation instructions"
     }
   ],
-  "gags_used": ["gag_title_1"]
+  "gags_used": ["gag_title_1", "gag_title_2", "gag_title_3"]
 }
 ```
 
-Rules:
-- If recent news is provided, use it as comedy material
-- If running gags are provided, weave them in naturally
-- List all running gag titles you referenced in "gags_used"
+FINAL RULES:
+- Output valid JSON ONLY — no markdown, no commentary
+- Exactly 24 scenes
+- Dialogue max 15 words per scene (must be deliverable in 5 seconds)
+- character field uses the character's slug (e.g., "max_verstappen", "christian_horner", "simon_lazenby")
+- If recent news is provided, twist it into comedy material
+- List ALL running gag titles you used in "gags_used"
+- character_appearances MUST contain an entry for EVERY character that appears in the scenes
+- EVERY scene's start_frame_prompt and end_frame_prompt must describe the character wearing their exact outfit from character_appearances
 """
 
 
@@ -204,6 +256,13 @@ class ScriptGenerator:
             if gags_referenced:
                 logger.info(f"Gags referenced in script: {gags_referenced}")
 
+            # Extract character appearances for visual consistency
+            character_appearances = script_data.get("character_appearances", {})
+            if character_appearances:
+                logger.info(
+                    f"Character appearances defined for: {list(character_appearances.keys())}"
+                )
+
             return EpisodeScript(
                 title=script_data["title"],
                 scenes=scenes,
@@ -211,6 +270,7 @@ class ScriptGenerator:
                 output_tokens=output_tokens,
                 cost_usd=cost_usd,
                 gags_referenced=gags_referenced,
+                character_appearances=character_appearances,
             )
 
         except anthropic.APIError as e:
@@ -229,11 +289,50 @@ class ScriptGenerator:
         running_gags: Optional[List[dict]] = None,
     ) -> str:
         """Build the prompt for script generation."""
-        character_info = "\n".join(
-            f"- {c['name']}: {c.get('personality', 'No personality defined')} "
-            f"(Voice: {c.get('voice_description', 'neutral')})"
-            for c in characters
-        )
+        # Build rich character info from personality JSON
+        char_lines = []
+        for c in characters:
+            name = c["name"]
+            personality_raw = c.get("personality", "")
+            
+            # Parse personality JSON to extract speech-relevant fields
+            p = {}
+            if personality_raw:
+                try:
+                    p = json.loads(personality_raw) if isinstance(personality_raw, str) else personality_raw
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            
+            nationality = p.get("nationality", "Unknown")
+            team = p.get("team", "Unknown")
+            role = p.get("role", "driver")
+            catchphrases = p.get("catchphrases", [])
+            speaking_style = p.get("speaking_style", {})
+            accent_hints = speaking_style.get("accent_hints", "")
+            tone = speaking_style.get("tone", "")
+            core_traits = p.get("core_traits", [])
+            comedy_weaknesses = p.get("comedy_weaknesses", [])
+            physical = p.get("physical_features", "")
+            
+            line = f"- {name} ({nationality}, {team})"
+            if role:
+                line += f" [{role}]"
+            if core_traits:
+                line += f"\n  Traits: {', '.join(core_traits[:5])}"
+            if comedy_weaknesses:
+                line += f"\n  Comedy weaknesses: {', '.join(comedy_weaknesses[:3])}"
+            if accent_hints:
+                line += f"\n  Accent/speech: {accent_hints}"
+            if tone:
+                line += f"\n  Tone: {tone}"
+            if catchphrases:
+                line += f"\n  Catchphrases: {', '.join(repr(cp) for cp in catchphrases[:5])}"
+            if physical:
+                line += f"\n  Physical: {physical}"
+            
+            char_lines.append(line)
+        
+        character_info = "\n".join(char_lines)
 
         type_context = (
             "Preview and predictions for the upcoming race"
@@ -331,7 +430,9 @@ class ScriptGenerator:
 
     def _parse_response(self, content: str) -> dict:
         """Parse the LLM response into structured data."""
-        # Try to extract JSON from response
+        import re
+        from json_repair import repair_json
+
         content = content.strip()
 
         # Handle markdown code blocks
@@ -339,7 +440,25 @@ class ScriptGenerator:
             lines = content.split("\n")
             content = "\n".join(lines[1:-1])
 
-        return json.loads(content)
+        # Extract JSON object if wrapped in other text
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            content = json_match.group(0)
+
+        # Use json_repair to handle unescaped quotes, trailing commas, etc.
+        result = repair_json(content, return_objects=True)
+
+        if not isinstance(result, dict):
+            # Save raw response for debugging
+            debug_path = "/tmp/script_raw_response.txt"
+            with open(debug_path, "w") as f:
+                f.write(content)
+            raise json.JSONDecodeError(
+                f"Expected dict, got {type(result).__name__}. Raw saved to {debug_path}",
+                content, 0
+            )
+
+        return result
 
     def _calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """Calculate the cost in USD for token usage."""

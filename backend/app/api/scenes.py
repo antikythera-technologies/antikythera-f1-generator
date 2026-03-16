@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.episode import Episode
+from app.config import settings
 from app.models.scene import Scene, SceneStatus
 from app.schemas.scene import SceneDetailResponse, ScenePromptUpdate
 
@@ -30,8 +31,10 @@ async def list_scenes(
     if not episode:
         raise HTTPException(status_code=404, detail="Episode not found")
 
+    from sqlalchemy.orm import selectinload
     stmt = (
         select(Scene)
+        .options(selectinload(Scene.character))
         .where(Scene.episode_id == episode_id)
         .order_by(Scene.scene_number)
     )
@@ -109,15 +112,20 @@ async def regenerate_start_frame(
     # Reset start frame status
     scene.start_frame_path = None
     scene.start_frame_prompt_final = None
-    scene.status = SceneStatus.PENDING
+    scene.status = SceneStatus.GENERATING
+    scene.last_error = None
     await db.commit()
 
-    # TODO: Enqueue regeneration job
+    from app.jobs import enqueue_scene_image
+    job_id = enqueue_scene_image(episode_id, scene_number, frame_type="start")
+
     return {
         "status": "queued",
+        "job_id": job_id,
         "episode_id": episode_id,
         "scene_number": scene_number,
         "regenerating": "start_frame",
+        "message": "Start frame image generation queued",
     }
 
 
@@ -140,14 +148,20 @@ async def regenerate_end_frame(
 
     scene.end_frame_path = None
     scene.end_frame_prompt_final = None
-    scene.status = SceneStatus.PENDING
+    scene.status = SceneStatus.GENERATING
+    scene.last_error = None
     await db.commit()
+
+    from app.jobs import enqueue_scene_image
+    job_id = enqueue_scene_image(episode_id, scene_number, frame_type="end")
 
     return {
         "status": "queued",
+        "job_id": job_id,
         "episode_id": episode_id,
         "scene_number": scene_number,
         "regenerating": "end_frame",
+        "message": "End frame image generation queued",
     }
 
 
@@ -159,24 +173,47 @@ async def regenerate_video(
     scene_number: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Regenerate the video clip using stored frames and prompts."""
+    """Regenerate the video clip using stored frames and prompts.
+
+    Supports three modes:
+    - Start frame only → single-frame image-to-video (fal.ai, RunPod Ovi)
+    - Start + end frame → dual-frame guided video (RunPod LTX)
+    - No frames → returns error (must generate images first)
+    """
     scene = await _get_scene(db, episode_id, scene_number)
 
-    if not scene.start_frame_path or not scene.end_frame_path:
+    # Need at least a start frame
+    if not scene.start_frame_path and not scene.source_image_path:
         raise HTTPException(
             status_code=400,
-            detail="Both start and end frame images must exist before regenerating video",
+            detail="At least a start frame image must exist before regenerating video. "
+                   "Use 'Regenerate Start Frame' first.",
         )
 
+    # Determine generation mode
+    has_start = bool(scene.start_frame_path or scene.source_image_path)
+    has_end = bool(scene.end_frame_path)
+    mode = "dual-frame" if has_start and has_end else "single-frame"
+
+    # Reset video assets
     scene.video_clip_path = None
-    scene.status = SceneStatus.PENDING
+    scene.audio_clip_path = None
+    scene.status = SceneStatus.GENERATING
+    scene.last_error = None
     await db.commit()
+
+    # Trigger async generation via RQ
+    from app.jobs import enqueue_scene_video
+    job_id = enqueue_scene_video(episode_id, scene_number)
 
     return {
         "status": "queued",
+        "mode": mode,
+        "job_id": job_id,
         "episode_id": episode_id,
         "scene_number": scene_number,
         "regenerating": "video",
+        "message": f"Video generation queued ({mode} mode, backend: {settings.VIDEO_GENERATOR_DEFAULT})",
     }
 
 
@@ -191,10 +228,10 @@ async def regenerate_all(
     """Regenerate start frame, end frame, and video for a scene."""
     scene = await _get_scene(db, episode_id, scene_number)
 
-    if not scene.start_frame_prompt or not scene.end_frame_prompt:
+    if not scene.start_frame_prompt:
         raise HTTPException(
             status_code=400,
-            detail="Both start and end frame prompts must be set",
+            detail="Start frame prompt must be set before regenerating",
         )
 
     # Reset all generated assets
@@ -203,14 +240,22 @@ async def regenerate_all(
     scene.end_frame_path = None
     scene.end_frame_prompt_final = None
     scene.video_clip_path = None
-    scene.status = SceneStatus.PENDING
+    scene.audio_clip_path = None
+    scene.status = SceneStatus.GENERATING
+    scene.last_error = None
     await db.commit()
+
+    # Trigger async generation via RQ
+    from app.jobs import enqueue_scene_all
+    job_id = enqueue_scene_all(episode_id, scene_number)
 
     return {
         "status": "queued",
+        "job_id": job_id,
         "episode_id": episode_id,
         "scene_number": scene_number,
         "regenerating": "all",
+        "message": f"Full regeneration queued (image + video, backend: {settings.VIDEO_GENERATOR_DEFAULT})",
     }
 
 
@@ -220,9 +265,14 @@ async def _get_scene(
     scene_number: int,
 ) -> Scene:
     """Helper to fetch a scene by episode_id and scene_number."""
-    stmt = select(Scene).where(
-        Scene.episode_id == episode_id,
-        Scene.scene_number == scene_number,
+    from sqlalchemy.orm import selectinload
+    stmt = (
+        select(Scene)
+        .options(selectinload(Scene.character))
+        .where(
+            Scene.episode_id == episode_id,
+            Scene.scene_number == scene_number,
+        )
     )
     result = await db.execute(stmt)
     scene = result.scalar_one_or_none()

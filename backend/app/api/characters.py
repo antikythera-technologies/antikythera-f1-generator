@@ -18,11 +18,7 @@ from app.schemas.character import (
     CharacterResponse,
     CharacterUpdate,
 )
-from app.services.personality import (
-    PERSONALITY_DIR,
-    find_personality_file,
-    load_personality_traits,
-)
+# Personality data loaded from DB (characters.personality column)
 from app.services.storage import StorageService
 
 logger = logging.getLogger(__name__)
@@ -127,7 +123,12 @@ async def upload_character_image(
 
     # Upload to MinIO
     storage = StorageService()
-    object_name = f"{character.name}/{image.filename}"
+    if image_type == "caricature":
+        # Caricature images always use a fixed name for consistent URLs
+        ext = image.filename.rsplit(".", 1)[-1] if "." in (image.filename or "") else "png"
+        object_name = f"{character.name}/caricature.{ext}"
+    else:
+        object_name = f"{character.name}/{image.filename}"
 
     content = await image.read()
     image_path = await storage.upload_character_image(object_name, content)
@@ -169,20 +170,19 @@ async def get_character_personality(
 ):
     """Return the full personality JSON for a character.
 
-    Reads from the personality files in character-system/personalities/.
+    Reads from the database personality column (JSON stored as text).
     """
     character = await db.get(Character, character_id)
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
 
-    personality_path = find_personality_file(character.name)
-    if not personality_path:
-        raise HTTPException(status_code=404, detail="No personality file found for this character")
+    if not character.personality:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No personality data for {character.display_name or character.name}",
+        )
 
-    with open(personality_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    return data
+    return json.loads(character.personality)
 
 
 @router.post("/{character_id}/generate-image")
@@ -193,8 +193,8 @@ async def generate_character_image(
     """Generate a new caricature image for a character using ComfyUI.
 
     Uses Flux Dev + ANTKF1STYLE LoRA + PuLID on RunPod.
-    Enriches the prompt with traits from the personality JSON files in
-    ``character-system/personalities/``.  If no matching JSON exists,
+    Enriches the prompt with personality traits from the database
+    (characters.personality column).  If no personality data exists,
     falls back to the minimal DB fields (display_name + team).
     """
     from app.services.image_generator import ImageGenerator
@@ -203,21 +203,20 @@ async def generate_character_image(
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
 
-    # ----- Try to load rich traits from personality JSON -----
-    personality_path = find_personality_file(character.name)
+    # ----- Load rich traits from database personality column -----
     personality_loaded = False
 
-    if personality_path:
+    if character.personality:
         try:
-            traits = load_personality_traits(personality_path)
+            from app.services.personality import load_personality_traits_from_db
+            traits = load_personality_traits_from_db(character.personality)
             personality_loaded = True
             logger.info(
-                f"Loaded personality traits for {character.name} "
-                f"from {personality_path.relative_to(PERSONALITY_DIR)}"
+                f"Loaded personality traits for {character.name} from DB"
             )
         except Exception as e:
             logger.warning(
-                f"Failed to load personality JSON for {character.name}: {e}. "
+                f"Failed to parse personality for {character.name}: {e}. "
                 "Falling back to DB-only traits."
             )
             traits = {

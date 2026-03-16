@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import episodes, characters, races, analytics, scheduler, news, gags, storylines, scenes
+from app.api import episodes, characters, races, analytics, scheduler, news, gags, storylines, scenes, pipeline_settings
 from app.config import settings
 from app.database import engine
 from app.models import Base
@@ -69,6 +69,7 @@ app.include_router(scheduler.router, prefix="/api/v1", tags=["Scheduler"])
 app.include_router(news.router, prefix="/api/v1", tags=["News"])
 app.include_router(gags.router, prefix="/api/v1/gags", tags=["Running Gags"])
 app.include_router(storylines.router, prefix="/api/v1/storylines", tags=["Storylines"])
+app.include_router(pipeline_settings.router, prefix="/api/v1/settings/pipeline", tags=["Settings"])
 
 
 @app.get("/")

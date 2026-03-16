@@ -12,18 +12,19 @@ The video generation pipeline -- 5 sequential phases that turn a race event into
 2. **Video Clip Generation** -- Two sub-phases, two engine options (LTX or Ovi):
    - Phase 2a: Generate scene images via ComfyUI (Flux Dev fp8 + ANTKF1STYLE LoRA + PuLID).
    - Phase 2b: Generate videos from images (LTX via ComfyUI, or Ovi via Gradio).
+   - Phase 2c: Generate TTS audio from dialogue (Edge TTS) and mux onto video clips (ffmpeg).
 3. **Stitching** -- ffmpeg concatenates 24 clips into final video (libx264, CRF 23, aac audio).
 4. **YouTube Upload** -- OAuth2 resumable upload with metadata (title, description, tags).
 5. **Cleanup** -- Delete MinIO assets older than 3 races.
 
 ## Video Generators
 
-Selected by `VIDEO_GENERATOR_DEFAULT` in `config.py` (currently `"ltx"`).
+Selected by `VIDEO_GENERATOR_DEFAULT` in `config.py` (currently `"ovi"` — LTX blocked as of 2026-03-12).
 
 | Engine | File | Class | Output | Status |
 |--------|------|-------|--------|--------|
-| LTX | `../services/ltx_video_generator.py` | `LTXVideoGenerator` | .webm | Code complete, not yet tested in production |
-| Ovi | `../services/ovi_video_generator.py` | `OviVideoGenerator` | .mp4 | Working, being phased out |
+| LTX | `../services/ltx_video_generator.py` | `LTXVideoGenerator` | .webm | BLOCKED — ComfyUI integration failed after 20h testing (2026-03-12) |
+| Ovi | `../services/ovi_video_generator.py` | `OviVideoGenerator` | .mp4 | **ACTIVE** — production engine |
 
 ## GPU Sharing Model
 
@@ -72,9 +73,11 @@ Node names that DO NOT exist (from old broken code -- never use these):
 | `../services/image_generator.py` | ComfyUI image gen (Flux + LoRA + PuLID) |
 | `../services/comfyui_client.py` | Shared HTTP client for ComfyUI API |
 | `../services/ltx_video_generator.py` | LTX 2.3 video engine |
-| `../services/ovi_video_generator.py` | Ovi video engine (legacy) |
+| `../services/ovi_video_generator.py` | Ovi video engine (**ACTIVE**) |
 | `../services/ovi_space_manager.py` | HuggingFace space lifecycle for Ovi |
 | `../services/script_generator.py` | Anthropic Haiku script generation |
+| `../services/tts_generator.py` | Edge TTS speech generation + character voice mapping |
+| `../services/audio_mixer.py` | Mux TTS audio onto silent video clips |
 | `../services/stitcher.py` | ffmpeg concatenation |
 | `../services/storage.py` | MinIO object storage |
 | `../services/personality.py` | Character personality trait loader |
@@ -103,5 +106,7 @@ Manually testing scene generation one scene at a time:
 4. Then automate with scheduler
 
 Image generation: tested and working.
-LTX video generation: coded and workflow verified, NOT yet run.
-Ovi video generation: tested previously, being phased out.
+LTX video generation: BLOCKED — ComfyUI workflow fails to produce valid output after 20h of debugging. Parked for separate audit.
+Ovi video generation: **ACTIVE production engine.** Testing scene-by-scene starting with scene_01.
+Audio (TTS): Edge TTS with 42 character voice mappings. Controlled by `TTS_ENABLED` in config. Audio failures are now FATAL (no more silent error swallowing). Post-mux validation confirms audio track exists.
+Running gags: Fully wired into pipeline — fetched from DB, passed to script generator, usage tracked after generation.

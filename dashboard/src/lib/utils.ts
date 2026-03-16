@@ -78,12 +78,15 @@ export const statusColors: Record<string, { bg: string; text: string; glow?: str
   error: { bg: "bg-racing-red/20", text: "text-racing-red", glow: "shadow-glow-red" },
 };
 
-// Get MinIO URL
-export function getMinioUrl(path: string | null): string | null {
+// Get MinIO URL with cache-busting for regenerated assets
+export function getMinioUrl(path: string | null, bustCache: boolean = false): string | null {
   if (!path) return null;
   const minioBase = process.env.NEXT_PUBLIC_MINIO_URL || "https://minio.antikythera.co.za";
-  // Path already includes bucket/key
-  return `${minioBase}/${path}`;
+  const url = `${minioBase}/${path}`;
+  if (bustCache) {
+    return `${url}?v=${Date.now()}`;
+  }
+  return url;
 }
 
 // Truncate text

@@ -434,6 +434,18 @@ export const charactersApi = {
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
     return res.json() as Promise<FaceReferenceResponse>;
   },
+  uploadCaricature: async (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    formData.append("image_type", "caricature");
+    formData.append("is_primary", "true");
+    const res = await fetch(`${API_BASE}/characters/${id}/images`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  },
   create: (data: Partial<Character>) =>
     request<Character>("/characters", {
       method: "POST",
@@ -757,6 +769,46 @@ export const storylinesApi = {
     }),
 };
 
+// Pipeline Settings types
+export type VideoGenerator = "ovi" | "ltx" | "fal-ovi" | "fal-ltx" | "fal-kling-std" | "fal-kling-std-audio" | "fal-kling-pro" | "fal-kling-pro-audio";
+export type OviQuality = "draft" | "standard" | "high" | "ultra" | "caricature";
+
+export interface PipelineSettings {
+  video_generator: VideoGenerator;
+  tts_enabled: boolean;
+  video_scene_count: number;
+  video_scene_duration_seconds: number;
+  ovi_quality: OviQuality;
+  ltx_enabled: boolean;
+}
+
+export interface PipelineSettingsUpdate {
+  video_generator?: VideoGenerator;
+  tts_enabled?: boolean;
+  ovi_quality?: OviQuality;
+}
+
+// Pipeline Settings API
+export interface ServiceBalances {
+  runpod_balance: number | null;
+  runpod_spend_per_hr: number | null;
+  runpod_pod_status: string | null;
+  fal_balance_url: string;
+  fal_status: string;
+}
+
+export const settingsApi = {
+  getPipeline: () => request<PipelineSettings>("/settings/pipeline"),
+
+  updatePipeline: (data: PipelineSettingsUpdate) =>
+    request<PipelineSettings>("/settings/pipeline", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  getBalances: () => request<ServiceBalances>("/settings/pipeline/balances"),
+};
+
 // Export all APIs
 export const api = {
   episodes: episodesApi,
@@ -768,6 +820,7 @@ export const api = {
   gags: gagsApi,
   scenes: scenesApi,
   storylines: storylinesApi,
+  settings: settingsApi,
 };
 
 export default api;

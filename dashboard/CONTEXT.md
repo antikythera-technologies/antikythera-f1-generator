@@ -23,11 +23,11 @@ Next.js 15 dashboard for monitoring and controlling the F1 video generation syst
 | `/gags` | Running Gags | CRUD, categories, usage tracking |
 | `/storylines` | Storylines | Narrative arcs, beat management |
 | `/storylines/[id]` | Storyline Detail | Beat progress, linked episodes |
-| `/settings` | Settings | Placeholder for API keys |
+| `/settings` | Settings | Video provider (Ovi/LTX), quality presets, TTS toggle, API keys |
 
 ## API Client (src/lib/api.ts)
 
-Centralized API client with 9 modules:
+Centralized API client with 10 modules:
 
 - `episodesApi` — list, get, generate, retry
 - `scenesApi` — list, get, updatePrompts, regenerateStartFrame/EndFrame/Video/All
@@ -38,6 +38,7 @@ Centralized API client with 9 modules:
 - `newsApi` — listSources, createSource, updateSource, listArticles, getArticle, fetchContent, scrape, getForEpisode
 - `gagsApi` — list, get, create, update, delete, recordUsage, forEpisode
 - `storylinesApi` — list, get, getActive, create, update, delete, advance, linkEpisode
+- `settingsApi` — getPipeline, updatePipeline (video generator, TTS, quality)
 
 ## Theme
 
@@ -78,4 +79,4 @@ npm run lint   # ESLint
 
 ## Current Development State
 
-Dashboard is functional. The Scenes page/modal was just built to enable scene-by-scene review during testing. Not all features have been thoroughly tested yet.
+Dashboard is functional. Settings page now has video provider selector (Ovi/LTX), quality presets, and TTS toggle with backend persistence. Scene viewer enables scene-by-scene review during testing.

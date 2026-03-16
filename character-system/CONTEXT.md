@@ -2,7 +2,7 @@
 
 ## What This Workspace Does
 
-Character system for the F1 satirical video series. 32 characters (21 drivers + 11 team principals) with personality definitions, face references, and generated caricatures.
+Character system for the F1 satirical video series. 42 characters (22 drivers + 11 team principals + 9 pundits) with personality definitions, face references, and generated caricatures.
 
 ## Personality JSONs
 
@@ -21,8 +21,8 @@ Loaded by `backend/app/services/personality.py` which extracts traits for image 
 
 ## Face References
 
-- Local: `face-references/` directory (44 files, all 42 active characters covered)
-- MinIO: `f1-characters/face-references/{character_name}.{ext}`
+- Source of truth: MinIO `f1-characters/face-references/{character_name}.{ext}` (53 images)
+- Synced to ComfyUI at `/workspace/comfyui/input/` before image generation
 - API: GET/POST `/characters/{id}/face-reference`
 - Pipeline flow: MinIO -> local temp -> upload to ComfyUI -> use in PuLID workflow
 - CRITICAL: Face reference photos MUST be close-up headshots for best PuLID results
@@ -40,7 +40,7 @@ Loaded by `backend/app/services/personality.py` which extracts traits for image 
 
 - 22 drivers across 10 teams (some teams have 3 listed for reserves)
 - 11 team principals
-- Pundits: folder exists but no JSONs yet
+- 9 pundits (simon_lazenby, david_croft, martin_brundle, ted_kravitz, karun_chandhok, jenson_button, nico_rosberg, natalie_pinkham, stefano_domenicali)
 
 ## Key Files
 

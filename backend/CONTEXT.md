@@ -14,6 +14,7 @@ FastAPI backend for the F1 video generation system. REST API, PostgreSQL databas
 - **Characters** (`api/characters.py`): CRUD + image upload + face reference + personality + caricature generation
 - **Races** (`api/races.py`): CRUD + calendar sync (sync not yet implemented)
 - **Scheduler** (`api/scheduler.py`): Sync calendar, list/create/cancel/trigger jobs, queue status
+- **Pipeline Settings** (`api/pipeline_settings.py`): GET/PUT runtime pipeline config (video generator, TTS, quality)
 - **News** (`api/news.py`): Sources CRUD, article scraping, context for episodes
 - **Gags** (`api/gags.py`): Running gags CRUD + usage tracking + cooldowns
 - **Storylines** (`api/storylines.py`): Multi-episode narrative arcs + beat progression
@@ -26,7 +27,7 @@ Core entities and their status fields:
 - **Episode**: PENDING -> GENERATING -> STITCHING -> UPLOADING -> PUBLISHED | FAILED
 - **Scene**: PENDING -> GENERATING -> COMPLETED | FAILED (24 per episode)
   - Has: start_frame_prompt, end_frame_prompt, camera_direction, video_prompt (for LTX dual-frame)
-  - Has: source_image_path, start_frame_path, end_frame_path, video_clip_path
+  - Has: source_image_path, start_frame_path, end_frame_path, video_clip_path, audio_clip_path
   - Has: video_generator field ("ltx" or "ovi")
 - **Character**: name, team, role, active flag -> CharacterImage (reference/style images)
 - **Race**: season, round_number, name, circuit, dates (fp1/fp2/fp3/sprint/qualifying/race)
@@ -62,8 +63,10 @@ One class per external integration:
 
 - `script_generator.py` -- Anthropic Haiku for 24-scene scripts
 - `image_generator.py` -- ComfyUI (Flux + LoRA + PuLID) for scene images
-- `ltx_video_generator.py` -- LTX 2.3 via ComfyUI for video clips (current)
-- `ovi_video_generator.py` -- Ovi via Gradio for video clips (legacy)
+- `ltx_video_generator.py` -- LTX 2.3 via ComfyUI for video clips (BLOCKED — under audit)
+- `ovi_video_generator.py` -- Ovi via Gradio for video clips (**ACTIVE**)
+- `tts_generator.py` -- Edge TTS speech generation + 42 character voice mappings
+- `audio_mixer.py` -- Mux TTS audio onto video clips via ffmpeg
 - `comfyui_client.py` -- shared HTTP client for ComfyUI API
 - `ovi_space_manager.py` -- RunPod pod lifecycle (start/stop/health)
 - `storage.py` -- MinIO object storage (4 buckets)
@@ -91,4 +94,4 @@ uv run black app/ tests/                       # Format
 
 ## Current Development State
 
-We are stepping through the pipeline scene by scene, testing each piece. The Scenes API was just built to allow viewing and editing scene prompts/images. Not everything has been tested end-to-end yet -- image generation works, video generation is being tested, stitching/YouTube upload haven't been tested yet.
+Stepping through the pipeline scene by scene. Image generation works. Ovi video generation is the **active production engine** (scene_01 tested successfully). LTX 2.3 is BLOCKED (ComfyUI integration failed after 20h; under audit). TTS audio mux tested and working. Stitching/YouTube upload haven't been tested yet.

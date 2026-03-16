@@ -34,7 +34,16 @@ class LogComponent(str, enum.Enum):
 class APIProvider(str, enum.Enum):
     """External API providers."""
     ANTHROPIC = "anthropic"
+    COMFYUI = "comfyui"
     OVI = "ovi"
+    LTX = "ltx"
+    FAL_OVI = "fal-ovi"
+    FAL_LTX = "fal-ltx"
+    FAL_KLING_STD = "fal-kling-std"
+    FAL_KLING_STD_AUDIO = "fal-kling-std-audio"
+    FAL_KLING_PRO = "fal-kling-pro"
+    FAL_KLING_PRO_AUDIO = "fal-kling-pro-audio"
+    FAL_IMAGE = "fal-image"
     YOUTUBE = "youtube"
     MINIO = "minio"
 

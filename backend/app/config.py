@@ -55,13 +55,13 @@ class Settings(BaseSettings):
 
     # Anthropic
     ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-3-haiku-20240307"
-    ANTHROPIC_MAX_TOKENS: int = 4096
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    ANTHROPIC_MAX_TOKENS: int = 16384
     ANTHROPIC_TEMPERATURE: float = 0.8
 
-    # Haiku pricing (per 1K tokens)
-    HAIKU_INPUT_COST_PER_1K: float = 0.00025
-    HAIKU_OUTPUT_COST_PER_1K: float = 0.00125
+    # Anthropic pricing (per 1K tokens) — Sonnet 4
+    HAIKU_INPUT_COST_PER_1K: float = 0.003
+    HAIKU_OUTPUT_COST_PER_1K: float = 0.015
 
     # Google Imagen 4 (legacy — kept for compatibility references)
     GOOGLE_API_KEY: str = ""
@@ -131,9 +131,17 @@ class Settings(BaseSettings):
     LTX23_VAE_TEMPORAL_OVERLAP: int = 1
     # SaveWEBM output
     LTX23_OUTPUT_CODEC: str = "vp9"
-    LTX23_OUTPUT_CRF: float = 32.0
+    LTX23_OUTPUT_CRF: float = 23.0
     COMFYUI_TIMEOUT_SECONDS: int = 600
-    VIDEO_GENERATOR_DEFAULT: str = "ltx"
+
+    # Video backend selection:
+    #   RunPod self-hosted: ovi (alias: runpod-ovi), ltx (alias: runpod-ltx)
+    #   fal.ai hosted:      fal-ovi, fal-ltx, fal-kling-std, fal-kling-std-audio,
+    #                       fal-kling-pro, fal-kling-pro-audio
+    VIDEO_GENERATOR_DEFAULT: str = "ovi"
+
+    # fal.ai API (hosted video generation)
+    FAL_KEY: str = ""
 
     # YouTube API
     YOUTUBE_CLIENT_ID: str = ""
@@ -152,6 +160,12 @@ class Settings(BaseSettings):
     VIDEO_CODEC: str = "libx264"
     VIDEO_AUDIO_CODEC: str = "aac"
     VIDEO_CRF: int = 23
+
+    # TTS (Text-to-Speech) via Edge TTS
+    TTS_ENABLED: bool = True
+    TTS_DEFAULT_VOICE: str = "en-GB-RyanNeural"
+    TTS_DEFAULT_RATE: str = "+0%"
+    TTS_MAX_TEMPO: float = 1.25  # Max speedup factor to fit dialogue in scene
 
     # Retry Configuration
     RETRY_MAX_ATTEMPTS: int = 3

@@ -71,12 +71,12 @@ async def get_upcoming_jobs(
     # Enrich with race data
     enriched = []
     for job in jobs:
-        job_dict = ScheduledJobWithRace.model_validate(job)
-        if job.race:
-            job_dict.race_name = job.race.race_name
-            job_dict.race_country = job.race.country
-            job_dict.is_sprint_weekend = job.race.is_sprint_weekend
-        enriched.append(job_dict)
+        job_data = ScheduledJobWithRace.model_validate(job, from_attributes=True)
+        if job.race_id and job.race:
+            job_data.race_name = job.race.race_name
+            job_data.race_country = job.race.country
+            job_data.is_sprint_weekend = job.race.is_sprint_weekend
+        enriched.append(job_data)
     
     return UpcomingJobsResponse(jobs=enriched, total=len(enriched))
 

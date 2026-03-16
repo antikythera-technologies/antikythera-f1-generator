@@ -34,6 +34,12 @@ rq>=1.15.1
 # Scheduling
 apscheduler>=3.10.4
 
+# Text-to-Speech
+edge-tts>=6.1.0
+
+# fal.ai (hosted video generation)
+fal-client>=0.5.0
+
 # Utilities
 python-dotenv>=1.0.0
 aiofiles>=23.2.1

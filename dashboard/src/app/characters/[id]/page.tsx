@@ -57,7 +57,9 @@ export default function CharacterDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadingCaricature, setUploadingCaricature] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const caricatureInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -96,6 +98,23 @@ export default function CharacterDetailPage() {
     }
   }
 
+  async function handleCaricatureUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingCaricature(true);
+    try {
+      await api.characters.uploadCaricature(characterId, file);
+      // Refresh character to get new primary_image_path
+      const updated = await api.characters.get(characterId);
+      setCharacter(updated);
+    } catch (err) {
+      console.error("Caricature upload failed:", err);
+    } finally {
+      setUploadingCaricature(false);
+      if (caricatureInputRef.current) caricatureInputRef.current.value = "";
+    }
+  }
+
   if (loading) return <LoadingPage text="Loading character..." />;
 
   if (error || !character) {
@@ -112,7 +131,7 @@ export default function CharacterDetailPage() {
     );
   }
 
-  const primaryImage = getMinioUrl(character.primary_image_path);
+  const primaryImage = getMinioUrl(character.primary_image_path, true);
   const p = personality;
 
   return (
@@ -155,6 +174,23 @@ export default function CharacterDetailPage() {
                 </div>
               )}
             </div>
+            <CardContent className="pt-3">
+              <input
+                ref={caricatureInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCaricatureUpload}
+                className="hidden"
+              />
+              <Button
+                variant="secondary"
+                onClick={() => caricatureInputRef.current?.click()}
+                disabled={uploadingCaricature}
+                className="w-full"
+              >
+                {uploadingCaricature ? "Uploading..." : primaryImage ? "Replace Caricature" : "Upload Caricature"}
+              </Button>
+            </CardContent>
           </Card>
 
           {/* Face Reference (PuLID source) */}

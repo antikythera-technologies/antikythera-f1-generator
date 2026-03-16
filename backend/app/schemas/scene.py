@@ -25,10 +25,18 @@ class SceneResponse(BaseModel):
     episode_id: int
     scene_number: int
     character_id: Optional[int]
+    character_name: Optional[str] = None
     status: SceneStatus
     dialogue: Optional[str]
     action_description: Optional[str]
+    audio_description: Optional[str] = None
+    source_image_path: Optional[str] = None
+    start_frame_path: Optional[str] = None
     video_clip_path: Optional[str]
+    video_generator: Optional[str] = None
+    video_prompt: Optional[str] = None
+    start_frame_prompt: Optional[str] = None
+    camera_direction: Optional[str] = None
     duration_seconds: Decimal
     generation_time_ms: Optional[int]
     retry_count: int
@@ -61,6 +69,9 @@ class SceneDetailResponse(SceneResponse):
     video_prompt: Optional[str] = None
     video_generator: Optional[str] = None
     camera_direction: Optional[str] = None
+
+    # Audio
+    audio_clip_path: Optional[str] = None
 
 
 class ScenePromptUpdate(BaseModel):

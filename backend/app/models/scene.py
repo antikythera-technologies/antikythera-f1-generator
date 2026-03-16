@@ -63,6 +63,7 @@ class Scene(Base):
     start_frame_path: Mapped[Optional[str]] = mapped_column(String(500))
     end_frame_path: Mapped[Optional[str]] = mapped_column(String(500))
     video_clip_path: Mapped[Optional[str]] = mapped_column(String(500))
+    audio_clip_path: Mapped[Optional[str]] = mapped_column(String(500))
     video_generator: Mapped[Optional[str]] = mapped_column(String(50))  # "ovi" or "ltx23"
     duration_seconds: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=5.0)
 
@@ -80,6 +81,13 @@ class Scene(Base):
     # Relationships
     episode: Mapped["Episode"] = relationship("Episode", back_populates="scenes")
     character: Mapped[Optional["Character"]] = relationship("Character", back_populates="scenes")
+
+    @property
+    def character_name(self) -> str | None:
+        """Character display name for API responses."""
+        if self.character:
+            return self.character.display_name or self.character.name
+        return None
     character_image: Mapped[Optional["CharacterImage"]] = relationship("CharacterImage", back_populates="scenes")
     logs: Mapped[list["GenerationLog"]] = relationship("GenerationLog", back_populates="scene", cascade="all, delete-orphan")
     api_usage: Mapped[list["APIUsage"]] = relationship("APIUsage", back_populates="scene", cascade="all, delete-orphan")

@@ -29,6 +29,13 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
   const [regenEndFrame, setRegenEndFrame] = useState(false);
   const [regenVideo, setRegenVideo] = useState(false);
   const [regenAll, setRegenAll] = useState(false);
+  const [regenMessage, setRegenMessage] = useState<string | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
+  
+  // Cache-buster: increments after each regeneration to force browser to reload assets
+  const [cacheBuster, setCacheBuster] = useState(0);
+  
+  const isRegenerating = regenStartFrame || regenEndFrame || regenVideo || regenAll;
 
   // Expandable sections
   const [showStartFinal, setShowStartFinal] = useState(false);
@@ -104,10 +111,23 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
 
   const handleRegenerate = async (
     action: "start-frame" | "end-frame" | "video" | "all",
-    setLoading: (v: boolean) => void
+    setLoadingState: (v: boolean) => void
   ) => {
-    if (!detail) return;
-    setLoading(true);
+    if (!detail) {
+      setRegenError("Scene details not loaded yet. Close and reopen the scene.");
+      return;
+    }
+    setLoadingState(true);
+    setRegenError(null);
+
+    const labels: Record<string, string> = {
+      "start-frame": "start frame image",
+      "end-frame": "end frame image",
+      "video": "video clip",
+      "all": "all assets (image + video)",
+    };
+    setRegenMessage(`Queuing ${labels[action]} regeneration...`);
+
     try {
       switch (action) {
         case "start-frame":
@@ -123,18 +143,62 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
           await api.scenes.regenerateAll(detail.episode_id, detail.scene_number);
           break;
       }
-      // Refresh detail after regeneration is queued
-      await fetchDetail();
+
+      // Poll scene status until it completes or fails
+      setRegenMessage(`Generating ${labels[action]}... This may take 1-5 minutes.`);
+      const maxPolls = 120; // 10 minutes max (5s intervals)
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          const updated = await api.scenes.get(detail.episode_id, detail.scene_number);
+          setDetail(updated);
+          setStartFramePrompt(updated.start_frame_prompt || "");
+          setEndFramePrompt(updated.end_frame_prompt || "");
+          setVideoPrompt(updated.video_prompt || "");
+          setCameraDirection(updated.camera_direction || "");
+
+          const elapsed = (i + 1) * 5;
+          if (updated.status === "completed") {
+            setCacheBuster((prev) => prev + 1);
+            setRegenMessage(`${labels[action]} regenerated successfully! (${elapsed}s)`);
+            setTimeout(() => setRegenMessage(null), 5000);
+            return;
+          } else if (updated.status === "failed") {
+            setRegenError(
+              `${labels[action]} failed: ${updated.last_error || "Unknown error"}`
+            );
+            setRegenMessage(null);
+            return;
+          }
+          // Still generating — update message with elapsed time
+          setRegenMessage(
+            `Generating ${labels[action]}... ${elapsed}s elapsed`
+          );
+        } catch {
+          // Network error during poll — keep trying
+        }
+      }
+      setRegenError(`${labels[action]} timed out after 10 minutes`);
+      setRegenMessage(null);
     } catch (err) {
       console.error(`Failed to regenerate ${action}:`, err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setRegenError(`Failed to regenerate ${labels[action]}: ${msg}`);
+      setRegenMessage(null);
     } finally {
-      setLoading(false);
+      setLoadingState(false);
     }
   };
 
-  const startFrameUrl = getMinioUrl(detail?.start_frame_path || null) || getMinioUrl(detail?.source_image_path || null);
-  const endFrameUrl = getMinioUrl(detail?.end_frame_path || null);
-  const videoUrl = getMinioUrl(detail?.video_clip_path || scene.video_clip_path || null);
+  // Append cacheBuster to force browser to reload after regeneration
+  const addCacheBuster = (url: string | null) => {
+    if (!url || cacheBuster === 0) return url;
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}v=${cacheBuster}`;
+  };
+  const startFrameUrl = addCacheBuster(getMinioUrl(detail?.start_frame_path || null) || getMinioUrl(detail?.source_image_path || null));
+  const endFrameUrl = addCacheBuster(getMinioUrl(detail?.end_frame_path || null));
+  const videoUrl = addCacheBuster(getMinioUrl(detail?.video_clip_path || scene.video_clip_path || null));
 
   return (
     <>
@@ -202,6 +266,54 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
             </div>
           ) : detail ? (
             <div className="space-y-6 p-6">
+              {/* Regeneration Status Overlay */}
+              {(isRegenerating || regenMessage || regenError) && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-deep-space/80 backdrop-blur-sm">
+                  <div className="mx-4 w-full max-w-md rounded-2xl border border-white/10 bg-twilight p-8 shadow-2xl">
+                    {regenError ? (
+                      <>
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-racing-red/20">
+                          <svg className="h-8 w-8 text-racing-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </div>
+                        <h3 className="mb-2 text-center text-lg font-bold text-white">Generation Failed</h3>
+                        <p className="mb-6 text-center text-sm text-racing-red">{regenError}</p>
+                        <button
+                          onClick={() => { setRegenError(null); setRegenMessage(null); }}
+                          className="w-full rounded-lg bg-white/10 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/20"
+                        >
+                          Dismiss
+                        </button>
+                      </>
+                    ) : regenMessage && !isRegenerating ? (
+                      <>
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-neon-cyan/20">
+                          <svg className="h-8 w-8 text-neon-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                        <h3 className="mb-2 text-center text-lg font-bold text-white">Complete</h3>
+                        <p className="mb-6 text-center text-sm text-neon-cyan">{regenMessage}</p>
+                        <button
+                          onClick={() => setRegenMessage(null)}
+                          className="w-full rounded-lg bg-neon-cyan/20 py-2.5 text-sm font-medium text-neon-cyan transition-colors hover:bg-neon-cyan/30"
+                        >
+                          Done
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-neon-cyan/30 border-t-neon-cyan" />
+                        <h3 className="mb-2 text-center text-lg font-bold text-white">Generating...</h3>
+                        <p className="mb-1 text-center text-sm text-white/70">{regenMessage}</p>
+                        <p className="text-center text-xs text-white/40">Do not close this window</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Media Section */}
               <section>
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/50">Media</h3>
@@ -304,7 +416,7 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     <textarea
                       value={startFramePrompt}
                       onChange={(e) => setStartFramePrompt(e.target.value)}
-                      rows={3}
+                      rows={8}
                       className="w-full rounded-lg border border-white/10 bg-twilight/50 px-3 py-2 text-sm text-white/90 placeholder-white/30 transition-colors focus:border-neon-cyan/50 focus:outline-none focus:ring-1 focus:ring-neon-cyan/30 resize-y"
                       placeholder="Enter start frame prompt..."
                     />
@@ -341,7 +453,7 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     <textarea
                       value={endFramePrompt}
                       onChange={(e) => setEndFramePrompt(e.target.value)}
-                      rows={3}
+                      rows={8}
                       className="w-full rounded-lg border border-white/10 bg-twilight/50 px-3 py-2 text-sm text-white/90 placeholder-white/30 transition-colors focus:border-neon-cyan/50 focus:outline-none focus:ring-1 focus:ring-neon-cyan/30 resize-y"
                       placeholder="Enter end frame prompt..."
                     />
@@ -378,7 +490,7 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     <textarea
                       value={videoPrompt}
                       onChange={(e) => setVideoPrompt(e.target.value)}
-                      rows={2}
+                      rows={6}
                       className="w-full rounded-lg border border-white/10 bg-twilight/50 px-3 py-2 text-sm text-white/90 placeholder-white/30 transition-colors focus:border-neon-cyan/50 focus:outline-none focus:ring-1 focus:ring-neon-cyan/30 resize-y"
                       placeholder="Enter video prompt..."
                     />

@@ -10,7 +10,7 @@ interface CharacterCardProps {
 }
 
 export function CharacterCard({ character }: CharacterCardProps) {
-  const imageUrl = getMinioUrl(character.primary_image_path);
+  const imageUrl = getMinioUrl(character.primary_image_path, true);
 
   return (
     <Link href={`/characters/${character.id}`}>

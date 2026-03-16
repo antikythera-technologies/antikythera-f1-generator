@@ -1,16 +1,11 @@
 """LTX 2.3 video generation service via ComfyUI.
 
-Generates 5-second video clips using first-frame + last-frame conditioning.
-The model interpolates between start and end images based on a text prompt
-describing the camera movement and character motion.
-
-ComfyUI workflow chain (17 nodes):
-  CheckpointLoaderSimple -> CLIPTextEncode(pos) + CLIPTextEncode(neg)
-  -> LTXVConditioning -> EmptyLTXVLatentVideo
-  -> LTXVAddGuide(start, frame_idx=0) -> LTXVAddGuide(end, frame_idx=-1)
-  -> LTXVApplySTG -> STGGuiderAdvanced -> LTXVScheduler
-  -> KSamplerSelect -> RandomNoise -> SamplerCustomAdvanced
-  -> LTXVSpatioTemporalTiledVAEDecode -> SaveWEBM
+Two workflow modes:
+  1. **AV mode (default)**: Single start-frame + native audio generation.
+     Uses LTXVImgToVideo + LTXVConcatAVLatent for joint audio-video denoising.
+     Produces .mp4 with embedded audio (ambient F1 sounds).
+  2. **Dual-frame mode (legacy)**: Start + end frame with STG sampling.
+     Video-only output (.webm). Audio must be muxed separately via TTS pipeline.
 """
 
 import logging
@@ -52,6 +47,7 @@ class LTXVideoGenerator:
 
     PRESETS = {
         "caricature": {
+            # Fast drafts — low steps, strong frame lock
             "steps": 18,
             "stg_block_indices": "14, 19",
             "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
@@ -63,6 +59,7 @@ class LTXVideoGenerator:
             "end_frame_strength": 1.0,
         },
         "standard": {
+            # Balanced quality — more steps, softer end frame
             "steps": 20,
             "stg_block_indices": "14, 19",
             "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
@@ -71,9 +68,25 @@ class LTXVideoGenerator:
             "stg_rescale_values": "1, 1, 1, 1, 1, 1",
             "stg_layers_indices": "[29], [29], [29], [29], [29], [29]",
             "start_frame_strength": 1.0,
-            "end_frame_strength": 1.0,
+            "end_frame_strength": 0.85,
+        },
+        "production": {
+            # Production quality — smooth output, no end-frame flicker.
+            # Higher steps for smoother denoising, softer end-frame
+            # conditioning to prevent snapping, moderate CFG for stable
+            # style preservation.
+            "steps": 25,
+            "stg_block_indices": "14, 19",
+            "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
+            "cfg_values": "8, 6, 6, 4, 3, 1",
+            "stg_scale_values": "3, 3, 2, 2, 1, 0",
+            "stg_rescale_values": "1, 1, 1, 1, 1, 1",
+            "stg_layers_indices": "[29], [29], [29], [29], [29], [29]",
+            "start_frame_strength": 1.0,
+            "end_frame_strength": 0.80,
         },
         "high_motion": {
+            # Maximum motion freedom — for action scenes
             "steps": 25,
             "stg_block_indices": "14, 19",
             "sigmas": "1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180",
@@ -82,7 +95,7 @@ class LTXVideoGenerator:
             "stg_rescale_values": "1, 1, 1, 1, 1, 1",
             "stg_layers_indices": "[29], [29], [29], [29], [29], [29]",
             "start_frame_strength": 0.9,
-            "end_frame_strength": 0.9,
+            "end_frame_strength": 0.80,
         },
     }
 
@@ -157,11 +170,23 @@ class LTXVideoGenerator:
 
         workflow: dict[str, Any] = {}
 
-        # --- Node 1: CheckpointLoaderSimple (loads MODEL, CLIP, VAE) ---
+        # --- Node 1: CheckpointLoaderSimple (loads MODEL, CLIP=None, VAE) ---
+        # LTX checkpoints do NOT include a text encoder — CLIP output is None.
         workflow["1"] = {
             "class_type": "CheckpointLoaderSimple",
             "inputs": {
                 "ckpt_name": settings.LTX23_MODEL_NAME,
+            },
+        }
+
+        # --- Node 1b: LTXAVTextEncoderLoader (loads text encoder separately) ---
+        # Required because LTX checkpoint's CLIP slot is empty.
+        workflow["1b"] = {
+            "class_type": "LTXAVTextEncoderLoader",
+            "inputs": {
+                "text_encoder": settings.LTX23_TEXT_ENCODER,
+                "ckpt_name": settings.LTX23_MODEL_NAME,
+                "device": "default",
             },
         }
 
@@ -186,7 +211,7 @@ class LTXVideoGenerator:
             "class_type": "CLIPTextEncode",
             "inputs": {
                 "text": video_prompt,
-                "clip": ["1", 1],  # CLIP from CheckpointLoaderSimple
+                "clip": ["1b", 0],  # CLIP from LTXAVTextEncoderLoader
             },
         }
 
@@ -195,7 +220,7 @@ class LTXVideoGenerator:
             "class_type": "CLIPTextEncode",
             "inputs": {
                 "text": "blurry, distorted, low quality, static, frozen",
-                "clip": ["1", 1],  # CLIP from CheckpointLoaderSimple
+                "clip": ["1b", 0],  # CLIP from LTXAVTextEncoderLoader
             },
         }
 
@@ -345,6 +370,175 @@ class LTXVideoGenerator:
 
         return workflow
 
+    def _build_av_workflow(
+        self,
+        start_frame_filename: str,
+        video_prompt: str,
+        seed: int,
+        width: int | None = None,
+        height: int | None = None,
+        frame_count: int | None = None,
+    ) -> dict[str, Any]:
+        """Build Audio-Visual workflow: single start frame + native audio.
+
+        15-node workflow:
+          CheckpointLoaderSimple -> LTXAVTextEncoderLoader ->
+          CLIPTextEncode(pos/neg) -> LoadImage -> LTXVImgToVideo ->
+          LTXVAudioVAELoader -> LTXVEmptyLatentAudio -> LTXVConcatAVLatent ->
+          KSampler -> LTXVSeparateAVLatent -> VAEDecode + LTXVAudioVAEDecode ->
+          CreateVideo -> SaveVideo
+        """
+        w = width or settings.LTX23_WIDTH
+        h = height or settings.LTX23_HEIGHT
+        frames = frame_count or settings.LTX23_FRAME_COUNT
+        fps = settings.LTX23_FPS
+
+        neg_prompt = "blurry, distorted, deformed, ugly, low quality, photorealistic, style change, morphing"
+
+        workflow: dict[str, Any] = {}
+
+        # 1: Load LTX-2 checkpoint → MODEL, CLIP(null), VAE
+        workflow["1"] = {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": settings.LTX23_MODEL_NAME},
+        }
+
+        # 2: Load text encoder (Gemma 3 12B) → CLIP
+        workflow["2"] = {
+            "class_type": "LTXAVTextEncoderLoader",
+            "inputs": {
+                "text_encoder": settings.LTX23_TEXT_ENCODER,
+                "ckpt_name": settings.LTX23_MODEL_NAME,
+                "device": "default",
+            },
+        }
+
+        # 3: Positive text conditioning
+        workflow["3"] = {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": video_prompt, "clip": ["2", 0]},
+        }
+
+        # 4: Negative text conditioning
+        workflow["4"] = {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": neg_prompt, "clip": ["2", 0]},
+        }
+
+        # 5: Load source image
+        workflow["5"] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": start_frame_filename},
+        }
+
+        # 6: Image-to-video conditioning (single start frame, no end frame)
+        workflow["6"] = {
+            "class_type": "LTXVImgToVideo",
+            "inputs": {
+                "positive": ["3", 0],
+                "negative": ["4", 0],
+                "vae": ["1", 2],
+                "image": ["5", 0],
+                "width": w,
+                "height": h,
+                "length": frames,
+                "batch_size": 1,
+                "strength": self.start_frame_strength,
+            },
+        }
+
+        # 7: Load audio VAE
+        workflow["7"] = {
+            "class_type": "LTXVAudioVAELoader",
+            "inputs": {"ckpt_name": "LTX2_audio_vae_bf16.safetensors"},
+        }
+
+        # 8: Create empty audio latent
+        workflow["8"] = {
+            "class_type": "LTXVEmptyLatentAudio",
+            "inputs": {
+                "frames_number": frames,
+                "frame_rate": fps,
+                "batch_size": 1,
+                "audio_vae": ["7", 0],
+            },
+        }
+
+        # 9: Concatenate video + audio latents
+        workflow["9"] = {
+            "class_type": "LTXVConcatAVLatent",
+            "inputs": {
+                "video_latent": ["6", 2],
+                "audio_latent": ["8", 0],
+            },
+        }
+
+        # 10: KSampler — joint audio+video denoising
+        # denoise=1.0 is CRITICAL: audio latent starts empty and needs full denoising.
+        # LTXVImgToVideo conditioning handles image guidance independently.
+        workflow["10"] = {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["1", 0],
+                "positive": ["6", 0],
+                "negative": ["6", 1],
+                "latent_image": ["9", 0],
+                "seed": seed,
+                "steps": self.steps,
+                "cfg": 4.0,
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "denoise": 1.0,
+            },
+        }
+
+        # 11: Separate audio and video latents
+        workflow["11"] = {
+            "class_type": "LTXVSeparateAVLatent",
+            "inputs": {"av_latent": ["10", 0]},
+        }
+
+        # 12: Decode video latent → image frames
+        workflow["12"] = {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["11", 0],
+                "vae": ["1", 2],
+            },
+        }
+
+        # 13: Decode audio latent → audio waveform
+        workflow["13"] = {
+            "class_type": "LTXVAudioVAEDecode",
+            "inputs": {
+                "samples": ["11", 1],
+                "audio_vae": ["7", 0],
+            },
+        }
+
+        # 14: Create video from frames + audio
+        workflow["14"] = {
+            "class_type": "CreateVideo",
+            "inputs": {
+                "images": ["12", 0],
+                "audio": ["13", 0],
+                "fps": float(fps),
+            },
+        }
+
+        # 15: Save video as mp4
+        workflow["15"] = {
+            "class_type": "SaveVideo",
+            "inputs": {
+                "video": ["14", 0],
+                "filename_prefix": "ltx23_av",
+                "format": "mp4",
+                "codec": "h264",
+            },
+        }
+
+        return workflow
+
     # ------------------------------------------------------------------
     # Public generation method
     # ------------------------------------------------------------------
@@ -353,27 +547,31 @@ class LTXVideoGenerator:
         self,
         scene_number: int,
         start_frame_path: str,
-        end_frame_path: str,
         video_prompt: str,
+        end_frame_path: str | None = None,
         dialogue: str | None = None,
         audio_description: str | None = None,
         seed: int | None = None,
+        use_av: bool = True,
     ) -> LTXVideoClip:
-        """Generate a 5-second video clip from start and end frame images.
+        """Generate a 5-second video clip with optional native audio.
 
         Args:
             scene_number: Scene number (1-24).
             start_frame_path: Local path to the start frame image.
-            end_frame_path: Local path to the end frame image.
             video_prompt: Text prompt describing camera movement and action.
-            dialogue: Optional dialogue (for future audio sync).
-            audio_description: Optional audio description (for future audio).
+            end_frame_path: Optional end frame (only for dual-frame mode).
+            dialogue: Optional dialogue text (unused by LTX, for pipeline metadata).
+            audio_description: Optional audio description (unused currently).
             seed: Optional seed for reproducibility. -1 or None = random.
+            use_av: If True (default), use AV workflow with native audio.
+                    If False, use legacy dual-frame video-only workflow.
 
         Returns:
             LTXVideoClip with path to generated video and metadata.
         """
-        logger.info(f"Scene {scene_number}: Starting LTX 2.3 video generation")
+        mode = "AV" if use_av else "dual-frame"
+        logger.info(f"Scene {scene_number}: Starting LTX 2.3 {mode} generation")
 
         # Determine seed
         if seed is None or seed == -1:
@@ -389,32 +587,44 @@ class LTXVideoGenerator:
 
         start_time = time.time()
 
-        # Upload both frames to ComfyUI
+        # Upload start frame
         start_filename = f"ltx23_scene{scene_number:02d}_start.png"
-        end_filename = f"ltx23_scene{scene_number:02d}_end.png"
-
         logger.info(f"Scene {scene_number}: Uploading start frame...")
         start_stored = await self.client.upload_image(
             start_frame_path, start_filename
         )
 
-        logger.info(f"Scene {scene_number}: Uploading end frame...")
-        end_stored = await self.client.upload_image(
-            end_frame_path, end_filename
-        )
-
-        # Build and queue workflow
-        workflow = self._build_workflow(
-            start_frame_filename=start_stored,
-            end_frame_filename=end_stored,
-            video_prompt=full_prompt,
-            seed=actual_seed,
-        )
+        if use_av:
+            # AV workflow: single start frame + native audio
+            workflow = self._build_av_workflow(
+                start_frame_filename=start_stored,
+                video_prompt=full_prompt,
+                seed=actual_seed,
+            )
+            output_ext = ".mp4"
+        else:
+            # Legacy dual-frame workflow (video-only)
+            if not end_frame_path:
+                raise LTXVideoGenerationError(
+                    f"Scene {scene_number}: end_frame_path required for dual-frame mode"
+                )
+            end_filename = f"ltx23_scene{scene_number:02d}_end.png"
+            logger.info(f"Scene {scene_number}: Uploading end frame...")
+            end_stored = await self.client.upload_image(
+                end_frame_path, end_filename
+            )
+            workflow = self._build_workflow(
+                start_frame_filename=start_stored,
+                end_frame_filename=end_stored,
+                video_prompt=full_prompt,
+                seed=actual_seed,
+            )
+            output_ext = ".webm"
 
         prompt_id = await self.client.queue_prompt(workflow)
         logger.info(f"Scene {scene_number}: ComfyUI prompt queued: {prompt_id}")
 
-        # Poll for completion
+        # Poll for completion (AV takes ~130s, video-only ~60s)
         outputs = await self.client.poll_for_completion(
             prompt_id,
             timeout=float(settings.COMFYUI_TIMEOUT_SECONDS),
@@ -425,13 +635,13 @@ class LTXVideoGenerator:
 
         # Save to local file
         output_path = (
-            self.output_dir / f"ltx23_scene_{scene_number:02d}_{actual_seed}.webm"
+            self.output_dir / f"ltx23_scene_{scene_number:02d}_{actual_seed}{output_ext}"
         )
         output_path.write_bytes(video_bytes)
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         logger.info(
-            f"Scene {scene_number}: LTX 2.3 video generated in {elapsed_ms}ms "
+            f"Scene {scene_number}: LTX 2.3 {mode} video generated in {elapsed_ms}ms "
             f"(seed={actual_seed}, {len(video_bytes)} bytes)"
         )
 
@@ -454,11 +664,11 @@ class LTXVideoGenerator:
     ) -> bytes:
         """Extract video bytes from ComfyUI workflow outputs.
 
-        Tries node "17" (SaveWEBM) first, then falls back to searching
-        all nodes for video/image output.
+        Tries AV output node "15" (SaveVideo) first, then legacy node "17"
+        (SaveWEBM), then falls back to searching all nodes.
         """
-        # Try the expected output node (SaveWEBM at node 17)
-        video_node = outputs.get("17")
+        # Try AV output node (SaveVideo at node 15), then legacy (SaveWEBM at 17)
+        video_node = outputs.get("15") or outputs.get("17")
         if video_node:
             # SaveWEBM outputs in "videos" key
             videos = video_node.get("videos", [])

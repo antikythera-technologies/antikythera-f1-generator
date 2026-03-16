@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.episode import Episode, EpisodeStatus, EpisodeType
 from app.models.race import Race
+from app.models.scene import Scene
 from app.jobs import enqueue_pipeline
 from app.schemas.episode import (
     EpisodeDetailResponse,
@@ -122,7 +123,10 @@ async def get_episode(
     """Get episode details."""
     stmt = (
         select(Episode)
-        .options(selectinload(Episode.race), selectinload(Episode.scenes))
+        .options(
+            selectinload(Episode.race),
+            selectinload(Episode.scenes).selectinload(Scene.character),
+        )
         .where(Episode.id == episode_id)
     )
     result = await db.execute(stmt)
