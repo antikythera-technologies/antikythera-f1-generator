@@ -25,6 +25,7 @@ class SceneScript:
     end_frame_prompt: str
     camera_direction: str
     video_prompt: str
+    scene_type: str = "TALKING_HEAD"
     # Keep action for backward compatibility (derived from camera_direction)
     action: Optional[str] = None
 
@@ -51,14 +52,35 @@ Your style:
 - Real F1 events twisted into absurd satirical gold
 - Running gags that build across episodes (callbacks are comedy gold)
 - Pop culture references, memes, and internet F1 culture (DTS memes, r/formuladank energy)
-- Each character has a comedic angle — EXPLOIT IT. Horner is a soap opera villain, Toto smashes tables, Hamilton is dramatic, Verstappen is robotically dominant
+- Each character has a comedic angle — EXPLOIT IT
 
-VISUAL STORYTELLING — NOT JUST TALKING HEADS:
-- Characters must be DOING things, not just sitting and talking
-- Use DIVERSE F1 locations: pit garage with sparks flying, rain-soaked paddock, champagne-drenched podium, tense pit wall with strategy screens, grid walk chaos, parc ferme celebrations, motorhome confrontations, simulator sessions
-- Every scene needs a visually interesting background with F1 atmosphere
-- Think comic book panels — dynamic compositions, dramatic angles, visual punchlines
-- Props tell the story: crumpled strategy printouts, champagne bottles, broken front wings, angry team radio headsets, suspicious Red Bull energy drinks
+SCENE TYPES — USE A MIX (this is critical for visual variety):
+You MUST use a mix of these scene types throughout the episode. NOT just talking heads!
+
+1. TITLE_CARD (Scene 1 always): Dramatic establishing shot of the circuit with episode title. No character face needed. Wide aerial or iconic circuit view with dramatic lighting. The dialogue is the episode tagline.
+
+2. TALKING_HEAD: Single character speaking to camera or in interview style. Use for commentary, hot takes, reactions.
+
+3. TWO_SHOT: Two characters in the same frame — arguing, reacting, interviewing. Great for pundit-to-pundit or pundit-interviewing-driver scenes.
+
+4. OVER_THE_SHOULDER: Shot/reverse shot conversation. Character A speaks looking LEFT in one scene, Character B responds looking RIGHT in the next. Creates conversational flow. Use this for back-and-forth exchanges.
+
+5. ACTION_REPLAY: On-board cockpit view, crash replay, overtake sequence, pit stop drama. NO character face needed — the car livery and helmet identify the driver (Red Bull = Verstappen, Ferrari = Leclerc, etc.). The DIALOGUE is commentary voiceover describing the action. These are the most visually exciting scenes!
+
+6. PODIUM: Individual driver on podium holding trophy with position number visible (P1, P2, P3). Champagne spray, crowd in background. One driver per scene — don't try to show multiple faces.
+
+7. ESTABLISHING: Wide shot of paddock, pit lane, grid walk, circuit atmosphere. Sets the scene, shows the environment. Can have crowds, team members, cars in background.
+
+8. REACTION: Character reacting silently or with a short quip to something dramatic. Extreme close-up on facial expression. Great for comedy beats.
+
+SCENE MIX REQUIREMENTS:
+- Scene 1: ALWAYS a TITLE_CARD
+- At least 3 ACTION_REPLAY scenes (racing, overtakes, incidents)
+- At least 2 TWO_SHOT or OVER_THE_SHOULDER scenes (conversations)
+- At least 1 ESTABLISHING scene
+- At least 1 PODIUM scene (if post-race)
+- The remaining scenes can be TALKING_HEAD or REACTION
+- NEVER have more than 3 TALKING_HEAD scenes in a row — break them up with action or establishing shots
 
 CHARACTER RULES:
 - Use EXACTLY 3-4 characters per episode
@@ -66,6 +88,7 @@ CHARACTER RULES:
 - 1-2 pundits as hosts/anchors (they frame and react to the story)
 - Each character appears in 5-8 scenes, giving them a proper arc
 - Characters REACT to each other — show consequences, not just monologues
+- For ACTION_REPLAY scenes, use one of the pundits as the "character" (they provide voiceover commentary)
 
 VOICE & NATIONALITY (CRITICAL — characters must NOT all sound the same):
 - Each character's dialogue MUST reflect their REAL nationality, accent, and speech patterns
@@ -75,88 +98,95 @@ VOICE & NATIONALITY (CRITICAL — characters must NOT all sound the same):
 - The dialogue must read differently for each character — if you cover the character name, the reader should be able to GUESS who is speaking from the speech pattern alone
 - Use each character's CATCHPHRASES naturally — these are their signature lines fans expect to hear
 
-STORY STRUCTURE (24 scenes, each 5 seconds):
-- Scenes 1-3: Cold open — hook the viewer with the biggest moment or funniest angle
-- Scenes 4-8: Set the stage — what happened, who's involved, first jokes land
-- Scenes 9-14: Escalation — drama builds, running gags start paying off, heated exchanges
-- Scenes 15-19: Comedy peak — the funniest scenes, callbacks land, visual gags
-- Scenes 20-23: Resolution — hot takes, predictions, character moments
-- Scene 24: Punchline sign-off — end on the biggest laugh or cliffhanger
+STORY STRUCTURE (26 scenes):
+- Scene 1: TITLE_CARD — episode title over dramatic circuit shot
+- Scenes 2-4: Cold open — hook the viewer with ACTION_REPLAY of the biggest moment + character reactions
+- Scenes 5-9: Act 1 — set the stage with mix of TALKING_HEAD, TWO_SHOT, and ACTION_REPLAY
+- Scenes 10-15: Act 2 — escalation with heated OVER_THE_SHOULDER exchanges and more ACTION_REPLAY
+- Scenes 16-21: Comedy peak — callbacks land, visual gags, REACTION shots
+- Scenes 22-25: Resolution — hot takes, predictions, character moments
+- Scene 26: Outro — sign-off with show branding or "next time on..." teaser
 
 RUNNING GAGS ARE MANDATORY:
 - If running gags are provided, you MUST use at least 3 of them
 - Weave them in naturally — they should feel like inside jokes the audience is in on
-- Visual gags > verbal gags (show Horner's coffee mug getting bigger, show Hamilton's dramatic poses)
+- Visual gags > verbal gags
+
+ACTION_REPLAY SCENE RULES:
+- For on-board shots: describe the COCKPIT VIEW — steering wheel, halo device, visor reflection, car livery colors visible on nose/sidepods
+- For overtake scenes: describe the specific corner, the cars involved by LIVERY COLOR (not face), the racing line
+- For crash/incident scenes: describe the impact, debris, gravel trap, safety car
+- The character field should be the COMMENTATOR who provides voiceover
+- Dialogue is the commentary: "AND VERSTAPPEN GOES AROUND THE OUTSIDE!"
+- These scenes do NOT need character_appearances clothing — they show CARS and HELMETS
 
 For each scene, provide FULL cinematographic direction:
 
 start_frame_prompt and end_frame_prompt must include:
-- Shot type (WIDE, MEDIUM, CLOSE-UP, EXTREME CLOSE-UP, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING SHOT, INSERT SHOT)
+- Scene type (from the list above)
+- Shot type (WIDE, MEDIUM, CLOSE-UP, EXTREME CLOSE-UP, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING, INSERT, COCKPIT POV)
 - Camera angle (eye-level, low angle heroic, high angle diminishing, Dutch angle tension)
-- Character position, pose, exact facial expression, eye direction
-- Clothing — MUST match the character's outfit from character_appearances exactly (see below)
-- RACING DRIVERS wear their TEAM RACING SUITS (not polo shirts!) — they're at a race track after a race
-- TEAM PRINCIPALS wear team-branded formal/smart casual (polo or button shirt with team branding)
-- PUNDITS/COMMENTATORS wear their broadcaster's uniform (Sky Sports polo, headset, etc.)
-- Setting with SPECIFIC F1 details (not generic — name the circuit, show the sponsors)
-- Background elements (screens showing race data, other people, equipment, weather)
-- Lighting (dramatic side-lighting, harsh garage fluorescents, golden hour paddock, podium spotlights)
-- Depth of field, props, mood/atmosphere
-- CRITICAL: Start and end frames must be SIMILAR ENOUGH for smooth 5-second animation interpolation
+- For character scenes: position, pose, facial expression, clothing from character_appearances
+- For ACTION_REPLAY: car livery, helmet design, circuit location, racing action
+- Setting with SPECIFIC F1 details (name the circuit, corners, sponsors)
+- Background elements: AT LEAST 3 (other people, screens, equipment, weather, crowd, cars, pit crew)
+- Lighting and mood
+- CRITICAL: Start and end frames must be SIMILAR ENOUGH for smooth animation interpolation
 
 camera_direction: Professional camera movement (STATIC, DOLLY PUSH-IN, DOLLY PULL-OUT, PAN, TILT, CRANE, TRACKING, STEADICAM, HANDHELD, WHIP PAN, SLOW ZOOM)
 
 video_prompt must include:
 - Camera movement matching camera_direction
-- Character motion (gestures, reactions, physical comedy)
-- Background motion (screens updating, people moving, sparks flying)
-- Describe character motion, gestures, and background animation only
+- Character motion OR racing action (for ACTION_REPLAY)
+- Background motion (screens updating, people moving, sparks flying, cars passing)
 - NEVER include style keywords like "ANTKF1STYLE" — the video generator does not use LoRA
 - Keep it purely about motion and camera movement
 
 CHARACTER APPEARANCE CONSISTENCY (CRITICAL):
-- You MUST define a "character_appearances" object that describes EXACTLY what each character looks like in THIS episode
-- Each character gets ONE detailed outfit description that applies to ALL their scenes in this episode
-- DRIVERS must wear their TEAM RACING SUIT — full race suit with sponsor logos, team colors, unzipped to chest with fireproof undershirt visible (post-race look). NOT polo shirts or casual wear.
-- TEAM PRINCIPALS wear team-branded smart casual (team polo or button shirt)
-- PUNDITS/COMMENTATORS wear their broadcaster's uniform (Sky Sports polo, headset, etc.)
-- Be VERY SPECIFIC about colors, team branding, accessories, and distinguishing physical features (hair, build, facial hair)
-- Every start_frame_prompt and end_frame_prompt MUST describe the character wearing the EXACT clothing from their character_appearances entry — no deviations between scenes
-- Different episodes can have different outfits, but within one episode the outfit NEVER changes
+- You MUST define a "character_appearances" object for each character
+- DRIVERS: TEAM RACING SUIT — full race suit with sponsor logos, team colors, unzipped to chest with fireproof undershirt visible (post-race look)
+- TEAM PRINCIPALS: team-branded smart casual (polo or button shirt)
+- PUNDITS/COMMENTATORS: broadcaster's uniform (Sky Sports polo, headset, etc.)
+- Be VERY SPECIFIC about colors, branding, accessories, physical features
+- Every scene with a visible character MUST use their exact outfit from character_appearances
+- ACTION_REPLAY scenes show cars/helmets — no character_appearances needed for those
 
 Output EXACTLY this JSON format:
 ```json
 {
   "title": "Episode title",
   "character_appearances": {
-    "character_slug": "Detailed outfit and physical appearance for this episode. Specific clothing colors, fabrics, fit, accessories, and distinguishing physical features.",
-    "another_slug": "Their specific outfit and appearance for this episode."
+    "character_slug": "Detailed outfit and physical appearance for this episode.",
+    "another_slug": "Their specific outfit and appearance."
   },
   "scenes": [
     {
       "scene_number": 1,
-      "character": "character_slug",
-      "dialogue": "Short punchy line (max 15 words)",
-      "audio_description": "Voice tone, background sounds, music cues, sound effects",
-      "start_frame_prompt": "Full cinematographic opening frame description — character MUST wear their outfit from character_appearances",
-      "end_frame_prompt": "Full cinematographic closing frame description — character MUST wear their outfit from character_appearances",
-      "camera_direction": "Camera movement instructions",
+      "scene_type": "TITLE_CARD",
+      "character": "narrator",
+      "dialogue": "Episode tagline (max 15 words)",
+      "audio_description": "Epic orchestral intro, engine roar building",
+      "start_frame_prompt": "Full cinematographic description",
+      "end_frame_prompt": "Full cinematographic description",
+      "camera_direction": "Camera movement",
       "video_prompt": "Motion and animation instructions"
     }
   ],
-  "gags_used": ["gag_title_1", "gag_title_2", "gag_title_3"]
+  "gags_used": ["gag_title_1", "gag_title_2"]
 }
 ```
 
 FINAL RULES:
 - Output valid JSON ONLY — no markdown, no commentary
-- Exactly 24 scenes
-- Dialogue max 15 words per scene (must be deliverable in 5 seconds)
-- character field uses the character's slug (e.g., "max_verstappen", "christian_horner", "simon_lazenby")
-- If recent news is provided, twist it into comedy material
-- List ALL running gag titles you used in "gags_used"
-- character_appearances MUST contain an entry for EVERY character that appears in the scenes
-- EVERY scene's start_frame_prompt and end_frame_prompt must describe the character wearing their exact outfit from character_appearances
+- Exactly 26 scenes
+- Dialogue max 15 words per scene
+- character field uses the character's slug (for ACTION_REPLAY use the commentator providing voiceover)
+- scene_type field MUST be one of: TITLE_CARD, TALKING_HEAD, TWO_SHOT, OVER_THE_SHOULDER, ACTION_REPLAY, PODIUM, ESTABLISHING, REACTION
+- Scene 1 MUST be TITLE_CARD, Scene 26 MUST be an outro
+- At least 3 ACTION_REPLAY scenes required
+- At least 2 TWO_SHOT or OVER_THE_SHOULDER scenes required
+- character_appearances MUST have an entry for EVERY character
+- EVERY character scene's prompts must use their exact outfit from character_appearances
 """
 
 
@@ -178,7 +208,7 @@ class ScriptGenerator:
         running_gags: Optional[List[dict]] = None,
     ) -> EpisodeScript:
         """
-        Generate a 24-scene script for an episode.
+        Generate a 26-scene script for an episode.
 
         Args:
             race_context: Description of the race/event to comment on
@@ -243,13 +273,14 @@ class ScriptGenerator:
                     end_frame_prompt=s.get("end_frame_prompt", ""),
                     camera_direction=s.get("camera_direction", ""),
                     video_prompt=s.get("video_prompt", ""),
+                    scene_type=s.get("scene_type", "TALKING_HEAD"),
                     action=s.get("action"),  # backward compat
                 )
                 for s in script_data["scenes"]
             ]
 
             if len(scenes) != 24:
-                logger.warning(f"Expected 24 scenes, got {len(scenes)}")
+                logger.warning(f"Expected 26 scenes, got {len(scenes)}")
 
             # Extract gag references from response
             gags_referenced = script_data.get("gags_used", [])
@@ -358,7 +389,7 @@ class ScriptGenerator:
             prompt_parts.append(f"\n{gags_section}")
 
         prompt_parts.append(
-            "\nGenerate a 24-scene satirical commentary script with full cinematographic direction. "
+            "\nGenerate a 26-scene satirical commentary script with full cinematographic direction. "
             "Each scene needs start_frame_prompt, end_frame_prompt, camera_direction, and video_prompt. "
             "Use the real news as comedy fuel — exaggerate and satirize real events. "
             "Weave in any running gags that fit naturally. "

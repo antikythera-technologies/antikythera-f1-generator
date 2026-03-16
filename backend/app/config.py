@@ -157,7 +157,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # Video Generation Settings
-    VIDEO_SCENE_COUNT: int = 24
+    VIDEO_SCENE_COUNT: int = 26
     VIDEO_SCENE_DURATION_SECONDS: int = 5
     VIDEO_TOTAL_DURATION_SECONDS: int = 120
     VIDEO_FRAME_RATE: int = 24
