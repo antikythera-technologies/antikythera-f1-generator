@@ -63,16 +63,17 @@ FAL_DISPLAY_NAMES: dict[FalBackend, str] = {
 }
 
 
-def estimate_speech_duration(dialogue: str | None, words_per_second: float = 2.5) -> float:
+def estimate_speech_duration(dialogue: str | None, words_per_second: float = 2.0) -> float:
     """Estimate how many seconds a dialogue line takes to speak.
     
-    Average conversational speech is ~150 wpm = 2.5 words/sec.
-    We add 0.5s buffer for natural pauses.
+    Animated character speech with emotion/accents is slower than normal.
+    ~120 wpm = 2.0 words/sec is realistic for dramatic delivery.
+    We add 1.0s buffer for natural pauses and audio fade.
     """
     if not dialogue:
         return 0.0
     word_count = len(dialogue.split())
-    return (word_count / words_per_second) + 0.5
+    return (word_count / words_per_second) + 1.0
 
 
 def calculate_scene_duration(
