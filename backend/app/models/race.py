@@ -36,6 +36,7 @@ class Race(Base):
 
     # Relationships
     episodes: Mapped[List["Episode"]] = relationship("Episode", back_populates="race")
+    results: Mapped[List["RaceResult"]] = relationship("RaceResult", back_populates="race", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("season", "round_number", name="uq_race_season_round"),
@@ -47,3 +48,5 @@ class Race(Base):
 
 # Import Episode here to avoid circular imports
 from app.models.episode import Episode
+
+from app.models.race_result import RaceResult

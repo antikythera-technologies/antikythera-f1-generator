@@ -216,8 +216,14 @@ class VideoPipeline:
         else:
             self._next_race_info = None
 
-        # Build race context
+        # Build race context + load actual results from DB
         race_context = self._build_race_context()
+        results_context = await self._load_race_results_context(db)
+        if results_context:
+            race_context += results_context
+            self.logger.info("Loaded actual race results for script context")
+        else:
+            self.logger.warning("No race results in DB — script may have inaccurate positions!")
 
         # Fetch available running gags for this episode
         running_gags = await self._fetch_running_gags(db, characters)
@@ -288,6 +294,82 @@ class VideoPipeline:
             await self._record_gag_usage(db, script.gags_referenced)
 
         return scenes
+
+    async def _load_race_results_context(self, db) -> str:
+        """Load actual race results from DB for accurate script generation."""
+        from sqlalchemy import select as _sel
+        from app.models.race_result import RaceResult, RaceSessionSummary, SessionType
+
+        if not self.race:
+            return ""
+
+        lines = []
+
+        # Get race results
+        stmt = (
+            _sel(RaceResult)
+            .where(RaceResult.race_id == self.race.id)
+            .where(RaceResult.session_type == SessionType.RACE)
+            .order_by(RaceResult.position)
+        )
+        result = await db.execute(stmt)
+        race_results = result.scalars().all()
+
+        if race_results:
+            lines.append("\nACTUAL RACE RESULTS (use these EXACT positions — do NOT invent results):")
+            for r in race_results[:20]:
+                status = f" ({r.status})" if r.status != "Finished" else ""
+                grid = f" (started P{r.grid_position})" if r.grid_position else ""
+                gained = f" [{r.positions_gained:+d} places]" if r.positions_gained else ""
+                lines.append(
+                    f"  P{r.position}: {r.driver_display_name or r.driver_name} "
+                    f"({r.team or '?'}){grid}{gained}{status}"
+                )
+                if r.fastest_lap:
+                    lines.append(f"    ^ Fastest lap: {r.fastest_lap_time or 'yes'}")
+
+        # Get qualifying results
+        stmt = (
+            _sel(RaceResult)
+            .where(RaceResult.race_id == self.race.id)
+            .where(RaceResult.session_type == SessionType.QUALIFYING)
+            .order_by(RaceResult.position)
+        )
+        result = await db.execute(stmt)
+        quali_results = result.scalars().all()
+
+        if quali_results:
+            lines.append("\nQUALIFYING GRID:")
+            for r in quali_results[:10]:
+                lines.append(
+                    f"  P{r.position}: {r.driver_display_name or r.driver_name}"
+                )
+
+        # Get session summary
+        stmt = (
+            _sel(RaceSessionSummary)
+            .where(RaceSessionSummary.race_id == self.race.id)
+            .where(RaceSessionSummary.session_type == SessionType.RACE)
+        )
+        result = await db.execute(stmt)
+        summary = result.scalar_one_or_none()
+
+        if summary:
+            lines.append(f"\nRACE SUMMARY:")
+            lines.append(f"  Podium: P1 {summary.winner}, P2 {summary.second}, P3 {summary.third}")
+            if summary.total_overtakes:
+                lines.append(f"  Total overtakes: {summary.total_overtakes}")
+            if summary.safety_car_periods:
+                lines.append(f"  Safety car periods: {summary.safety_car_periods}")
+            if summary.vsc_periods:
+                lines.append(f"  Virtual safety car periods: {summary.vsc_periods}")
+            if summary.total_dnfs:
+                lines.append(f"  DNFs: {summary.total_dnfs}")
+
+        if lines:
+            lines.append("\nCRITICAL: Use ONLY the race results above. Do NOT invent or guess positions.")
+        
+        return "\n".join(lines)
 
     def _build_race_context(self) -> str:
         """Build race context for script generation.
