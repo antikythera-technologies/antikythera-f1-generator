@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+import asyncio
 import httpx
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,8 @@ OPENF1_BASE = "https://api.openf1.org/v1"
 
 
 class RaceResultsScraper:
+    # OpenF1 free tier: 3 req/sec, 30 req/min
+    _REQUEST_DELAY = 1.0  # seconds between requests
     """Fetch and store race results from OpenF1 API."""
 
     def __init__(self):
@@ -137,18 +140,32 @@ class RaceResultsScraper:
     async def fetch_all_sessions(
         self, db: AsyncSession, race: Race
     ) -> dict[str, int]:
-        """Fetch results for all sessions of a race weekend."""
+        """Fetch results for all sessions of a race weekend.
+
+        Includes rate-limiting delays between API calls to respect
+        OpenF1's free tier (3 req/sec, 30 req/min).
+        """
         results = {}
+
+        # Cache the meeting key to avoid redundant lookups
+        self._cached_meeting_key = await self._find_meeting(race)
+        await asyncio.sleep(self._REQUEST_DELAY)
 
         # Always fetch race + qualifying
         results["race"] = await self.fetch_and_store_results(db, race, "race")
+        await asyncio.sleep(self._REQUEST_DELAY * 2)
+
         results["qualifying"] = await self.fetch_and_store_results(db, race, "qualifying")
+        await asyncio.sleep(self._REQUEST_DELAY * 2)
 
         # Fetch sprint sessions if sprint weekend
         if race.is_sprint_weekend:
             results["sprint"] = await self.fetch_and_store_results(db, race, "sprint")
+            await asyncio.sleep(self._REQUEST_DELAY * 2)
+
             results["sprint_qualifying"] = await self.fetch_and_store_results(db, race, "sprint_qualifying")
 
+        self._cached_meeting_key = None
         return results
 
     async def _find_session(
@@ -162,8 +179,8 @@ class RaceResultsScraper:
         So we first find all sessions for the meeting, then match by name.
         """
         try:
-            # Step 1: Find the meeting for this race
-            meeting_key = await self._find_meeting(race)
+            # Step 1: Find the meeting (use cache if available)
+            meeting_key = getattr(self, '_cached_meeting_key', None) or await self._find_meeting(race)
             if not meeting_key:
                 logger.warning(f"No OpenF1 meeting found for {race.race_name}")
                 return None
