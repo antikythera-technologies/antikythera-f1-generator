@@ -561,22 +561,53 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             scene.generation_started_at = started_at
             await db.flush()
 
-            # Always use flux-lora — flux-general IP-Adapter warps faces badly.
-            # Character consistency via LoRA + prompt description only.
-            endpoint = "fal-ai/flux-lora"
-            logger.info(f"Scene {scene_number}: Submitting to {endpoint}...")
+            # Upload face reference to fal CDN if character has one
+            face_ref_url = None
+            if scene.character:
+                face_local = await storage.download_face_reference(scene.character.name)
+                if face_local:
+                    import fal_client
+                    face_ref_url = fal_client.upload_file(face_local)
+                    logger.info(f"Scene {scene_number}: Face reference uploaded: {face_ref_url[:80]}...")
 
-            # Build request payload
-            fal_payload = {
-                "prompt": full_prompt,
-                "image_size": {"width": 1280, "height": 720},
-                "num_images": 1,
-                "num_inference_steps": 28,
-                "guidance_scale": 3.5,
-                "loras": [{"path": LORA_URL, "scale": 1.0}],
-                "output_format": "png",
-            }
-            # No face reference — LoRA handles style consistency
+            # Choose image backend from Redis (shared between API + worker)
+            from app.services.runtime_settings import get_image_generator
+            image_backend = get_image_generator()
+
+            if image_backend == "instant-character":
+                # --- Instant Character: face reference + identity preservation ---
+                endpoint = "fal-ai/instant-character"
+                logger.info(f"Scene {scene_number}: Submitting to {endpoint} (face ref={'yes' if face_ref_url else 'no'})...")
+
+                fal_payload = {
+                    "prompt": full_prompt,
+                    "image_size": "landscape_16_9",
+                    "num_images": 1,
+                    "num_inference_steps": 28,
+                    "guidance_scale": 3.5,
+                    "scale": 0.8,  # Face reference prominence (0-2, tunable)
+                    "output_format": "png",
+                }
+                if face_ref_url:
+                    fal_payload["image_url"] = face_ref_url
+                else:
+                    logger.warning(f"Scene {scene_number}: No face reference for instant-character, falling back to flux-lora")
+                    image_backend = "flux-lora"  # Fallback
+
+            if image_backend != "instant-character":
+                # --- Flux LoRA: style-only, no face reference (default) ---
+                endpoint = "fal-ai/flux-lora"
+                logger.info(f"Scene {scene_number}: Submitting to {endpoint}...")
+
+                fal_payload = {
+                    "prompt": full_prompt,
+                    "image_size": {"width": 1280, "height": 720},
+                    "num_images": 1,
+                    "num_inference_steps": 28,
+                    "guidance_scale": 3.5,
+                    "loras": [{"path": LORA_URL, "scale": 1.0}],
+                    "output_format": "png",
+                }
 
             # Submit to fal.ai
             async with httpx.AsyncClient(timeout=300) as client:
