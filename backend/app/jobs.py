@@ -574,27 +574,72 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             from app.services.runtime_settings import get_image_generator
             image_backend = get_image_generator()
 
-            if image_backend == "instant-character":
-                # --- Instant Character: face reference + identity preservation ---
-                endpoint = "fal-ai/instant-character"
-                logger.info(f"Scene {scene_number}: Submitting to {endpoint} (face ref={'yes' if face_ref_url else 'no'})...")
+            if image_backend == "instant-character" and face_ref_url:
+                # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
+                import fal_client as _fal
 
-                fal_payload = {
-                    "prompt": full_prompt,
-                    "image_size": "landscape_16_9",
-                    "num_images": 1,
-                    "num_inference_steps": 28,
-                    "guidance_scale": 3.5,
-                    "scale": 0.8,  # Face reference prominence (0-2, tunable)
-                    "output_format": "png",
-                }
-                if face_ref_url:
-                    fal_payload["image_url"] = face_ref_url
+                logger.info(f"Scene {scene_number}: Generating via fal-ai/instant-character (face ref=yes)...")
+
+                _ic_result = _fal.subscribe(
+                    "fal-ai/instant-character",
+                    arguments={
+                        "prompt": full_prompt,
+                        "image_url": face_ref_url,
+                        "image_size": "landscape_16_9",
+                        "num_inference_steps": 28,
+                        "guidance_scale": 3.5,
+                        "scale": 0.8,
+                        "output_format": "png",
+                    },
+                    with_logs=True,
+                )
+
+                _ic_images = _ic_result.get("images", [])
+                if not _ic_images:
+                    raise RuntimeError("fal.ai instant-character returned no images")
+
+                _ic_url = _ic_images[0]["url"]
+                logger.info(f"Scene {scene_number}: instant-character done, downloading...")
+
+                async with httpx.AsyncClient(timeout=120) as _dl:
+                    _img_resp = await _dl.get(_ic_url)
+                    _img_resp.raise_for_status()
+
+                tmp_path = os.path.join(tempfile.gettempdir(), f"f1_scene_{episode_id}_{scene_number:02d}_{frame_type}.png")
+                with open(tmp_path, "wb") as f:
+                    f.write(_img_resp.content)
+
+                logger.info(f"Scene {scene_number}: Image downloaded ({len(_img_resp.content) / 1024:.0f} KB)")
+
+                # Upload to MinIO
+                image_storage_path = await storage.upload_scene_image(
+                    race_id=0,
+                    episode_id=episode_id,
+                    scene_number=scene_number,
+                    file_path=tmp_path,
+                    suffix=frame_type,
+                )
+
+                generation_time_ms = int(
+                    (datetime.utcnow() - started_at).total_seconds() * 1000
+                )
+
+                if frame_type == "start":
+                    scene.start_frame_path = image_storage_path
+                    scene.source_image_path = image_storage_path
                 else:
-                    logger.warning(f"Scene {scene_number}: No face reference for instant-character, falling back to flux-lora")
-                    image_backend = "flux-lora"  # Fallback
+                    scene.end_frame_path = image_storage_path
 
-            if image_backend != "instant-character":
+                scene.status = SceneStatus.COMPLETED
+                scene.generation_completed_at = datetime.utcnow()
+                scene.generation_time_ms = generation_time_ms
+                scene.last_error = None
+
+                await db.commit()
+                logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via instant-character")
+                return f"Scene {scene_number} {frame_type} frame generated (instant-character)"
+
+            if not (image_backend == "instant-character" and face_ref_url):
                 # --- Flux LoRA: style-only, no face reference (default) ---
                 endpoint = "fal-ai/flux-lora"
                 logger.info(f"Scene {scene_number}: Submitting to {endpoint}...")
