@@ -81,6 +81,8 @@ SCENE MIX REQUIREMENTS:
 - At least 1 PODIUM scene (if post-race)
 - The remaining scenes can be TALKING_HEAD or REACTION
 - NEVER have more than 3 TALKING_HEAD scenes in a row — break them up with action or establishing shots
+- NEVER use EXTREME CLOSE-UP or CLOSE-UP of a character's face as the shot type for start_frame_prompt — use MEDIUM SHOT or wider. Close-ups lose hair detail and distort the caricature style. The closest framing allowed is MEDIUM CLOSE-UP (chest and above).
+- NEVER have two consecutive scenes with the same character at the same framing — vary the shot types
 
 CHARACTER RULES:
 - Use EXACTLY 3-4 characters per episode
