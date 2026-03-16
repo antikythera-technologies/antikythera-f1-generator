@@ -317,14 +317,14 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                 </div>
               )}
 
-              {/* Media Section */}
+              {/* Media Section — landscape layout */}
               <section>
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/50">Media</h3>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Start Frame */}
+                <div className="space-y-4">
+                  {/* Start Frame — full width landscape */}
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-white/40">Start Frame</p>
-                    <div className="relative aspect-[9/16] overflow-hidden rounded-lg border border-white/10 bg-twilight">
+                    <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-twilight">
                       {startFrameUrl ? (
                         <img
                           src={startFrameUrl}
@@ -339,39 +339,35 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     </div>
                   </div>
 
-                  {/* End Frame */}
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-medium text-white/40">End Frame</p>
-                    <div className="relative aspect-[9/16] overflow-hidden rounded-lg border border-white/10 bg-twilight">
-                      {endFrameUrl ? (
+                  {/* Video Player — full width below start frame */}
+                  {videoUrl && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-white/40">Video Clip</p>
+                      <div className="overflow-hidden rounded-lg border border-white/10 bg-twilight">
+                        <video
+                          src={videoUrl}
+                          controls
+                          className="w-full"
+                          preload="metadata"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* End Frame — full width below video */}
+                  {endFrameUrl && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-white/40">End Frame</p>
+                      <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-twilight">
                         <img
                           src={endFrameUrl}
                           alt="End frame"
                           className="h-full w-full object-cover"
                         />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <span className="text-sm text-white/20">No end frame</span>
-                        </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-
-                {/* Video Player */}
-                {videoUrl && (
-                  <div className="mt-4 space-y-1.5">
-                    <p className="text-xs font-medium text-white/40">Video Clip</p>
-                    <div className="overflow-hidden rounded-lg border border-white/10 bg-twilight">
-                      <video
-                        src={videoUrl}
-                        controls
-                        className="w-full"
-                        preload="metadata"
-                      />
-                    </div>
-                  </div>
-                )}
               </section>
 
               {/* Script Section */}
