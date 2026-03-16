@@ -580,19 +580,30 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         f"Scene {scene_number}: Using episode appearance for {scene.character.name}"
                     )
 
-        # Build prompt: LoRA trigger + scene description + character appearance/traits
-        physical = character_traits.get("physical_features", "")
-        prompt_parts = ["ANTKF1STYLE", frame_prompt]
-        if episode_appearance:
-            prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
-        elif physical:
-            prompt_parts.append(f"Character physical traits: {physical}")
-        prompt_parts.append(
-            "Satirical caricature style with oversized head, "
-            "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
-            "No text, no words, no letters, no logos, no watermarks on clothing or background."
-        )
-        full_prompt = " ".join(prompt_parts)
+        # Build prompt: different for character scenes vs establishing/title card scenes
+        if scene.character_id:
+            # Character scene: LoRA trigger + caricature style + character traits
+            physical = character_traits.get("physical_features", "")
+            prompt_parts = ["ANTKF1STYLE", frame_prompt]
+            if episode_appearance:
+                prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
+            elif physical:
+                prompt_parts.append(f"Character physical traits: {physical}")
+            prompt_parts.append(
+                "Satirical caricature style with oversized head, "
+                "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
+                "No text, no words, no letters, no logos, no watermarks on clothing or background."
+            )
+            full_prompt = " ".join(prompt_parts)
+        else:
+            # No character (TITLE_CARD, ESTABLISHING, ACTION_REPLAY): 
+            # NO LoRA trigger, NO caricature style — just the scene description
+            full_prompt = (
+                f"{frame_prompt} "
+                "Cinematic photography, dramatic lighting, no people in foreground, "
+                "no text, no words, no letters, no watermarks."
+            )
+            logger.info(f"Scene {scene_number}: Using clean landscape prompt (no LoRA/caricature)")
 
         storage = StorageService()
 
