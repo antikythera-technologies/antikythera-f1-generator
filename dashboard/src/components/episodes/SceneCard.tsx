@@ -17,7 +17,9 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
   const isFailed = scene.status === "failed";
   const isComplete = scene.status === "completed";
 
-  const thumbnailUrl = getMinioUrl(scene.source_image_path);
+  // Cache-bust using generation_time_ms — changes on every regen, stable between renders
+  const cacheKey = String(scene.generation_time_ms || scene.created_at || "");
+  const thumbnailUrl = getMinioUrl(scene.source_image_path, cacheKey);
 
   return (
     <Card

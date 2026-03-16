@@ -78,12 +78,22 @@ export const statusColors: Record<string, { bg: string; text: string; glow?: str
   error: { bg: "bg-racing-red/20", text: "text-racing-red", glow: "shadow-glow-red" },
 };
 
-// Get MinIO URL with cache-busting for regenerated assets
-export function getMinioUrl(path: string | null, bustCache: boolean = false): string | null {
+// Get MinIO URL with cache-busting for regenerated assets.
+// Scene assets (images/videos) reuse the same MinIO path on every regeneration,
+// so we MUST cache-bust or the browser shows stale content indefinitely.
+// Pass a cacheKey (e.g., generation_completed_at timestamp) for stable cache-busting,
+// or bustCache=true for Date.now() fallback.
+export function getMinioUrl(
+  path: string | null,
+  bustCache: boolean | string = false,
+): string | null {
   if (!path) return null;
   const minioBase = process.env.NEXT_PUBLIC_MINIO_URL || "https://minio.antikythera.co.za";
   const url = `${minioBase}/${path}`;
-  if (bustCache) {
+  if (typeof bustCache === "string" && bustCache) {
+    return `${url}?v=${encodeURIComponent(bustCache)}`;
+  }
+  if (bustCache === true) {
     return `${url}?v=${Date.now()}`;
   }
   return url;

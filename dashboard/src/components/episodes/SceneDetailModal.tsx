@@ -190,11 +190,14 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
     }
   };
 
-  // Append cacheBuster to force browser to reload after regeneration
+  // ALWAYS cache-bust using generation_completed_at timestamp + local cacheBuster.
+  // MinIO paths don't change between regenerations (scene_01.mp4 stays scene_01.mp4),
+  // so without this the browser serves stale cached assets indefinitely.
+  const cacheKey = `${detail?.generation_completed_at || ""}_${cacheBuster}`;
   const addCacheBuster = (url: string | null) => {
-    if (!url || cacheBuster === 0) return url;
+    if (!url) return url;
     const sep = url.includes("?") ? "&" : "?";
-    return `${url}${sep}v=${cacheBuster}`;
+    return `${url}${sep}v=${encodeURIComponent(cacheKey)}`;
   };
   const startFrameUrl = addCacheBuster(getMinioUrl(detail?.start_frame_path || null) || getMinioUrl(detail?.source_image_path || null));
   const endFrameUrl = addCacheBuster(getMinioUrl(detail?.end_frame_path || null));
