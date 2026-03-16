@@ -626,28 +626,12 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             from app.services.runtime_settings import get_image_generator
             image_backend = get_image_generator()
 
-            # Skip instant-character for scenes that don't show a character's face.
-            # TITLE_CARD, ACTION_REPLAY, ESTABLISHING scenes use narrator/voiceover —
-            # the "character" is a commentator providing voiceover, not someone in frame.
-            scene_needs_face = scene.character_id is not None
-            if scene_needs_face and frame_prompt:
-                # Detect scene types that show racing/landscape, not character faces
-                prompt_lower = frame_prompt.upper()
-                no_face_keywords = [
-                    "COCKPIT POV", "ACTION_REPLAY", "TITLE_CARD",
-                    "ESTABLISHING", "AERIAL", "ON-BOARD", "ONBOARD",
-                    "HELMET CAM", "CIRCUIT VIEW",
-                ]
-                if any(kw in prompt_lower for kw in no_face_keywords):
-                    scene_needs_face = False
-                    logger.info(
-                        f"Scene {scene_number}: Action/establishing scene — "
-                        f"using flux-lora (character is voiceover only)"
-                    )
-
-            if not scene_needs_face:
-                if scene.character_id is None:
-                    logger.info(f"Scene {scene_number}: No character — using flux-lora")
+            # Only scenes with no character use flux-lora (title cards with narrator).
+            # All other scenes use instant-character — the prompt controls what's shown
+            # (cockpit POV, podium, etc). The face reference adds consistency even when
+            # the character isn't the main focus.
+            if not scene.character_id:
+                logger.info(f"Scene {scene_number}: No character — using flux-lora")
                 image_backend = "flux-lora"
 
             if image_backend == "instant-character" and face_ref_url:
