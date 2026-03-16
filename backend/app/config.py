@@ -136,6 +136,11 @@ class Settings(BaseSettings):
 
     # Video backend selection:
     #   RunPod self-hosted: ovi (alias: runpod-ovi), ltx (alias: runpod-ltx)
+    # Image generator backend:
+    #   flux-lora:           fal-ai/flux-lora (LoRA style only, no face ref) — current default
+    #   instant-character:   fal-ai/instant-character (face ref + style, identity preservation)
+    IMAGE_GENERATOR_DEFAULT: str = "flux-lora"
+
     #   fal.ai hosted:      fal-ovi, fal-ltx, fal-kling-std, fal-kling-std-audio,
     #                       fal-kling-pro, fal-kling-pro-audio
     VIDEO_GENERATOR_DEFAULT: str = "ovi"

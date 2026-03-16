@@ -13,7 +13,8 @@ router = APIRouter()
 class PipelineSettingsResponse(BaseModel):
     """Current pipeline settings."""
 
-    video_generator: str  # ovi, ltx, fal-ovi, fal-ltx, fal-kling-std, fal-kling-std-audio, fal-kling-pro, fal-kling-pro-audio
+    image_generator: str  # flux-lora, instant-character
+    video_generator: str  # fal-ovi, fal-ltx, fal-kling-std, fal-kling-std-audio, fal-kling-pro, fal-kling-pro-audio
     tts_enabled: bool
     video_scene_count: int
     video_scene_duration_seconds: int
@@ -24,6 +25,7 @@ class PipelineSettingsResponse(BaseModel):
 class PipelineSettingsUpdate(BaseModel):
     """Updatable pipeline settings."""
 
+    image_generator: Optional[str] = None  # flux-lora, instant-character
     video_generator: Optional[str] = None  # Any valid backend ID
     tts_enabled: Optional[bool] = None
     ovi_quality: Optional[str] = None
@@ -33,6 +35,7 @@ class PipelineSettingsUpdate(BaseModel):
 async def get_pipeline_settings():
     """Get current pipeline settings."""
     return PipelineSettingsResponse(
+        image_generator=settings.IMAGE_GENERATOR_DEFAULT,
         video_generator=settings.VIDEO_GENERATOR_DEFAULT,
         tts_enabled=settings.TTS_ENABLED,
         video_scene_count=settings.VIDEO_SCENE_COUNT,
@@ -49,6 +52,8 @@ async def update_pipeline_settings(update: PipelineSettingsUpdate):
     Changes are applied immediately and persist until the backend restarts.
     For permanent changes, update the .env file.
     """
+    if update.image_generator is not None:
+        settings.IMAGE_GENERATOR_DEFAULT = update.image_generator
     if update.video_generator is not None:
         settings.VIDEO_GENERATOR_DEFAULT = update.video_generator
     if update.tts_enabled is not None:
@@ -57,6 +62,7 @@ async def update_pipeline_settings(update: PipelineSettingsUpdate):
         settings.OVI_QUALITY = update.ovi_quality
 
     return PipelineSettingsResponse(
+        image_generator=settings.IMAGE_GENERATOR_DEFAULT,
         video_generator=settings.VIDEO_GENERATOR_DEFAULT,
         tts_enabled=settings.TTS_ENABLED,
         video_scene_count=settings.VIDEO_SCENE_COUNT,

@@ -771,9 +771,11 @@ export const storylinesApi = {
 
 // Pipeline Settings types
 export type VideoGenerator = "ovi" | "ltx" | "fal-ovi" | "fal-ltx" | "fal-kling-std" | "fal-kling-std-audio" | "fal-kling-pro" | "fal-kling-pro-audio";
+export type ImageGenerator = "flux-lora" | "instant-character";
 export type OviQuality = "draft" | "standard" | "high" | "ultra" | "caricature";
 
 export interface PipelineSettings {
+  image_generator: ImageGenerator;
   video_generator: VideoGenerator;
   tts_enabled: boolean;
   video_scene_count: number;
@@ -783,6 +785,7 @@ export interface PipelineSettings {
 }
 
 export interface PipelineSettingsUpdate {
+  image_generator?: ImageGenerator;
   video_generator?: VideoGenerator;
   tts_enabled?: boolean;
   ovi_quality?: OviQuality;

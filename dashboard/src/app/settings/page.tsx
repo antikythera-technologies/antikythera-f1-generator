@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
-import { settingsApi, type PipelineSettings, type VideoGenerator, type ServiceBalances } from "@/lib/api";
+import { settingsApi, type PipelineSettings, type VideoGenerator, type ImageGenerator, type ServiceBalances } from "@/lib/api";
 
 const BACKEND_INFO: Record<string, { label: string; maxDuration: number; audio: boolean; costPerSec: number; note: string }> = {
   "fal-ovi":              { label: "Ovi (fal.ai)",                    maxDuration: 10, audio: true,  costPerSec: 0.04,   note: "5s or 10s, native audio" },
@@ -31,6 +31,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [balances, setBalances] = useState<ServiceBalances | null>(null);
   const [videoGenerator, setVideoGenerator] = useState<VideoGenerator>("fal-ltx");
+  const [imageGenerator, setImageGenerator] = useState<ImageGenerator>("flux-lora");
 
   useEffect(() => {
     Promise.all([
@@ -40,6 +41,7 @@ export default function SettingsPage() {
       .then(([pipelineData, balanceData]) => {
         setSettings(pipelineData);
         setVideoGenerator(pipelineData.video_generator);
+        setImageGenerator((pipelineData as any).image_generator || "flux-lora");
         if (balanceData) setBalances(balanceData);
       })
       .catch((err) => {
@@ -53,7 +55,7 @@ export default function SettingsPage() {
     setSaving(true);
     setSaveMessage(null);
     try {
-      const updated = await settingsApi.updatePipeline({ video_generator: videoGenerator });
+      const updated = await settingsApi.updatePipeline({ video_generator: videoGenerator, image_generator: imageGenerator } as any);
       setSettings(updated);
       setSaveMessage({ type: "success", text: "Settings saved successfully" });
       setTimeout(() => setSaveMessage(null), 3000);
@@ -64,7 +66,7 @@ export default function SettingsPage() {
     }
   };
 
-  const hasChanges = settings && videoGenerator !== settings.video_generator;
+  const hasChanges = settings && (videoGenerator !== settings.video_generator || imageGenerator !== (settings as any).image_generator);
   const info = BACKEND_INFO[videoGenerator];
   const sceneDuration = settings?.video_scene_duration_seconds ?? 5;
   const sceneCount = settings?.video_scene_count ?? 24;
@@ -99,6 +101,40 @@ export default function SettingsPage() {
               </div>
             ) : (
               <>
+                {/* Image Generator Selector */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-white/60 mb-1">Image Generator</label>
+                    <select
+                      value={imageGenerator}
+                      onChange={(e) => setImageGenerator(e.target.value as ImageGenerator)}
+                      className="w-full rounded-lg border border-white/10 bg-twilight px-3 py-2.5 text-white focus:border-cyber-purple focus:outline-none focus:ring-1 focus:ring-cyber-purple"
+                    >
+                      <option value="flux-lora">Flux LoRA (style only, no face ref) — $0.035/image</option>
+                      <option value="instant-character">Instant Character (face ref + identity) — experimental</option>
+                    </select>
+                    <p className="mt-1 text-xs text-white/40">
+                      {imageGenerator === "instant-character"
+                        ? "Uses face reference images for character consistency. Experimental — testing in progress."
+                        : "Current default. LoRA style consistency, faces driven by prompt only."}
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    <div className={`rounded-lg border p-3 w-full ${
+                      imageGenerator === "instant-character"
+                        ? "border-neon-cyan/30 bg-neon-cyan/5"
+                        : "border-white/10 bg-twilight/30"
+                    }`}>
+                      <p className="text-xs text-white/50">Face References</p>
+                      <p className={`text-sm font-medium ${
+                        imageGenerator === "instant-character" ? "text-neon-cyan" : "text-white/40"
+                      }`}>
+                        {imageGenerator === "instant-character" ? "Enabled — using character face images" : "Disabled — prompt-only faces"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Video Generator Selector */}
                 <div>
                   <label className="block text-sm font-medium text-white/60 mb-1">Video Generator</label>
