@@ -129,3 +129,75 @@ async def get_service_balances():
         result.fal_status = "no_key"
 
     return result
+
+
+class CostBreakdown(BaseModel):
+    """Cost breakdown by provider."""
+    provider: str
+    call_count: int
+    total_cost: float
+
+
+class CostSummary(BaseModel):
+    """Cost tracking summary."""
+    total_cost: float
+    total_calls: int
+    this_month_cost: float
+    this_month_calls: int
+    by_provider: list[CostBreakdown]
+    by_episode: list[dict]
+
+
+@router.get("/costs", response_model=CostSummary)
+async def get_cost_summary():
+    """Get cost tracking summary from api_usage table."""
+    from sqlalchemy import text
+    from app.database import async_session_maker
+
+    async with async_session_maker() as db:
+        # Total costs
+        result = await db.execute(text(
+            "SELECT COALESCE(COUNT(*), 0), COALESCE(SUM(cost_usd), 0) FROM api_usage"
+        ))
+        row = result.fetchone()
+        total_calls = row[0]
+        total_cost = float(row[1])
+
+        # This month
+        result = await db.execute(text(
+            "SELECT COALESCE(COUNT(*), 0), COALESCE(SUM(cost_usd), 0) FROM api_usage "
+            "WHERE created_at >= date_trunc('month', CURRENT_DATE)"
+        ))
+        row = result.fetchone()
+        month_calls = row[0]
+        month_cost = float(row[1])
+
+        # By provider
+        result = await db.execute(text(
+            "SELECT provider, COUNT(*), COALESCE(SUM(cost_usd), 0) "
+            "FROM api_usage GROUP BY provider ORDER BY SUM(cost_usd) DESC"
+        ))
+        by_provider = [
+            CostBreakdown(provider=r[0], call_count=r[1], total_cost=float(r[2]))
+            for r in result.fetchall()
+        ]
+
+        # By episode
+        result = await db.execute(text(
+            "SELECT a.episode_id, e.title, COUNT(*), COALESCE(SUM(a.cost_usd), 0) "
+            "FROM api_usage a LEFT JOIN episodes e ON a.episode_id = e.id "
+            "GROUP BY a.episode_id, e.title ORDER BY a.episode_id"
+        ))
+        by_episode = [
+            {"episode_id": r[0], "title": r[1], "calls": r[2], "cost": float(r[3])}
+            for r in result.fetchall()
+        ]
+
+    return CostSummary(
+        total_cost=total_cost,
+        total_calls=total_calls,
+        this_month_cost=month_cost,
+        this_month_calls=month_calls,
+        by_provider=by_provider,
+        by_episode=by_episode,
+    )

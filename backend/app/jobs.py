@@ -16,6 +16,33 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+async def _log_api_cost(
+    db,
+    episode_id: int,
+    scene_id: int | None,
+    provider: str,
+    endpoint: str,
+    cost_usd: float,
+    response_time_ms: int = 0,
+):
+    """Log an API usage record for cost tracking."""
+    from app.models.logs import APIUsage, APIProvider
+    try:
+        usage = APIUsage(
+            episode_id=episode_id,
+            scene_id=scene_id,
+            provider=APIProvider(provider),
+            endpoint=endpoint,
+            cost_usd=cost_usd,
+            response_time_ms=response_time_ms,
+        )
+        db.add(usage)
+        await db.flush()
+        logger.debug(f"Logged API cost: {provider} ${cost_usd:.4f} ({endpoint})")
+    except Exception as e:
+        logger.warning(f"Failed to log API cost: {e}")
+
 # Queue name used across the project
 PIPELINE_QUEUE = "f1-pipeline"
 
@@ -347,6 +374,20 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
             scene.generation_time_ms = generation_time_ms
             scene.last_error = None
 
+            # Log video generation cost
+            video_cost_map = {
+                "fal-ovi": 0.20, "fal-ltx": 0.30,
+                "fal-kling-std": 0.42, "fal-kling-std-audio": 0.63,
+                "fal-kling-pro": 0.42, "fal-kling-pro-audio": 0.84,
+            }
+            await _log_api_cost(
+                db, episode_id, scene.id,
+                provider=backend if backend.startswith("fal-") else "ovi",
+                endpoint=f"fal.ai/{backend}",
+                cost_usd=video_cost_map.get(backend, 0.20),
+                response_time_ms=generation_time_ms,
+            )
+
             await db.commit()
             logger.info(f"Scene {scene_number}: Video regenerated in {generation_time_ms}ms")
             return f"Scene {scene_number} video regenerated ({backend})"
@@ -637,6 +678,15 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 scene.last_error = None
 
                 await db.commit()
+                # Log image generation cost
+                await _log_api_cost(
+                    db, episode_id, scene.id,
+                    provider="fal-image",
+                    endpoint="fal-ai/instant-character",
+                    cost_usd=0.04,  # instant-character pricing
+                    response_time_ms=generation_time_ms,
+                )
+
                 logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via instant-character")
                 return f"Scene {scene_number} {frame_type} frame generated (instant-character)"
 
@@ -743,6 +793,15 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             scene.last_error = None
 
             await db.commit()
+            # Log image generation cost
+            await _log_api_cost(
+                db, episode_id, scene.id,
+                provider="fal-image",
+                endpoint="fal-ai/flux-lora",
+                cost_usd=0.035,  # flux-lora pricing
+                response_time_ms=generation_time_ms,
+            )
+
             logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via fal.ai")
             return f"Scene {scene_number} {frame_type} frame generated"
 

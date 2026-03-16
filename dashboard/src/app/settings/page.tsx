@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
-import { settingsApi, type PipelineSettings, type VideoGenerator, type ImageGenerator, type ServiceBalances } from "@/lib/api";
+import { settingsApi, type PipelineSettings, type VideoGenerator, type ImageGenerator, type ServiceBalances, type CostSummary } from "@/lib/api";
 
 const BACKEND_INFO: Record<string, { label: string; maxDuration: number; audio: boolean; costPerSec: number; note: string }> = {
   "fal-ovi":              { label: "Ovi (fal.ai)",                    maxDuration: 10, audio: true,  costPerSec: 0.04,   note: "5s or 10s, native audio" },
@@ -31,18 +31,21 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [balances, setBalances] = useState<ServiceBalances | null>(null);
   const [videoGenerator, setVideoGenerator] = useState<VideoGenerator>("fal-ltx");
+  const [costs, setCosts] = useState<CostSummary | null>(null);
   const [imageGenerator, setImageGenerator] = useState<ImageGenerator>("flux-lora");
 
   useEffect(() => {
     Promise.all([
       settingsApi.getPipeline(),
       settingsApi.getBalances().catch(() => null),
+      settingsApi.getCosts().catch(() => null),
     ])
-      .then(([pipelineData, balanceData]) => {
+      .then(([pipelineData, balanceData, costData]) => {
         setSettings(pipelineData);
         setVideoGenerator(pipelineData.video_generator);
         setImageGenerator((pipelineData as any).image_generator || "flux-lora");
         if (balanceData) setBalances(balanceData);
+        if (costData) setCosts(costData);
       })
       .catch((err) => {
         console.error("Failed to load pipeline settings:", err);

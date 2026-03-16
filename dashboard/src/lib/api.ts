@@ -784,6 +784,21 @@ export interface PipelineSettings {
   ltx_enabled: boolean;
 }
 
+export interface CostBreakdown {
+  provider: string;
+  call_count: number;
+  total_cost: number;
+}
+
+export interface CostSummary {
+  total_cost: number;
+  total_calls: number;
+  this_month_cost: number;
+  this_month_calls: number;
+  by_provider: CostBreakdown[];
+  by_episode: { episode_id: number; title: string; calls: number; cost: number }[];
+}
+
 export interface PipelineSettingsUpdate {
   image_generator?: ImageGenerator;
   video_generator?: VideoGenerator;
@@ -802,6 +817,7 @@ export interface ServiceBalances {
 
 export const settingsApi = {
   getPipeline: () => request<PipelineSettings>("/settings/pipeline"),
+  getCosts: () => request<CostSummary>("/settings/costs"),
 
   updatePipeline: (data: PipelineSettingsUpdate) =>
     request<PipelineSettings>("/settings/pipeline", {
