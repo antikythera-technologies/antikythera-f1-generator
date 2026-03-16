@@ -615,6 +615,13 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             from app.services.runtime_settings import get_image_generator
             image_backend = get_image_generator()
 
+            # Skip instant-character for scenes without a real character face
+            # (TITLE_CARD, ACTION_REPLAY, ESTABLISHING scenes use narrator/voiceover)
+            scene_needs_face = scene.character_id is not None
+            if not scene_needs_face:
+                logger.info(f"Scene {scene_number}: No character — using flux-lora for this scene")
+                image_backend = "flux-lora"
+
             if image_backend == "instant-character" and face_ref_url:
                 # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
                 import fal_client as _fal
