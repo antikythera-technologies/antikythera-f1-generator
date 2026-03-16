@@ -198,6 +198,24 @@ class VideoPipeline:
             for c in characters
         ]
 
+        # Look up next race for outro teaser
+        if self.race:
+            next_race_stmt = (
+                select(Race)
+                .where(Race.round_number == self.race.round_number + 1)
+                .where(Race.season == self.race.season)
+            )
+            next_race_result = await db.execute(next_race_stmt)
+            next_race = next_race_result.scalar_one_or_none()
+            if next_race:
+                sprint_tag = " (Sprint Weekend)" if next_race.is_sprint_weekend else ""
+                self._next_race_info = f"{next_race.race_name} in {next_race.country}{sprint_tag}"
+                self.logger.info(f"Next race: {self._next_race_info}")
+            else:
+                self._next_race_info = None
+        else:
+            self._next_race_info = None
+
         # Build race context
         race_context = self._build_race_context()
 
@@ -314,6 +332,21 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             context += f"- Mid-season (Round {round_num}). Championship battle should be heating up. Reference standings, momentum shifts.\n"
         else:
             context += f"- Late season (Round {round_num}). Championship could be on the line. Maximum drama and tension.\n"
+
+        # Add next race info for outro teaser
+        from sqlalchemy import select as _select
+        from app.models.race import Race as _Race
+        import asyncio
+
+        try:
+            # Sync lookup — we're in a sync method but have access to self.race
+            # Find next race by round number
+            # This is populated by the caller if available
+            if hasattr(self, '_next_race_info') and self._next_race_info:
+                context += f"\nNEXT RACE: {self._next_race_info}\n"
+                context += "- The outro/teaser scene (scene 26) MUST reference the NEXT race listed above, NOT any other race.\n"
+        except Exception:
+            pass
 
         return context
 
