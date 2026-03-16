@@ -223,7 +223,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
 
     logger.info(
         f"Scene {scene_number}: Starting video regeneration "
-        f"(backend={settings.VIDEO_GENERATOR_DEFAULT})"
+        f"(backend={__import__('app.services.runtime_settings', fromlist=['get_video_generator']).get_video_generator()})"
     )
 
     async with async_session_maker() as db:
@@ -247,7 +247,8 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
             await db.commit()
             raise ValueError("No start frame image available")
 
-        backend = settings.VIDEO_GENERATOR_DEFAULT
+        from app.services.runtime_settings import get_video_generator
+        backend = get_video_generator()
         storage = StorageService()
 
         try:

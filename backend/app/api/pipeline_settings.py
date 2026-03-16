@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import settings
+from app.services.runtime_settings import set_runtime_setting, get_image_generator, get_video_generator
 
 router = APIRouter()
 
@@ -35,8 +36,8 @@ class PipelineSettingsUpdate(BaseModel):
 async def get_pipeline_settings():
     """Get current pipeline settings."""
     return PipelineSettingsResponse(
-        image_generator=settings.IMAGE_GENERATOR_DEFAULT,
-        video_generator=settings.VIDEO_GENERATOR_DEFAULT,
+        image_generator=get_image_generator(),
+        video_generator=get_video_generator(),
         tts_enabled=settings.TTS_ENABLED,
         video_scene_count=settings.VIDEO_SCENE_COUNT,
         video_scene_duration_seconds=settings.VIDEO_SCENE_DURATION_SECONDS,
@@ -54,16 +55,18 @@ async def update_pipeline_settings(update: PipelineSettingsUpdate):
     """
     if update.image_generator is not None:
         settings.IMAGE_GENERATOR_DEFAULT = update.image_generator
+        set_runtime_setting("image_generator", update.image_generator)
     if update.video_generator is not None:
         settings.VIDEO_GENERATOR_DEFAULT = update.video_generator
+        set_runtime_setting("video_generator", update.video_generator)
     if update.tts_enabled is not None:
         settings.TTS_ENABLED = update.tts_enabled
     if update.ovi_quality is not None:
         settings.OVI_QUALITY = update.ovi_quality
 
     return PipelineSettingsResponse(
-        image_generator=settings.IMAGE_GENERATOR_DEFAULT,
-        video_generator=settings.VIDEO_GENERATOR_DEFAULT,
+        image_generator=get_image_generator(),
+        video_generator=get_video_generator(),
         tts_enabled=settings.TTS_ENABLED,
         video_scene_count=settings.VIDEO_SCENE_COUNT,
         video_scene_duration_seconds=settings.VIDEO_SCENE_DURATION_SECONDS,
