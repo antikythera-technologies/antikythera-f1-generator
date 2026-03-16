@@ -47,17 +47,8 @@ class RaceResultsScraper:
         Returns:
             Number of results stored
         """
-        # Map our session type to OpenF1 session type
-        openf1_session_map = {
-            "race": "Race",
-            "sprint": "Sprint",
-            "qualifying": "Qualifying",
-            "sprint_qualifying": "Sprint Qualifying",
-        }
-        openf1_type = openf1_session_map.get(session_type, "Race")
-
-        # Find the session on OpenF1
-        session_key = await self._find_session(race, openf1_type)
+        # Find the session on OpenF1 (uses session_name matching internally)
+        session_key = await self._find_session(race, session_type)
         if not session_key:
             logger.warning(
                 f"No OpenF1 session found for {race.race_name} {session_type}"
@@ -149,103 +140,114 @@ class RaceResultsScraper:
         """Fetch results for all sessions of a race weekend."""
         results = {}
 
-        # Always fetch race results
-        results["race"] = await self.fetch_and_store_results(
-            db, race, "race"
-        )
+        # Always fetch race + qualifying
+        results["race"] = await self.fetch_and_store_results(db, race, "race")
+        results["qualifying"] = await self.fetch_and_store_results(db, race, "qualifying")
 
-        # Fetch qualifying
-        results["qualifying"] = await self.fetch_and_store_results(
-            db, race, "qualifying"
-        )
-
-        # Fetch sprint if it's a sprint weekend
+        # Fetch sprint sessions if sprint weekend
         if race.is_sprint_weekend:
-            results["sprint"] = await self.fetch_and_store_results(
-                db, race, "sprint"
-            )
+            results["sprint"] = await self.fetch_and_store_results(db, race, "sprint")
+            results["sprint_qualifying"] = await self.fetch_and_store_results(db, race, "sprint_qualifying")
 
         return results
 
     async def _find_session(
         self, race: Race, session_type: str
     ) -> Optional[int]:
-        """Find OpenF1 session key for a race."""
-        params = {
-            "year": race.season,
-            "session_type": session_type,
-        }
+        """Find OpenF1 session key for a race.
 
-        # Match by location from circuit name
-        circuit_keywords = {
-            "Albert Park": "Melbourne",
-            "Shanghai": "Shanghai",
-            "Suzuka": "Suzuka",
-            "Bahrain": "Sakhir",
-            "Jeddah": "Jeddah",
-            "Miami": "Miami",
-            "Imola": "Imola",
-            "Monaco": "Monaco",
-            "Barcelona": "Barcelona",
-            "Montreal": "Montréal",
-            "Silverstone": "Silverstone",
-            "Spielberg": "Spielberg",
-            "Hungaroring": "Budapest",
-            "Spa": "Spa-Francorchamps",
-            "Zandvoort": "Zandvoort",
-            "Monza": "Monza",
-            "Baku": "Baku",
-            "Marina Bay": "Singapore",
-            "Suzuka": "Suzuka",
-            "Lusail": "Lusail",
-            "Austin": "Austin",
-            "Mexico": "Mexico City",
-            "Interlagos": "São Paulo",
-            "Las Vegas": "Las Vegas",
-            "Yas Marina": "Yas Island",
-        }
-
-        # Try to match circuit
-        location = None
-        for keyword, openf1_loc in circuit_keywords.items():
-            if keyword.lower() in (race.circuit_name or "").lower():
-                location = openf1_loc
-                break
-
-        if not location:
-            # Fallback: use country
-            location = race.country
-
+        OpenF1 uses different naming than expected:
+        - Sprint is session_type=Race, session_name=Sprint
+        - Sprint Qualifying is session_type=Qualifying, session_name=Sprint Qualifying
+        So we first find all sessions for the meeting, then match by name.
+        """
         try:
+            # Step 1: Find the meeting for this race
+            meeting_key = await self._find_meeting(race)
+            if not meeting_key:
+                logger.warning(f"No OpenF1 meeting found for {race.race_name}")
+                return None
+
+            # Step 2: Get all sessions for this meeting
             resp = await self.client.get(
                 f"{OPENF1_BASE}/sessions",
-                params={**params, "location": location},
+                params={"meeting_key": meeting_key},
             )
             resp.raise_for_status()
             sessions = resp.json()
 
-            if sessions:
-                return sessions[0]["session_key"]
+            # Step 3: Match by session name
+            session_name_map = {
+                "race": "Race",
+                "qualifying": "Qualifying",
+                "sprint": "Sprint",
+                "sprint_qualifying": "Sprint Qualifying",
+                "fp1": "Practice 1",
+                "fp2": "Practice 2",
+                "fp3": "Practice 3",
+            }
+            target_name = session_name_map.get(session_type, session_type)
 
-            # Fallback: try without location filter
-            resp = await self.client.get(
-                f"{OPENF1_BASE}/sessions",
-                params=params,
-            )
-            resp.raise_for_status()
-            all_sessions = resp.json()
-
-            # Match by round number (meeting_key order)
-            for s in all_sessions:
-                if s.get("circuit_short_name", "").lower() in (
-                    race.circuit_name or ""
-                ).lower():
+            for s in sessions:
+                if s.get("session_name") == target_name:
+                    logger.info(
+                        f"Found session: {s['session_name']} "
+                        f"(key={s['session_key']}) for {race.race_name}"
+                    )
                     return s["session_key"]
+
+            logger.warning(
+                f"No '{target_name}' session in meeting {meeting_key} "
+                f"for {race.race_name}. Available: "
+                f"{[s['session_name'] for s in sessions]}"
+            )
+            return None
 
         except Exception as e:
             logger.error(f"OpenF1 session lookup failed: {e}")
+            return None
 
-        return None
+    async def _find_meeting(self, race: Race) -> Optional[int]:
+        """Find the OpenF1 meeting_key for a race."""
+        try:
+            resp = await self.client.get(
+                f"{OPENF1_BASE}/meetings",
+                params={"year": race.season},
+            )
+            resp.raise_for_status()
+            meetings = resp.json()
+
+            # Match by country or circuit name
+            race_country = (race.country or "").lower()
+            race_circuit = (race.circuit_name or "").lower()
+
+            for m in meetings:
+                loc = (m.get("location") or "").lower()
+                country = (m.get("country_name") or "").lower()
+                circuit = (m.get("circuit_short_name") or "").lower()
+                name = (m.get("meeting_name") or "").lower()
+
+                if (
+                    race_country in country
+                    or race_country in loc
+                    or circuit in race_circuit
+                    or race_circuit in circuit
+                    or race_country in name
+                ):
+                    logger.info(
+                        f"Matched meeting: {m['meeting_name']} "
+                        f"(key={m['meeting_key']}) for {race.race_name}"
+                    )
+                    return m["meeting_key"]
+
+            logger.warning(
+                f"No meeting match for {race.race_name} ({race.country})"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(f"OpenF1 meeting lookup failed: {e}")
+            return None
 
     async def _fetch_drivers(self, session_key: int) -> dict[int, dict]:
         """Fetch driver info for a session. Returns {driver_number: info}."""
