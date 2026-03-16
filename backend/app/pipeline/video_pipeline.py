@@ -1486,7 +1486,24 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 await self.storage.download_file(bucket, object_name, local_path)
                 clip_paths.append(local_path)
 
-        result = await self.stitcher.stitch(self.episode_id, clip_paths)
+        # Build title/subtitle for intro overlay
+        episode_num = self.episode_id
+        race_name = self.race.race_name if self.race else "F1 Race"
+        title = self.episode.title or race_name
+        subtitle = f"Season {self.race.season if self.race else 2026} | Episode {episode_num} | {race_name}"
+
+        # Build next episode teaser for outro
+        next_episode_text = ""
+        if hasattr(self, '_next_race_info') and self._next_race_info:
+            next_episode_text = f"Next: {self._next_race_info}"
+
+        result = await self.stitcher.stitch(
+            self.episode_id,
+            clip_paths,
+            title=title,
+            subtitle=subtitle,
+            next_episode_text=next_episode_text,
+        )
 
         final_path = await self.storage.upload_final_video(
             race_id=self.race.id if self.race else 0,
