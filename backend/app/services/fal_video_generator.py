@@ -63,6 +63,52 @@ FAL_DISPLAY_NAMES: dict[FalBackend, str] = {
 }
 
 
+def estimate_speech_duration(dialogue: str | None, words_per_second: float = 2.5) -> float:
+    """Estimate how many seconds a dialogue line takes to speak.
+    
+    Average conversational speech is ~150 wpm = 2.5 words/sec.
+    We add 0.5s buffer for natural pauses.
+    """
+    if not dialogue:
+        return 0.0
+    word_count = len(dialogue.split())
+    return (word_count / words_per_second) + 0.5
+
+
+def calculate_scene_duration(
+    dialogue: str | None,
+    base_duration: int = 5,
+    backend: str = "fal-ltx",
+) -> int:
+    """Calculate optimal scene duration based on dialogue length.
+    
+    Returns an even integer duration (LTX requires even values: 6, 8, 10, etc).
+    Caps at the backend's maximum.
+    """
+    max_durations = {
+        "fal-ovi": 10,
+        "fal-ltx": 20,
+        "fal-kling-std": 15,
+        "fal-kling-std-audio": 15,
+        "fal-kling-pro": 15,
+        "fal-kling-pro-audio": 15,
+    }
+    max_dur = max_durations.get(backend, 10)
+    
+    speech_seconds = estimate_speech_duration(dialogue)
+    needed = max(base_duration, int(speech_seconds) + 1)
+    
+    # LTX requires even durations; round up
+    if "ltx" in backend and needed % 2 != 0:
+        needed += 1
+    
+    # Ovi only supports 5 or 10
+    if "ovi" in backend:
+        needed = 5 if needed <= 5 else 10
+    
+    return min(needed, max_dur)
+
+
 class FalVideoError(Exception):
     """Error during fal.ai video generation."""
 
@@ -127,6 +173,7 @@ class FalVideoGenerator:
         dialogue: Optional[str] = None,
         audio_description: Optional[str] = None,
         seed: Optional[int] = None,
+        duration: Optional[int] = None,
     ) -> FalVideoClip:
         """Generate a video clip from image + prompt via fal.ai.
 
@@ -143,12 +190,24 @@ class FalVideoGenerator:
         """
         import fal_client
 
+        # Auto-calculate duration from dialogue length if not explicitly set
+        if duration is None:
+            duration = calculate_scene_duration(
+                dialogue, base_duration=5, backend=self.backend.value
+            )
+        if duration > 5:
+            logger.info(
+                f"Scene {scene_number}: Extended duration to {duration}s "
+                f"for dialogue: {dialogue[:50]}..."
+            )
+
         arguments = self._build_arguments(
             image_url=image_url,
             prompt=prompt,
             dialogue=dialogue,
             audio_description=audio_description,
             seed=seed,
+            duration=duration,
         )
 
         logger.info(
@@ -251,34 +310,36 @@ class FalVideoGenerator:
         dialogue: Optional[str],
         audio_description: Optional[str],
         seed: Optional[int],
+        duration: int = 5,
     ) -> dict:
         """Build fal.ai API arguments for the selected backend."""
         if self.backend == FalBackend.OVI:
             return self._args_ovi(
-                image_url, prompt, dialogue, audio_description, seed
+                image_url, prompt, dialogue, audio_description, seed, duration
             )
         elif self.backend == FalBackend.LTX:
             return self._args_ltx(
-                image_url, prompt, dialogue, audio_description, seed
+                image_url, prompt, dialogue, audio_description, seed, duration
             )
         else:
             return self._args_kling(
-                image_url, prompt, dialogue, audio_description, seed
+                image_url, prompt, dialogue, audio_description, seed, duration
             )
 
-    def _args_ovi(self, image_url, prompt, dialogue, audio_description, seed):
+    def _args_ovi(self, image_url, prompt, dialogue, audio_description, seed, duration=5):
         """Build Ovi arguments with <S>/<E> speech tokens."""
         full_prompt = self._build_ovi_prompt(prompt, dialogue, audio_description)
         args = {
             "prompt": full_prompt,
             "image_url": image_url,
             "num_inference_steps": 30,
+            "duration": duration,  # Ovi accepts 5 or 10
         }
         if seed is not None:
             args["seed"] = seed
         return args
 
-    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed):
+    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6):
         """Build LTX 2.3 arguments with native audio generation."""
         full_prompt = prompt
         if dialogue:
@@ -289,6 +350,7 @@ class FalVideoGenerator:
             "image_url": image_url,
             "num_inference_steps": 30,
             "generate_audio": True,
+            "duration": duration,  # LTX accepts even values: 6, 8, 10, ..., 20
         }
         if audio_description:
             args["audio_prompt"] = audio_description
@@ -296,7 +358,7 @@ class FalVideoGenerator:
             args["seed"] = seed
         return args
 
-    def _args_kling(self, image_url, prompt, dialogue, audio_description, seed):
+    def _args_kling(self, image_url, prompt, dialogue, audio_description, seed, duration=5):
         """Build Kling 3.0 arguments."""
         enable_audio = self.backend in FAL_AUDIO_BACKENDS
 
@@ -307,7 +369,7 @@ class FalVideoGenerator:
         args = {
             "prompt": full_prompt,
             "image_url": image_url,
-            "duration": "5",
+            "duration": str(duration),  # Kling accepts string: "3" to "15"
             "aspect_ratio": "16:9",
         }
         if enable_audio:
