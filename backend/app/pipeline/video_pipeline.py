@@ -901,12 +901,31 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
 
                 # Generate video
                 start_time = datetime.utcnow()
+                # Build rich audio prompt with character voice description
+                voice_desc = None
+                if scene.character_id:
+                    _, char_traits, _ = await self._load_character_context(db, scene)
+                    accent = char_traits.get("speaking_style", {}).get("accent_hints") if isinstance(char_traits.get("speaking_style"), dict) else None
+                    tone = char_traits.get("speaking_style", {}).get("tone") if isinstance(char_traits.get("speaking_style"), dict) else None
+                    nationality = char_traits.get("nationality")
+                    voice_parts = []
+                    if nationality:
+                        voice_parts.append(f"{nationality} accent")
+                    if accent:
+                        voice_parts.append(accent)
+                    if tone:
+                        voice_parts.append(tone)
+                    voice_desc = ", ".join(voice_parts) if voice_parts else None
+
+                from app.services.fal_video_generator import FalVideoGenerator as FVG
+                rich_audio = FVG.build_audio_prompt(scene.audio_description, voice_desc)
+
                 clip = await fal_gen.generate_clip(
                     scene_number=scene.scene_number,
                     image_url=image_url,
                     prompt=(scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
                     dialogue=scene.dialogue,
-                    audio_description=scene.audio_description,
+                    audio_description=rich_audio,
                 )
                 generation_time_ms = int(
                     (datetime.utcnow() - start_time).total_seconds() * 1000

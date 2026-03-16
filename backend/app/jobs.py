@@ -270,13 +270,35 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                 # Upload to fal CDN
                 image_url = await fal_gen.upload_image(local_image)
 
+                # Build rich audio prompt with character voice description
+                rich_audio = scene.audio_description
+                if scene.character and scene.character.personality:
+                    try:
+                        import json as _json
+                        _p = _json.loads(scene.character.personality) if isinstance(scene.character.personality, str) else scene.character.personality
+                        _ss = _p.get("speaking_style", {})
+                        _nationality = _p.get("nationality", "")
+                        _accent = _ss.get("accent_hints", "") if isinstance(_ss, dict) else ""
+                        _tone = _ss.get("tone", "") if isinstance(_ss, dict) else ""
+                        _voice_parts = [p for p in [
+                            f"{_nationality} accent" if _nationality else "",
+                            _accent,
+                            _tone,
+                        ] if p]
+                        _voice_desc = ", ".join(_voice_parts) if _voice_parts else None
+                        from app.services.fal_video_generator import FalVideoGenerator as _FVG
+                        rich_audio = _FVG.build_audio_prompt(scene.audio_description, _voice_desc)
+                        logger.debug(f"Scene {scene_number}: Audio prompt: {rich_audio[:100]}...")
+                    except Exception as e:
+                        logger.warning(f"Scene {scene_number}: Could not build voice prompt: {e}")
+
                 # Generate video
                 clip = await fal_gen.generate_clip(
                     scene_number=scene_number,
                     image_url=image_url,
                     prompt=(scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
                     dialogue=scene.dialogue,
-                    audio_description=scene.audio_description,
+                    audio_description=rich_audio,
                 )
                 video_local = clip.video_path
 

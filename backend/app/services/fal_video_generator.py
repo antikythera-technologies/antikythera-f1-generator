@@ -358,6 +358,23 @@ class FalVideoGenerator:
             args["seed"] = seed
         return args
 
+    @staticmethod
+    def build_audio_prompt(
+        audio_description: str | None,
+        voice_description: str | None = None,
+    ) -> str | None:
+        """Build a rich audio prompt combining voice characteristics + scene audio.
+
+        Prepends the character's voice/accent description so the audio model
+        generates consistent voices across scenes.
+        """
+        parts = []
+        if voice_description:
+            parts.append(f"Voice: {voice_description}")
+        if audio_description:
+            parts.append(audio_description)
+        return ". ".join(parts) if parts else None
+
     def _args_kling(self, image_url, prompt, dialogue, audio_description, seed, duration=5):
         """Build Kling 3.0 arguments."""
         enable_audio = self.backend in FAL_AUDIO_BACKENDS
