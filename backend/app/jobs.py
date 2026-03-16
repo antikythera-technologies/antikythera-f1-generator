@@ -580,8 +580,31 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         f"Scene {scene_number}: Using episode appearance for {scene.character.name}"
                     )
 
-        # Build prompt: different for character scenes vs establishing/title card scenes
-        if scene.character_id:
+        # Detect if this is a scene that should NOT show a character face
+        # (ACTION_REPLAY, ESTABLISHING, TITLE_CARD — even if a character provides voiceover)
+        is_landscape_scene = not scene.character_id  # No character = always landscape
+        if scene.character_id and frame_prompt:
+            landscape_keywords = [
+                "COCKPIT POV", "ACTION_REPLAY", "TITLE_CARD",
+                "ESTABLISHING", "AERIAL", "ON-BOARD", "ONBOARD",
+                "HELMET CAM", "CIRCUIT VIEW",
+            ]
+            if any(kw in frame_prompt.upper() for kw in landscape_keywords):
+                is_landscape_scene = True
+                logger.info(
+                    f"Scene {scene_number}: Landscape/action scene detected — "
+                    f"no face, no LoRA, clean cinematic prompt"
+                )
+
+        # Build prompt based on scene type
+        if is_landscape_scene:
+            # Clean prompt: NO LoRA trigger, NO caricature, NO face
+            full_prompt = (
+                f"{frame_prompt} "
+                "Cinematic photography, dramatic lighting, no people in foreground, "
+                "no text, no words, no letters, no watermarks."
+            )
+        else:
             # Character scene: LoRA trigger + caricature style + character traits
             physical = character_traits.get("physical_features", "")
             prompt_parts = ["ANTKF1STYLE", frame_prompt]
@@ -595,15 +618,6 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
             full_prompt = " ".join(prompt_parts)
-        else:
-            # No character (TITLE_CARD, ESTABLISHING, ACTION_REPLAY): 
-            # NO LoRA trigger, NO caricature style — just the scene description
-            full_prompt = (
-                f"{frame_prompt} "
-                "Cinematic photography, dramatic lighting, no people in foreground, "
-                "no text, no words, no letters, no watermarks."
-            )
-            logger.info(f"Scene {scene_number}: Using clean landscape prompt (no LoRA/caricature)")
 
         storage = StorageService()
 
@@ -613,26 +627,23 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             scene.generation_started_at = started_at
             await db.flush()
 
-            # Upload face reference to fal CDN if character has one
+            # Upload face reference to fal CDN — only for character scenes
             face_ref_url = None
-            if scene.character:
+            if scene.character and not is_landscape_scene:
                 face_local = await storage.download_face_reference(scene.character.name)
                 if face_local:
                     import fal_client
                     face_ref_url = fal_client.upload_file(face_local)
                     logger.info(f"Scene {scene_number}: Face reference uploaded: {face_ref_url[:80]}...")
 
-            # Choose image backend from Redis (shared between API + worker)
+            # Choose image backend
             from app.services.runtime_settings import get_image_generator
             image_backend = get_image_generator()
 
-            # Only scenes with no character use flux-lora (title cards with narrator).
-            # All other scenes use instant-character — the prompt controls what's shown
-            # (cockpit POV, podium, etc). The face reference adds consistency even when
-            # the character isn't the main focus.
-            if not scene.character_id:
-                logger.info(f"Scene {scene_number}: No character — using flux-lora")
+            # Landscape/action scenes always use flux-lora (no face reference needed)
+            if is_landscape_scene:
                 image_backend = "flux-lora"
+                logger.info(f"Scene {scene_number}: Using flux-lora (landscape/action scene)")
 
             if image_backend == "instant-character" and face_ref_url:
                 # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
