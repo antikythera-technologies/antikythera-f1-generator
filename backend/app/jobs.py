@@ -175,7 +175,7 @@ def enqueue_scene_image(episode_id: int, scene_number: int, frame_type: str = "s
         episode_id,
         scene_number,
         frame_type,
-        job_timeout=300,        # 5 minutes for ComfyUI image gen
+        job_timeout=600,        # 10 minutes for fal.ai image gen (instant-character needs warm-up)
         result_ttl=86400,
         failure_ttl=604800,
         meta={"episode_id": episode_id, "scene_number": scene_number, "type": f"scene_image_{frame_type}"},
