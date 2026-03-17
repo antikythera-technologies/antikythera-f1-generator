@@ -391,7 +391,7 @@ class FalVideoGenerator:
             args["seed"] = seed
         return args
 
-    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6):
+    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None):
         """Build LTX 2.3 arguments with native audio generation."""
         full_prompt = prompt
         if dialogue:
@@ -404,6 +404,8 @@ class FalVideoGenerator:
             "generate_audio": True,
             "duration": duration,  # LTX accepts even values: 6, 8, 10, ..., 20
         }
+        if end_image_url is not None:
+            args["end_image_url"] = end_image_url
         if audio_description:
             args["audio_prompt"] = audio_description
         if seed is not None:
