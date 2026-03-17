@@ -617,6 +617,42 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                       </div>
                     </div>
 
+                    {/* Pipeline & Cost Info */}
+                    <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-3">
+                      <div>
+                        <p className="text-xs text-white/40">Image Backend</p>
+                        <p className="mt-0.5 text-sm font-mono text-white/70">
+                          {detail.image_backend || "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/40">Video Backend</p>
+                        <p className="mt-0.5 text-sm font-mono text-white/70">
+                          {detail.video_generator || "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/40">Image Cost</p>
+                        <p className="mt-0.5 text-sm font-mono text-neon-cyan">
+                          {detail.image_cost_usd ? `$${detail.image_cost_usd.toFixed(4)}` : "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/40">Video Cost</p>
+                        <p className="mt-0.5 text-sm font-mono text-cyber-purple">
+                          {detail.video_cost_usd ? `$${detail.video_cost_usd.toFixed(4)}` : "N/A"}
+                        </p>
+                      </div>
+                      {(detail.image_cost_usd || detail.video_cost_usd) && (
+                        <div className="col-span-2">
+                          <p className="text-xs text-white/40">Total Scene Cost</p>
+                          <p className="mt-0.5 text-sm font-mono font-bold text-electric-blue">
+                            ${((detail.image_cost_usd || 0) + (detail.video_cost_usd || 0)).toFixed(4)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                     {detail.last_error && (
                       <div>
                         <p className="text-xs text-white/40 mb-1">Last Error</p>

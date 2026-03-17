@@ -7,11 +7,11 @@ from pydantic import BaseModel
 
 
 class CostBreakdown(BaseModel):
-    """Cost breakdown by provider."""
-    anthropic: Decimal
-    ovi: Decimal
-    youtube: Decimal
-    storage: Decimal
+    """Cost breakdown by provider category."""
+    anthropic: Decimal = Decimal(0)
+    fal_image: Decimal = Decimal(0)
+    fal_video: Decimal = Decimal(0)
+    total: Decimal = Decimal(0)
 
 
 class CostAnalytics(BaseModel):

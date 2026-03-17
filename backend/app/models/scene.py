@@ -66,6 +66,10 @@ class Scene(Base):
     audio_clip_path: Mapped[Optional[str]] = mapped_column(String(500))
     video_generator: Mapped[Optional[str]] = mapped_column(String(50))  # "ovi" or "ltx23"
     duration_seconds: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=5.0)
+    image_cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 6), default=0)
+    video_cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 6), default=0)
+    image_backend: Mapped[Optional[str]] = mapped_column(String(50))
+    scene_type: Mapped[Optional[str]] = mapped_column(String(50))  # TALKING_HEAD, ACTION_REPLAY, etc.
 
     # Timing
     generation_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

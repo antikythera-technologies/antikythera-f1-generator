@@ -39,15 +39,33 @@ async def get_costs(
     result = await db.execute(stmt)
     usage_records = result.scalars().all()
 
-    # Aggregate by provider
-    anthropic_cost = sum(
-        (r.cost_usd or Decimal(0)) for r in usage_records if r.provider == APIProvider.ANTHROPIC
-    )
-    total_tokens = sum(
-        ((r.input_tokens or 0) + (r.output_tokens or 0))
-        for r in usage_records
-        if r.provider == APIProvider.ANTHROPIC
-    )
+    # Define provider categories
+    FAL_VIDEO_PROVIDERS = {
+        APIProvider.FAL_OVI,
+        APIProvider.FAL_LTX,
+        APIProvider.FAL_KLING_STD,
+        APIProvider.FAL_KLING_STD_AUDIO,
+        APIProvider.FAL_KLING_PRO,
+        APIProvider.FAL_KLING_PRO_AUDIO,
+    }
+
+    # Aggregate by provider category
+    anthropic_cost = Decimal(0)
+    fal_image_cost = Decimal(0)
+    fal_video_cost = Decimal(0)
+    total_cost = Decimal(0)
+    total_tokens = 0
+
+    for r in usage_records:
+        cost = r.cost_usd or Decimal(0)
+        total_cost += cost
+        if r.provider == APIProvider.ANTHROPIC:
+            anthropic_cost += cost
+            total_tokens += (r.input_tokens or 0) + (r.output_tokens or 0)
+        elif r.provider == APIProvider.FAL_IMAGE:
+            fal_image_cost += cost
+        elif r.provider in FAL_VIDEO_PROVIDERS:
+            fal_video_cost += cost
 
     # Count episodes
     episode_stmt = select(func.count(Episode.id)).where(
@@ -60,12 +78,12 @@ async def get_costs(
     return [
         CostAnalytics(
             period=f"{start_date} to {end_date}",
-            total_cost_usd=anthropic_cost,  # Ovi is free
+            total_cost_usd=total_cost,
             breakdown=CostBreakdown(
                 anthropic=anthropic_cost,
-                ovi=Decimal(0),  # Ovi is free
-                youtube=Decimal(0),  # YouTube API is free
-                storage=Decimal(0),  # TODO: Calculate MinIO costs
+                fal_image=fal_image_cost,
+                fal_video=fal_video_cost,
+                total=total_cost,
             ),
             episodes_generated=episodes_count,
             total_tokens=total_tokens,

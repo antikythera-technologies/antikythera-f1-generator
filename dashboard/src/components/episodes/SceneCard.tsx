@@ -85,6 +85,27 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
           )}
         </div>
 
+        {/* Pipeline & Cost info */}
+        {(scene.video_generator || scene.image_backend || scene.image_cost_usd || scene.video_cost_usd) && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {scene.image_backend && (
+              <span className="rounded-full bg-neon-cyan/10 px-2 py-0.5 text-[10px] font-medium text-neon-cyan uppercase tracking-wider">
+                {scene.image_backend}
+              </span>
+            )}
+            {scene.video_generator && (
+              <span className="rounded-full bg-cyber-purple/10 px-2 py-0.5 text-[10px] font-medium text-cyber-purple uppercase tracking-wider">
+                {scene.video_generator}
+              </span>
+            )}
+            {(scene.image_cost_usd || scene.video_cost_usd) && (
+              <span className="ml-auto font-mono text-[10px] text-white/40">
+                ${((scene.image_cost_usd || 0) + (scene.video_cost_usd || 0)).toFixed(3)}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Dialogue preview */}
         {scene.dialogue && (
           <p className="text-sm text-white/70 italic line-clamp-2">

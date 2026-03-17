@@ -143,7 +143,7 @@ class Settings(BaseSettings):
 
     #   fal.ai hosted:      fal-ovi, fal-ltx, fal-kling-std, fal-kling-std-audio,
     #                       fal-kling-pro, fal-kling-pro-audio
-    VIDEO_GENERATOR_DEFAULT: str = "ovi"
+    VIDEO_GENERATOR_DEFAULT: str = "fal-ltx"
 
     # fal.ai API (hosted video generation)
     FAL_KEY: str = ""

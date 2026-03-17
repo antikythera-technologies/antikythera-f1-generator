@@ -10,6 +10,7 @@ import anthropic
 
 from app.config import settings
 from app.exceptions import ScriptGenerationError
+from app.services.api_logger import log_api_request, log_api_response
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ SCENE MIX REQUIREMENTS:
 - At least 1 PODIUM scene (if post-race)
 - The remaining scenes can be TALKING_HEAD or REACTION
 - NEVER have more than 3 TALKING_HEAD scenes in a row — break them up with action or establishing shots
-- NEVER use EXTREME CLOSE-UP or CLOSE-UP of a character's face as the shot type for start_frame_prompt — use MEDIUM SHOT or wider. Close-ups lose hair detail and distort the caricature style. The closest framing allowed is MEDIUM CLOSE-UP (chest and above).
+- NEVER use EXTREME CLOSE-UP, CLOSE-UP, or MEDIUM CLOSE-UP as the shot type — the closest allowed framing is MEDIUM SHOT. The full head, hair, and shoulders MUST be visible in every character frame. Tight crops lose hair detail and distort the caricature style.
 - NEVER have two consecutive scenes with the same character at the same framing — vary the shot types
 
 CHARACTER RULES:
@@ -235,7 +236,13 @@ class ScriptGenerator:
         )
         logger.debug(f"Prompt length: {len(prompt)} characters")
 
-        start_time = time.time()
+        log_api_request(logger, "anthropic", self.model, {
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "system_prompt_len": len(SCRIPT_SYSTEM_PROMPT),
+            "user_prompt_len": len(prompt),
+        })
+        start_time = time.monotonic()
 
         try:
             response = self.client.messages.create(
@@ -246,15 +253,19 @@ class ScriptGenerator:
                 messages=[{"role": "user", "content": prompt}],
             )
 
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            logger.info(f"Anthropic response received in {elapsed_ms}ms")
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
 
             # Extract usage
             usage = response.usage
             input_tokens = usage.input_tokens
             output_tokens = usage.output_tokens
 
-            logger.info(f"Token usage - Input: {input_tokens}, Output: {output_tokens}")
+            log_api_response(logger, "anthropic", self.model, "ok", {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "stop_reason": response.stop_reason,
+                "content_len": len(response.content[0].text),
+            }, elapsed_ms)
 
             # Calculate cost
             cost_usd = self._calculate_cost(input_tokens, output_tokens)

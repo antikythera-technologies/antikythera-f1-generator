@@ -5,6 +5,7 @@ RQ queue. The actual work is executed by the worker process defined in
 ``app.worker``.
 """
 
+from decimal import Decimal
 import logging
 from typing import Optional
 
@@ -13,6 +14,9 @@ from rq import Queue
 from rq.job import Job
 
 from app.config import settings
+
+import time
+from app.services.api_logger import log_api_request, log_api_response
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +324,20 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                     except Exception as e:
                         logger.warning(f"Scene {scene_number}: Could not build voice prompt: {e}")
 
+                # Upload end frame for FLF if available
+                end_image_url = None
+                if scene.end_frame_path:
+                    from app.services.fal_video_generator import FAL_FLF_CAPABLE
+                    if fal_gen.backend in FAL_FLF_CAPABLE:
+                        end_local = f"/tmp/f1-regen/ep{episode_id}_scene{scene_number:02d}_end.png"
+                        try:
+                            end_bucket, end_obj = scene.end_frame_path.split("/", 1)
+                            await storage.download_file(end_bucket, end_obj, end_local)
+                            end_image_url = await fal_gen.upload_image(end_local)
+                            logger.info(f"Scene {scene_number}: End frame uploaded for FLF")
+                        except Exception as e:
+                            logger.warning(f"Scene {scene_number}: Could not load end frame for FLF: {e}")
+
                 # Generate video
                 clip = await fal_gen.generate_clip(
                     scene_number=scene_number,
@@ -327,6 +345,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                     prompt=(scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
                     dialogue=scene.dialogue,
                     audio_description=rich_audio,
+                    end_image_url=end_image_url,
                 )
                 video_local = clip.video_path
 
@@ -379,7 +398,9 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                 "fal-ovi": 0.20, "fal-ltx": 0.30,
                 "fal-kling-std": 0.42, "fal-kling-std-audio": 0.63,
                 "fal-kling-pro": 0.42, "fal-kling-pro-audio": 0.84,
+                "fal-kling-o1-flf": 0.56, "fal-vidu-q1-flf": 0.50, "fal-wan-flf": 0.50,
             }
+            scene.video_cost_usd = Decimal(str(video_cost_map.get(backend, 0.20)))
             await _log_api_cost(
                 db, episode_id, scene.id,
                 provider=backend if backend.startswith("fal-") else "ovi",
@@ -451,13 +472,16 @@ async def _ensure_runpod_ready(timeout: int = 300) -> None:
 
     # Quick health check
     try:
+        _health_url = f"{comfyui_url}/system_stats"
+        logger.info(f"[API:runpod] Health check: GET {_health_url}")
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{comfyui_url}/system_stats")
+            resp = await client.get(_health_url)
+            logger.info(f"[API:runpod] Health check response: {resp.status_code}")
             if resp.status_code == 200:
                 logger.info("RunPod ComfyUI pod is ready")
                 return
-    except Exception:
-        pass
+    except Exception as _hc_err:
+        logger.info(f"[API:runpod] Health check failed: {_hc_err}")
 
     logger.warning("RunPod ComfyUI pod is not responding — attempting to start it")
 
@@ -466,16 +490,22 @@ async def _ensure_runpod_ready(timeout: int = 300) -> None:
 
     # Start the pod via RunPod GraphQL API
     import json
+    _resume_payload = {"query": f'mutation {{ podResume(input: {{ podId: \"{pod_id}\", gpuCount: 1 }}) {{ id desiredStatus }} }}'}
+    log_api_request(logger, "runpod", "graphql/podResume", _resume_payload)
+    _t0_resume = time.monotonic()
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://api.runpod.io/graphql",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"query": f'mutation {{ podResume(input: {{ podId: \"{pod_id}\", gpuCount: 1 }}) {{ id desiredStatus }} }}'},
+            json=_resume_payload,
         )
         data = resp.json()
+        _elapsed_resume = int((time.monotonic() - _t0_resume) * 1000)
         if "errors" in data:
             error_msg = data["errors"][0].get("message", "Unknown RunPod error")
+            log_api_response(logger, "runpod", "graphql/podResume", "error", data, _elapsed_resume)
             raise RuntimeError(f"Failed to start RunPod pod: {error_msg}")
+        log_api_response(logger, "runpod", "graphql/podResume", "ok", data, _elapsed_resume)
         logger.info(f"RunPod pod resume requested: {data}")
 
     # Poll until ComfyUI is ready
@@ -486,11 +516,12 @@ async def _ensure_runpod_ready(timeout: int = 300) -> None:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{comfyui_url}/system_stats")
+                logger.debug(f"[API:runpod] Poll health check: {resp.status_code} ({elapsed}s)")
                 if resp.status_code == 200:
                     logger.info(f"RunPod ComfyUI pod ready after {elapsed}s")
                     return
-        except Exception:
-            pass
+        except Exception as _poll_err:
+            logger.debug(f"[API:runpod] Poll health check failed: {_poll_err} ({elapsed}s)")
         if elapsed % 30 == 0:
             logger.info(f"Waiting for RunPod pod to start... {elapsed}s elapsed")
 
@@ -606,6 +637,13 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             )
         else:
             # Character scene: LoRA trigger + caricature style + character traits
+
+            # Safety net: rewrite tight framing keywords to prevent head/hair cropping
+            import re as _re
+            frame_prompt = _re.sub(r'(?i)MEDIUM\s+CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
+            frame_prompt = _re.sub(r'(?i)EXTREME\s+CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
+            frame_prompt = _re.sub(r'(?i)CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
+
             physical = character_traits.get("physical_features", "")
             prompt_parts = ["ANTKF1STYLE", frame_prompt]
             if episode_appearance:
@@ -615,6 +653,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             prompt_parts.append(
                 "Satirical caricature style with oversized head, "
                 "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
+                "Full head, hair, and shoulders must be visible in frame. Do not crop the top of the head. "
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
             full_prompt = " ".join(prompt_parts)
@@ -633,8 +672,11 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 face_local = await storage.download_face_reference(scene.character.name)
                 if face_local:
                     import fal_client
+                    logger.info(f"[API:fal-image] Uploading face reference: {face_local}")
+                    _t0_face = time.monotonic()
                     face_ref_url = fal_client.upload_file(face_local)
-                    logger.info(f"Scene {scene_number}: Face reference uploaded: {face_ref_url[:80]}...")
+                    _elapsed_face = int((time.monotonic() - _t0_face) * 1000)
+                    logger.info(f"[API:fal-image] Face reference uploaded in {_elapsed_face}ms: {face_ref_url[:80]}...")
 
             # Choose image backend
             from app.services.runtime_settings import get_image_generator
@@ -649,22 +691,31 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
                 import fal_client as _fal
 
-                logger.info(f"Scene {scene_number}: Generating via fal-ai/instant-character (face ref=yes)...")
-
-                _ic_result = _fal.subscribe(
-                    "fal-ai/instant-character",
-                    arguments={
+                _ic_args = {
                         "prompt": full_prompt,
                         "image_url": face_ref_url,
+                        "negative_prompt": (
+                            "cropped head, cut off head, cut off hair, top of head missing, "
+                            "forehead cropped, extreme close-up, tight crop, face filling frame"
+                        ),
                         "image_size": "landscape_16_9",
                         "num_inference_steps": 28,
                         "guidance_scale": 3.5,
-                        "scale": 0.8,
+                        "scale": 0.4,
                         "output_format": "png",
                         "loras": [{"path": LORA_URL, "scale": 1.0, "trigger_word": "ANTKF1STYLE"}],
-                    },
+                    }
+                _t0_ic = time.monotonic()
+                log_api_request(logger, "fal-image", "fal-ai/instant-character", _ic_args)
+                logger.info(f"[API:fal-image] PROMPT: {full_prompt}")
+
+                _ic_result = _fal.subscribe(
+                    "fal-ai/instant-character",
+                    arguments=_ic_args,
                     with_logs=True,
                 )
+                _elapsed_ic = int((time.monotonic() - _t0_ic) * 1000)
+                log_api_response(logger, "fal-image", "fal-ai/instant-character", "ok", _ic_result, _elapsed_ic)
 
                 _ic_images = _ic_result.get("images", [])
                 if not _ic_images:
@@ -705,6 +756,8 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 scene.status = SceneStatus.COMPLETED
                 scene.generation_completed_at = datetime.utcnow()
                 scene.generation_time_ms = generation_time_ms
+                scene.image_cost_usd = Decimal("0.04")
+                scene.image_backend = "instant-character"
                 scene.last_error = None
 
                 await db.commit()
@@ -736,6 +789,9 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 }
 
             # Submit to fal.ai
+            _t0_flux = time.monotonic()
+            log_api_request(logger, "fal-image", "fal-ai/flux-lora", fal_payload)
+            logger.info(f"[API:fal-image] PROMPT: {full_prompt}")
             async with httpx.AsyncClient(timeout=300) as client:
                 # Submit request
                 submit_resp = await client.post(
@@ -780,6 +836,8 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 )
                 result_resp.raise_for_status()
                 result_data = result_resp.json()
+                _elapsed_flux = int((time.monotonic() - _t0_flux) * 1000)
+                log_api_response(logger, "fal-image", "fal-ai/flux-lora", "ok", result_data, _elapsed_flux)
 
                 images = result_data.get("images", [])
                 if not images:
@@ -821,6 +879,8 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             scene.generation_completed_at = datetime.utcnow()
             scene.generation_time_ms = generation_time_ms
             scene.last_error = None
+            scene.image_cost_usd = Decimal("0.035")
+            scene.image_backend = "flux-lora"
 
             await db.commit()
             # Log image generation cost
@@ -858,10 +918,35 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
 
     # Step 1: Generate start frame image
     await _async_scene_image(episode_id, scene_number, frame_type="start")
-    logger.info(f"Scene {scene_number}: Image done, proceeding to video")
+    logger.info(f"Scene {scene_number}: Start image done")
 
-    # Step 2: Generate video from the new image
-    # _async_scene_video sets its own GENERATING status and COMPLETED on success
+    # Step 1b: Generate end frame if backend supports FLF
+    from app.services.runtime_settings import get_video_generator
+    from app.services.fal_video_generator import FalBackend, FAL_FLF_CAPABLE
+    backend_str = get_video_generator()
+    try:
+        backend_enum = FalBackend(backend_str)
+        if backend_enum in FAL_FLF_CAPABLE:
+            # Check if scene has an end_frame_prompt via DB
+            from app.database import async_session_maker
+            from app.models.scene import Scene as SceneModel
+            from sqlalchemy import select
+            async with async_session_maker() as db:
+                stmt = select(SceneModel).where(
+                    SceneModel.episode_id == episode_id,
+                    SceneModel.scene_number == scene_number,
+                )
+                result = await db.execute(stmt)
+                scene = result.scalar_one_or_none()
+                if scene and scene.end_frame_prompt:
+                    logger.info(f"Scene {scene_number}: Generating end frame for FLF")
+                    await _async_scene_image(episode_id, scene_number, frame_type="end")
+                    logger.info(f"Scene {scene_number}: End frame done")
+    except (ValueError, Exception) as e:
+        logger.debug(f"Scene {scene_number}: FLF check skipped: {e}")
+
+    # Step 2: Generate video from the new image(s)
+    logger.info(f"Scene {scene_number}: Proceeding to video")
     result = await _async_scene_video(episode_id, scene_number)
     logger.info(f"Scene {scene_number}: Full regeneration complete")
     return result

@@ -20,6 +20,8 @@ from typing import Optional
 
 import httpx
 
+from app.services.api_logger import log_api_request, log_api_response
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +34,9 @@ class FalBackend(str, Enum):
     KLING_STD_AUDIO = "fal-kling-std-audio"
     KLING_PRO = "fal-kling-pro"
     KLING_PRO_AUDIO = "fal-kling-pro-audio"
+    KLING_O1_FLF = "fal-kling-o1-flf"
+    VIDU_Q1_FLF = "fal-vidu-q1-flf"
+    WAN_FLF = "fal-wan-flf"
 
 
 # Map backend enum to fal.ai model endpoint
@@ -42,6 +47,9 @@ FAL_MODEL_MAP: dict[FalBackend, str] = {
     FalBackend.KLING_STD_AUDIO: "fal-ai/kling-video/v3/standard/image-to-video",
     FalBackend.KLING_PRO: "fal-ai/kling-video/v3/pro/image-to-video",
     FalBackend.KLING_PRO_AUDIO: "fal-ai/kling-video/v3/pro/image-to-video",
+    FalBackend.KLING_O1_FLF: "fal-ai/kling-video/o1/image-to-video",
+    FalBackend.VIDU_Q1_FLF: "fal-ai/vidu/q1/start-end-to-video",
+    FalBackend.WAN_FLF: "fal-ai/wan-flf2v",
 }
 
 # Backends that produce native audio (no TTS mux needed)
@@ -52,6 +60,19 @@ FAL_AUDIO_BACKENDS: set[FalBackend] = {
     FalBackend.KLING_PRO_AUDIO,
 }
 
+# FLF (First-Last Frame) capability sets
+FAL_FLF_CAPABLE: set[FalBackend] = {
+    FalBackend.LTX,
+    FalBackend.KLING_O1_FLF,
+    FalBackend.VIDU_Q1_FLF,
+    FalBackend.WAN_FLF,
+}
+FAL_FLF_REQUIRED: set[FalBackend] = {
+    FalBackend.KLING_O1_FLF,
+    FalBackend.VIDU_Q1_FLF,
+    FalBackend.WAN_FLF,
+}
+
 # Human-readable names for logging
 FAL_DISPLAY_NAMES: dict[FalBackend, str] = {
     FalBackend.OVI: "Ovi (fal.ai)",
@@ -60,6 +81,9 @@ FAL_DISPLAY_NAMES: dict[FalBackend, str] = {
     FalBackend.KLING_STD_AUDIO: "Kling 3.0 Standard + Audio",
     FalBackend.KLING_PRO: "Kling 3.0 Pro",
     FalBackend.KLING_PRO_AUDIO: "Kling 3.0 Pro + Audio",
+    FalBackend.KLING_O1_FLF: "Kling O1 FLF",
+    FalBackend.VIDU_Q1_FLF: "Vidu Q1 FLF",
+    FalBackend.WAN_FLF: "Wan FLF",
 }
 
 
@@ -93,6 +117,9 @@ def calculate_scene_duration(
         "fal-kling-std-audio": 15,
         "fal-kling-pro": 15,
         "fal-kling-pro-audio": 15,
+        "fal-kling-o1-flf": 10,
+        "fal-vidu-q1-flf": 10,
+        "fal-wan-flf": 10,
     }
     max_dur = max_durations.get(backend, 10)
     
@@ -175,6 +202,7 @@ class FalVideoGenerator:
         audio_description: Optional[str] = None,
         seed: Optional[int] = None,
         duration: Optional[int] = None,
+        end_image_url: Optional[str] = None,
     ) -> FalVideoClip:
         """Generate a video clip from image + prompt via fal.ai.
 
@@ -209,6 +237,7 @@ class FalVideoGenerator:
             audio_description=audio_description,
             seed=seed,
             duration=duration,
+            end_image_url=end_image_url,
         )
 
         logger.info(
@@ -217,7 +246,8 @@ class FalVideoGenerator:
         )
         logger.debug(f"Scene {scene_number}: Args: {arguments}")
 
-        start_time = time.time()
+        log_api_request(logger, "fal-video", self.model_id, arguments)
+        start_time = time.monotonic()
 
         try:
             result = await asyncio.get_event_loop().run_in_executor(
@@ -230,11 +260,14 @@ class FalVideoGenerator:
                 ),
             )
         except Exception as e:
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            log_api_response(logger, "fal-video", self.model_id, f"ERROR: {type(e).__name__}: {e}", elapsed_ms=elapsed_ms)
             raise FalVideoError(
                 f"Scene {scene_number}: fal.ai {self.display_name} failed: {e}"
             )
 
-        elapsed_ms = int((time.time() - start_time) * 1000)
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        log_api_response(logger, "fal-video", self.model_id, "ok", result, elapsed_ms)
 
         # Extract video URL from result
         video_data = result.get("video")
@@ -291,13 +324,19 @@ class FalVideoGenerator:
         if not os.path.exists(local_path):
             raise FalVideoError(f"Image not found: {local_path}")
 
-        logger.info(f"Uploading to fal CDN: {local_path}")
+        file_size_kb = os.path.getsize(local_path) / 1024
+        log_api_request(logger, "fal-cdn", "upload_file", {
+            "path": local_path,
+            "size_kb": round(file_size_kb, 1),
+        })
+        start_time = time.monotonic()
 
         url = await asyncio.get_event_loop().run_in_executor(
             None, fal_client.upload_file, local_path
         )
 
-        logger.info(f"Uploaded: {url}")
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        log_api_response(logger, "fal-cdn", "upload_file", "ok", {"url": url}, elapsed_ms)
         return url
 
     # ------------------------------------------------------------------
@@ -312,6 +351,7 @@ class FalVideoGenerator:
         audio_description: Optional[str],
         seed: Optional[int],
         duration: int = 5,
+        end_image_url: Optional[str] = None,
     ) -> dict:
         """Build fal.ai API arguments for the selected backend."""
         if self.backend == FalBackend.OVI:
@@ -320,7 +360,18 @@ class FalVideoGenerator:
             )
         elif self.backend == FalBackend.LTX:
             return self._args_ltx(
-                image_url, prompt, dialogue, audio_description, seed, duration
+                image_url, prompt, dialogue, audio_description, seed, duration,
+                end_image_url=end_image_url,
+            )
+        elif self.backend == FalBackend.KLING_O1_FLF:
+            return self._args_kling_o1_flf(
+                image_url, prompt, dialogue, audio_description, seed, duration,
+                end_image_url=end_image_url,
+            )
+        elif self.backend in (FalBackend.VIDU_Q1_FLF, FalBackend.WAN_FLF):
+            return self._args_flf_generic(
+                image_url, prompt, dialogue, audio_description, seed, duration,
+                end_image_url=end_image_url,
             )
         else:
             return self._args_kling(
@@ -396,6 +447,48 @@ class FalVideoGenerator:
             args["seed"] = seed
         return args
 
+    def _args_kling_o1_flf(self, image_url, prompt, dialogue, audio_description, seed, duration=5, end_image_url=None):
+        """Build Kling O1 FLF arguments. Requires end_image_url."""
+        if end_image_url is None:
+            raise FalVideoError("Kling O1 FLF requires end_image_url")
+
+        full_prompt = prompt
+        if dialogue:
+            full_prompt += f' The character says: "{dialogue}"'
+
+        # Kling O1 uses @Image1/@Image2 syntax in prompt for FLFV
+        full_prompt = f"@Image1 {full_prompt} @Image2"
+
+        args = {
+            "prompt": full_prompt,
+            "start_image_url": image_url,
+            "end_image_url": end_image_url,
+            "duration": str(duration),
+            "aspect_ratio": "16:9",
+        }
+        if seed is not None:
+            args["seed"] = seed
+        return args
+
+    def _args_flf_generic(self, image_url, prompt, dialogue, audio_description, seed, duration=5, end_image_url=None):
+        """Build FLF arguments for Vidu Q1 and Wan backends. Requires end_image_url."""
+        if end_image_url is None:
+            raise FalVideoError(f"{self.display_name} requires end_image_url")
+
+        full_prompt = prompt
+        if dialogue:
+            full_prompt += f' The character says: "{dialogue}"'
+
+        args = {
+            "prompt": full_prompt,
+            "image_url": image_url,
+            "end_image_url": end_image_url,
+            "duration": duration,
+        }
+        if seed is not None:
+            args["seed"] = seed
+        return args
+
     @staticmethod
     def _build_ovi_prompt(
         action: str,
@@ -438,12 +531,28 @@ class FalVideoGenerator:
 # Convenience: list all available backends
 # ------------------------------------------------------------------
 
+# Per-backend cost rates ($/second of video)
+FAL_COST_PER_SECOND: dict[FalBackend, float] = {
+    FalBackend.OVI: 0.04,
+    FalBackend.LTX: 0.06,
+    FalBackend.KLING_STD: 0.084,
+    FalBackend.KLING_STD_AUDIO: 0.126,
+    FalBackend.KLING_PRO: 0.112,
+    FalBackend.KLING_PRO_AUDIO: 0.168,
+    FalBackend.KLING_O1_FLF: 0.112,
+    FalBackend.VIDU_Q1_FLF: 0.10,
+    FalBackend.WAN_FLF: 0.10,
+}
+
 ALL_FAL_BACKENDS: list[dict] = [
     {
         "value": b.value,
         "name": FAL_DISPLAY_NAMES[b],
         "model": FAL_MODEL_MAP[b],
         "has_audio": b in FAL_AUDIO_BACKENDS,
+        "supports_flf": b in FAL_FLF_CAPABLE,
+        "requires_flf": b in FAL_FLF_REQUIRED,
+        "cost_per_second": FAL_COST_PER_SECOND.get(b, 0.10),
     }
     for b in FalBackend
 ]

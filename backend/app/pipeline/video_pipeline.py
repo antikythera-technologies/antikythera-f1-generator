@@ -281,6 +281,7 @@ class VideoPipeline:
                 end_frame_prompt=scene_script.end_frame_prompt or None,
                 camera_direction=scene_script.camera_direction or None,
                 video_prompt=scene_script.video_prompt or None,
+                scene_type=getattr(scene_script, "scene_type", None),
                 status=SceneStatus.PENDING,
             )
             db.add(scene)
@@ -740,6 +741,15 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     scene.generation_completed_at = datetime.utcnow()
                     scene.generation_time_ms = clip.generation_time_ms
 
+                    # Log LTX video generation cost (RunPod self-hosted, ~$0.50/hr GPU)
+                    await self._log_api_usage(
+                        db,
+                        provider=APIProvider.LTX,
+                        endpoint="comfyui/ltx-2.3-av",
+                        cost_usd=0.0,  # Self-hosted RunPod — cost is per-hour, not per-clip
+                        response_time_ms=clip.generation_time_ms,
+                    )
+
                     self.logger.info(
                         f"Scene {sn} complete: {clip.generation_time_ms}ms (LTX AV)"
                     )
@@ -906,6 +916,15 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
 
                     self.episode.ovi_calls += 1
 
+                    # Log Ovi video generation cost (RunPod self-hosted)
+                    await self._log_api_usage(
+                        db,
+                        provider=APIProvider.OVI,
+                        endpoint="runpod/ovi",
+                        cost_usd=0.0,  # Self-hosted RunPod — cost is per-hour, not per-clip
+                        response_time_ms=generation_time_ms,
+                    )
+
                     self.logger.info(
                         f"Scene {scene.scene_number} complete: {generation_time_ms}ms"
                     )
@@ -990,6 +1009,72 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         await db.commit()
         self.logger.info(f"Phase 2a complete: {len(image_paths)} images")
 
+        # ----- Phase 2a-bis: End Frame Generation (FLF) -----
+        from app.services.fal_video_generator import FAL_FLF_CAPABLE
+        from app.pipeline.flf_router import should_generate_end_frame
+
+        end_image_paths: dict[int, str] = {}
+        backend_enum = fal_gen.backend
+
+        if backend_enum in FAL_FLF_CAPABLE:
+            self.logger.info("PHASE 2a-bis: End Frame Generation (FLF)")
+
+            for idx, scene in enumerate(scenes):
+                if scene.status == SceneStatus.COMPLETED and scene.video_clip_path:
+                    continue
+
+                if not should_generate_end_frame(
+                    scene_type=scene.scene_type,
+                    scene_index=idx,
+                    total_scenes=len(scenes),
+                    backend_supports_flf=True,
+                ):
+                    continue
+
+                # Skip if no end frame prompt
+                if not scene.end_frame_prompt:
+                    self.logger.debug(
+                        f"Scene {scene.scene_number}: No end_frame_prompt — skipping FLF"
+                    )
+                    continue
+
+                # Skip if already has end frame
+                if scene.end_frame_path:
+                    self.logger.info(
+                        f"Scene {scene.scene_number}: Already has end frame — reusing"
+                    )
+                    local_path = (
+                        f"/tmp/f1-images/episode_{self.episode_id}"
+                        f"_scene_{scene.scene_number:02d}_end_resume.png"
+                    )
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    bucket, object_name = scene.end_frame_path.split("/", 1)
+                    await self.storage.download_file(bucket, object_name, local_path)
+                    end_image_paths[scene.scene_number] = local_path
+                    continue
+
+                self.logger.info(
+                    f"Generating end frame for scene {scene.scene_number}/{len(scenes)} (FLF)"
+                )
+
+                try:
+                    end_image = await self._get_scene_image_fal(db, scene, frame_type="end")
+                    end_image_paths[scene.scene_number] = end_image
+                    self.logger.info(f"Scene {scene.scene_number}: End frame ready")
+                    await db.flush()
+                except Exception as e:
+                    self.logger.warning(
+                        f"Scene {scene.scene_number} end frame failed: {e} — "
+                        f"will proceed without FLF for this scene"
+                    )
+
+            await db.commit()
+            self.logger.info(
+                f"Phase 2a-bis complete: {len(end_image_paths)} end frames"
+            )
+        else:
+            self.logger.info("Backend does not support FLF — skipping end frame generation")
+
         # ----- Phase 2b: Generate video clips via fal.ai -----
         self.logger.info(
             f"PHASE 2b: Video Generation ({fal_gen.display_name})"
@@ -1035,12 +1120,23 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 from app.services.fal_video_generator import FalVideoGenerator as FVG
                 rich_audio = FVG.build_audio_prompt(scene.audio_description, voice_desc)
 
+                # Upload end frame if FLF available for this scene
+                end_image_url = None
+                if scene.scene_number in end_image_paths:
+                    end_image_url = await fal_gen.upload_image(
+                        end_image_paths[scene.scene_number]
+                    )
+                    self.logger.info(
+                        f"Scene {scene.scene_number}: End frame uploaded for FLF"
+                    )
+
                 clip = await fal_gen.generate_clip(
                     scene_number=scene.scene_number,
                     image_url=image_url,
                     prompt=(scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
                     dialogue=scene.dialogue,
                     audio_description=rich_audio,
+                    end_image_url=end_image_url,
                 )
                 generation_time_ms = int(
                     (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -1068,6 +1164,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     "fal-kling-std-audio": 0.63,
                     "fal-kling-pro": 0.42,
                     "fal-kling-pro-audio": 0.84,
+                    "fal-kling-o1-flf": 0.56,
+                    "fal-vidu-q1-flf": 0.50,
+                    "fal-wan-flf": 0.50,
                 }
                 cost = fal_cost_map.get(backend, 0.20)
                 provider_map = {
@@ -1077,6 +1176,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     "fal-kling-std-audio": APIProvider.FAL_KLING_STD_AUDIO,
                     "fal-kling-pro": APIProvider.FAL_KLING_PRO,
                     "fal-kling-pro-audio": APIProvider.FAL_KLING_PRO_AUDIO,
+                    "fal-kling-o1-flf": APIProvider.FAL_KLING_O1_FLF,
+                    "fal-vidu-q1-flf": APIProvider.FAL_VIDU_Q1_FLF,
+                    "fal-wan-flf": APIProvider.FAL_WAN_FLF,
                 }
                 await self._log_api_usage(
                     db,
@@ -1308,7 +1410,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
     # LoRA URL for ANTKF1STYLE (hosted on fal CDN)
     FAL_LORA_URL = "https://v3b.fal.media/files/b/0a918355/tJadbfWJuPFPPcrwOQ_3W_pytorch_lora_weights.safetensors"
 
-    async def _get_scene_image_fal(self, db: AsyncSession, scene: Scene) -> str:
+    async def _get_scene_image_fal(self, db: AsyncSession, scene: Scene, frame_type: str = "start") -> str:
         """Generate scene image via fal.ai flux-lora (LoRA only, no face ref).
 
         Uses fal-ai/flux-lora with ANTKF1STYLE LoRA. No face reference —
@@ -1344,7 +1446,10 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 # Character consistency via LoRA + prompt description only.
 
         # Build prompt with LoRA trigger + scene description + character traits
-        frame_prompt = scene.start_frame_prompt or scene.action_description or "Character speaking to camera"
+        if frame_type == "end":
+            frame_prompt = scene.end_frame_prompt or scene.action_description or "Character speaking to camera"
+        else:
+            frame_prompt = scene.start_frame_prompt or scene.action_description or "Character speaking to camera"
         physical = character_traits.get("physical_features", "")
         prompt_parts = ["ANTKF1STYLE", frame_prompt]
         if physical:
@@ -1425,7 +1530,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         # Save to temp file
         tmp_path = os.path.join(
             tempfile.gettempdir(),
-            f"f1_scene_{self.episode_id}_{scene.scene_number:02d}_start.png",
+            f"f1_scene_{self.episode_id}_{scene.scene_number:02d}_{frame_type}.png",
         )
         os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
         with open(tmp_path, "wb") as f:
@@ -1437,10 +1542,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             episode_id=self.episode_id,
             scene_number=scene.scene_number,
             file_path=tmp_path,
+            suffix=frame_type,
         )
 
-        scene.source_image_path = image_storage_path
-        scene.start_frame_path = image_storage_path
+        if frame_type == "end":
+            scene.end_frame_path = image_storage_path
+        else:
+            scene.source_image_path = image_storage_path
+            scene.start_frame_path = image_storage_path
 
         # Log cost (~$0.035/megapixel, 1280x720 = 0.92MP ≈ $0.035)
         cost = 0.035

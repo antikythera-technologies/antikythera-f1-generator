@@ -212,10 +212,15 @@ export interface Scene {
   dialogue: string | null;
   action_description: string | null;
   audio_description: string | null;
+  scene_type: string | null;
   ovi_prompt?: string | null;
   status: SceneStatus;
   source_image_path: string | null;
   video_clip_path: string | null;
+  video_generator: string | null;
+  image_backend: string | null;
+  image_cost_usd: number | null;
+  video_cost_usd: number | null;
   duration_seconds: number;
   generation_time_ms: number | null;
   retry_count: number;
@@ -225,6 +230,7 @@ export interface Scene {
 
 export interface SceneDetail extends Scene {
   script_response: string | null;
+  scene_type: string | null;
   source_image_path: string | null;
   character_image_id: number | null;
   start_frame_prompt: string | null;
@@ -238,6 +244,9 @@ export interface SceneDetail extends Scene {
   camera_direction: string | null;
   generation_started_at: string | null;
   generation_completed_at: string | null;
+  image_cost_usd: number | null;
+  video_cost_usd: number | null;
+  image_backend: string | null;
 }
 
 export interface ScenePromptUpdateData {
@@ -770,7 +779,7 @@ export const storylinesApi = {
 };
 
 // Pipeline Settings types
-export type VideoGenerator = "ovi" | "ltx" | "fal-ovi" | "fal-ltx" | "fal-kling-std" | "fal-kling-std-audio" | "fal-kling-pro" | "fal-kling-pro-audio";
+export type VideoGenerator = "fal-ovi" | "fal-ltx" | "fal-kling-std" | "fal-kling-std-audio" | "fal-kling-pro" | "fal-kling-pro-audio" | "fal-kling-o1-flf" | "fal-vidu-q1-flf" | "fal-wan-flf";
 export type ImageGenerator = "flux-lora" | "instant-character";
 export type OviQuality = "draft" | "standard" | "high" | "ultra" | "caricature";
 

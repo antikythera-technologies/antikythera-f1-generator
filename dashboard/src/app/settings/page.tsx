@@ -5,13 +5,16 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { settingsApi, type PipelineSettings, type VideoGenerator, type ImageGenerator, type ServiceBalances, type CostSummary } from "@/lib/api";
 
-const BACKEND_INFO: Record<string, { label: string; maxDuration: number; audio: boolean; costPerSec: number; note: string }> = {
-  "fal-ovi":              { label: "Ovi (fal.ai)",                    maxDuration: 10, audio: true,  costPerSec: 0.04,   note: "5s or 10s, native audio" },
-  "fal-ltx":              { label: "LTX 2.3 + Audio (fal.ai)",       maxDuration: 20, audio: true,  costPerSec: 0.06,   note: "6-20s, native audio, 1080p" },
-  "fal-kling-std":        { label: "Kling 3.0 Standard (fal.ai)",    maxDuration: 15, audio: false, costPerSec: 0.084,  note: "3-15s, no audio" },
-  "fal-kling-std-audio":  { label: "Kling 3.0 Std + Audio (fal.ai)", maxDuration: 15, audio: true,  costPerSec: 0.126,  note: "3-15s, native audio" },
-  "fal-kling-pro":        { label: "Kling 3.0 Pro (fal.ai)",         maxDuration: 15, audio: false, costPerSec: 0.112,  note: "3-15s, higher quality, no audio" },
-  "fal-kling-pro-audio":  { label: "Kling 3.0 Pro + Audio (fal.ai)", maxDuration: 15, audio: true,  costPerSec: 0.168,  note: "3-15s, highest quality + audio" },
+const BACKEND_INFO: Record<string, { label: string; maxDuration: number; audio: boolean; costPerSec: number; note: string; flf: "auto" | "required" | "none" }> = {
+  "fal-ovi":              { label: "Ovi (fal.ai)",                    maxDuration: 10, audio: true,  costPerSec: 0.04,   note: "5s or 10s, native audio",               flf: "none" },
+  "fal-ltx":              { label: "LTX 2.3 + Audio (fal.ai)",       maxDuration: 20, audio: true,  costPerSec: 0.06,   note: "6-20s, native audio, 1080p",            flf: "auto" },
+  "fal-kling-std":        { label: "Kling 3.0 Standard (fal.ai)",    maxDuration: 15, audio: false, costPerSec: 0.084,  note: "3-15s, no audio",                       flf: "none" },
+  "fal-kling-std-audio":  { label: "Kling 3.0 Std + Audio (fal.ai)", maxDuration: 15, audio: true,  costPerSec: 0.126,  note: "3-15s, native audio",                   flf: "none" },
+  "fal-kling-pro":        { label: "Kling 3.0 Pro (fal.ai)",         maxDuration: 15, audio: false, costPerSec: 0.112,  note: "3-15s, higher quality, no audio",        flf: "none" },
+  "fal-kling-pro-audio":  { label: "Kling 3.0 Pro + Audio (fal.ai)", maxDuration: 15, audio: true,  costPerSec: 0.168,  note: "3-15s, highest quality + audio",         flf: "none" },
+  "fal-kling-o1-flf":     { label: "Kling O1 FLF (fal.ai)",          maxDuration: 10, audio: false, costPerSec: 0.112,  note: "First-last frame video, no audio",       flf: "required" },
+  "fal-vidu-q1-flf":      { label: "Vidu Q1 FLF (fal.ai)",           maxDuration: 10, audio: false, costPerSec: 0.10,   note: "First-last frame video, no audio",       flf: "required" },
+  "fal-wan-flf":           { label: "Wan FLF (fal.ai)",               maxDuration: 10, audio: false, costPerSec: 0.10,   note: "First-last frame video, no audio",       flf: "required" },
 };
 
 function StatusIndicator({ status }: { status: "connected" | "disconnected" | "warning" }) {
@@ -148,7 +151,7 @@ export default function SettingsPage() {
                   >
                     {Object.entries(BACKEND_INFO).map(([value, bi]) => (
                       <option key={value} value={value}>
-                        {bi.label} {bi.audio ? "" : "(no audio)"} — ${bi.costPerSec.toFixed(3)}/s
+                        {bi.label} {bi.audio ? "" : "(no audio)"}{bi.flf !== "none" ? ` [FLF]` : ""} — ${bi.costPerSec.toFixed(3)}/s
                       </option>
                     ))}
                   </select>
@@ -163,7 +166,7 @@ export default function SettingsPage() {
                 {info && (
                   <div className="rounded-lg border border-white/10 bg-twilight/50 p-4">
                     <h4 className="text-sm font-medium text-white/70 mb-3">Backend Capabilities</h4>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                       <div className="text-center">
                         <p className="text-xs text-white/40">Max Duration</p>
                         <p className="text-lg font-bold text-neon-cyan">{info.maxDuration}s</p>
@@ -172,6 +175,16 @@ export default function SettingsPage() {
                         <p className="text-xs text-white/40">Audio</p>
                         <p className={`text-lg font-bold ${info.audio ? "text-success-green" : "text-racing-red"}`}>
                           {info.audio ? "Yes" : "No"}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-white/40">FLF</p>
+                        <p className={`text-lg font-bold ${
+                          info.flf === "auto" ? "text-cyber-purple" :
+                          info.flf === "required" ? "text-electric-blue" :
+                          "text-white/30"
+                        }`}>
+                          {info.flf === "auto" ? "Auto" : info.flf === "required" ? "Required" : "N/A"}
                         </p>
                       </div>
                       <div className="text-center">
@@ -306,6 +319,49 @@ export default function SettingsPage() {
         </Card>
       </div>
 
+
+      {/* Cost Breakdown */}
+      {costs && (
+        <Card className="border-electric-blue/30">
+          <CardHeader><CardTitle>Cost Breakdown</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div className="rounded-lg border border-white/10 p-4 text-center">
+                <p className="text-xs text-white/40">Total Spend</p>
+                <p className="text-2xl font-bold text-electric-blue">${costs.total_cost.toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg border border-white/10 p-4 text-center">
+                <p className="text-xs text-white/40">This Month</p>
+                <p className="text-2xl font-bold text-neon-cyan">${costs.this_month_cost.toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg border border-white/10 p-4 text-center">
+                <p className="text-xs text-white/40">Total API Calls</p>
+                <p className="text-2xl font-bold text-white">{costs.total_calls.toLocaleString()}</p>
+              </div>
+              <div className="rounded-lg border border-white/10 p-4 text-center">
+                <p className="text-xs text-white/40">This Month Calls</p>
+                <p className="text-2xl font-bold text-white/70">{costs.this_month_calls.toLocaleString()}</p>
+              </div>
+            </div>
+            {costs.by_provider.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-white/60">By Provider</h4>
+                {costs.by_provider.map((p) => (
+                  <div key={p.provider} className="flex items-center justify-between rounded-lg border border-white/5 bg-twilight/30 px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-cyber-purple/20 px-2 py-0.5 text-xs font-medium text-cyber-purple uppercase">
+                        {p.provider}
+                      </span>
+                      <span className="text-xs text-white/40">{p.call_count} calls</span>
+                    </div>
+                    <span className="font-mono text-sm font-bold text-white">${p.total_cost.toFixed(4)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {/* Service Balances */}
       {balances && (
         <Card className="border-neon-cyan/30">

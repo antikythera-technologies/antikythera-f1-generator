@@ -38,6 +38,10 @@ class SceneResponse(BaseModel):
     start_frame_prompt: Optional[str] = None
     camera_direction: Optional[str] = None
     duration_seconds: Decimal
+    image_cost_usd: Optional[Decimal] = None
+    video_cost_usd: Optional[Decimal] = None
+    image_backend: Optional[str] = None
+    scene_type: Optional[str] = None
     generation_time_ms: Optional[int]
     retry_count: int
     last_error: Optional[str]
