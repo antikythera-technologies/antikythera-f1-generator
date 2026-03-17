@@ -100,7 +100,7 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
             )}
             {(scene.image_cost_usd || scene.video_cost_usd) && (
               <span className="ml-auto font-mono text-[10px] text-white/40">
-                ${((scene.image_cost_usd || 0) + (scene.video_cost_usd || 0)).toFixed(3)}
+                ${(Number(scene.image_cost_usd || 0) + Number(scene.video_cost_usd || 0)).toFixed(3)}
               </span>
             )}
           </div>

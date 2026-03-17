@@ -634,20 +634,20 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                       <div>
                         <p className="text-xs text-white/40">Image Cost</p>
                         <p className="mt-0.5 text-sm font-mono text-neon-cyan">
-                          {detail.image_cost_usd ? `$${detail.image_cost_usd.toFixed(4)}` : "N/A"}
+                          {detail.image_cost_usd ? `$${Number(detail.image_cost_usd).toFixed(4)}` : "N/A"}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-white/40">Video Cost</p>
                         <p className="mt-0.5 text-sm font-mono text-cyber-purple">
-                          {detail.video_cost_usd ? `$${detail.video_cost_usd.toFixed(4)}` : "N/A"}
+                          {detail.video_cost_usd ? `$${Number(detail.video_cost_usd).toFixed(4)}` : "N/A"}
                         </p>
                       </div>
                       {(detail.image_cost_usd || detail.video_cost_usd) && (
                         <div className="col-span-2">
                           <p className="text-xs text-white/40">Total Scene Cost</p>
                           <p className="mt-0.5 text-sm font-mono font-bold text-electric-blue">
-                            ${((detail.image_cost_usd || 0) + (detail.video_cost_usd || 0)).toFixed(4)}
+                            ${(Number(detail.image_cost_usd || 0) + Number(detail.video_cost_usd || 0)).toFixed(4)}
                           </p>
                         </div>
                       )}
