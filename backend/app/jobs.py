@@ -696,9 +696,10 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "image_url": face_ref_url,
                         "negative_prompt": (
                             "cropped head, cut off head, cut off hair, top of head missing, "
-                            "forehead cropped, extreme close-up, tight crop, face filling frame"
+                            "forehead cropped, extreme close-up, tight crop, face filling frame, "
+                            "zoomed in, macro, portrait crop, chin to forehead only"
                         ),
-                        "image_size": "landscape_16_9",
+                        "image_size": {"width": 1280, "height": 720},
                         "num_inference_steps": 28,
                         "guidance_scale": 3.5,
                         "scale": 0.3,
