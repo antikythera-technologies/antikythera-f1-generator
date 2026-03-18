@@ -6,8 +6,6 @@ for first-last-frame video generation. Zero external dependencies.
 
 # Scene types eligible for FLF (character-focused, benefit from smooth transitions)
 FLF_ELIGIBLE = {
-    "TWO_SHOT",
-    "OVER_THE_SHOULDER",
     "PODIUM",
     "REACTION",
 }

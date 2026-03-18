@@ -629,11 +629,11 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
 
         # Build prompt based on scene type
         if is_landscape_scene:
-            # Clean prompt: NO LoRA trigger, NO caricature, NO face
+            # Landscape prompt WITH LoRA trigger for consistent caricature style
             full_prompt = (
-                f"{frame_prompt} "
-                "Cinematic photography, dramatic lighting, no people in foreground, "
-                "no text, no words, no letters, no watermarks."
+                f"ANTKF1STYLE {frame_prompt} "
+                "Satirical caricature art style, dramatic lighting, vibrant colors. "
+                "No text, no words, no letters, no watermarks."
             )
         else:
             # Character scene: LoRA trigger + caricature style + character traits
