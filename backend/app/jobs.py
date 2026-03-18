@@ -645,7 +645,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             frame_prompt = _re.sub(r'(?i)CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
 
             physical = character_traits.get("physical_features", "")
-            prompt_parts = ["ANTKF1STYLE", frame_prompt]
+            prompt_parts = ["ANTKF1STYLE", "Full body from waist up, camera 3 meters away.", frame_prompt]
             if episode_appearance:
                 prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
             elif physical:
@@ -702,7 +702,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "image_size": {"width": 1280, "height": 720},
                         "num_inference_steps": 28,
                         "guidance_scale": 3.5,
-                        "scale": 0.3,
+                        "scale": 0.15,
                         "output_format": "png",
                         "loras": [{"path": LORA_URL, "scale": 1.0, "trigger_word": "ANTKF1STYLE"}],
                     }
