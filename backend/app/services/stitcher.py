@@ -102,7 +102,7 @@ class VideoStitcher:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 minute timeout
+                timeout=900,  # 15 minute timeout
             )
 
             if result.returncode != 0:
@@ -166,16 +166,22 @@ class VideoStitcher:
         title_safe = title.upper().replace("'", "'\\\\''").replace(":", "\\:")
         subtitle_safe = subtitle.replace("'", "'\\\\''").replace(":", "\\:")
 
-        # Title: big, bold, center — fades in from 0.5s, holds, fades out at end
-        # Subtitle: smaller, below title — same timing
+        font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font_sub = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+        # Title: bold, center, white with dark shadow — fades in, holds, fades out
+        # Subtitle: lighter weight, below title — same timing
         filter_complex = (
             f"drawtext=text='{title_safe}'"
-            f":fontsize=52:fontcolor=white:borderw=3:bordercolor=black"
-            f":x=(w-text_w)/2:y=(h-text_h)/2-30"
+            f":fontfile={font}:fontsize=56:fontcolor=white"
+            f":borderw=4:bordercolor=black@0.7"
+            f":shadowcolor=black@0.5:shadowx=3:shadowy=3"
+            f":x=(w-text_w)/2:y=(h-text_h)/2-35"
             f":alpha='if(lt(t,0.5),t/0.5,if(lt(t,4),1,(5-t)/1))'"
             f",drawtext=text='{subtitle_safe}'"
-            f":fontsize=22:fontcolor=white@0.8:borderw=2:bordercolor=black"
-            f":x=(w-text_w)/2:y=(h-text_h)/2+40"
+            f":fontfile={font_sub}:fontsize=24:fontcolor=white@0.85"
+            f":borderw=2:bordercolor=black@0.5"
+            f":x=(w-text_w)/2:y=(h-text_h)/2+35"
             f":alpha='if(lt(t,0.8),t/0.8,if(lt(t,4),1,(5-t)/1))'"
         )
 
@@ -218,12 +224,17 @@ class VideoStitcher:
         # Branding top, "next episode" text below, fade to black at end
         filter_complex = (
             f"drawtext=text='{branding_safe}'"
-            f":fontsize=36:fontcolor=white:borderw=2:bordercolor=black"
-            f":x=(w-text_w)/2:y=(h-text_h)/2-20"
+            f":fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            f":fontsize=40:fontcolor=white"
+            f":borderw=3:bordercolor=black@0.7"
+            f":shadowcolor=black@0.5:shadowx=2:shadowy=2"
+            f":x=(w-text_w)/2:y=(h-text_h)/2-25"
             f":alpha='if(lt(t,1),t/1,1)'"
             f",drawtext=text='{next_safe}'"
-            f":fontsize=20:fontcolor=white@0.7:borderw=1:bordercolor=black"
-            f":x=(w-text_w)/2:y=(h-text_h)/2+30"
+            f":fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            f":fontsize=22:fontcolor=white@0.8"
+            f":borderw=1:bordercolor=black@0.5"
+            f":x=(w-text_w)/2:y=(h-text_h)/2+25"
             f":alpha='if(lt(t,1.5),0,if(lt(t,2.5),(t-1.5)/1,1))'"
             f",fade=t=out:st=6:d=2"
         )
