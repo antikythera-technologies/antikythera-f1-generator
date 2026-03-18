@@ -388,6 +388,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
 
             scene.video_clip_path = clip_path
             scene.video_generator = backend
+            scene.audio_clip_path = None  # Clear — new video has different audio
             scene.status = SceneStatus.COMPLETED
             scene.generation_completed_at = datetime.utcnow()
             scene.generation_time_ms = generation_time_ms
@@ -630,8 +631,30 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
         # Build prompt based on scene type
         if is_landscape_scene:
             # Landscape prompt WITH LoRA trigger for consistent caricature style
+            racing_direction_rule = ""
+            racing_keywords = ["car", "cars", "race", "racing", "overtake", "track", "circuit",
+                               "straight", "corner", "grid", "cockpit", "onboard", "on-board"]
+            if any(kw in (frame_prompt or "").lower() for kw in racing_keywords):
+                # Detect POV/cockpit shots vs external shots
+                pov_keywords = ["cockpit pov", "onboard", "on-board", "helmet cam", "driver pov"]
+                is_pov = any(kw in (frame_prompt or "").lower() for kw in pov_keywords)
+                if is_pov:
+                    racing_direction_rule = (
+                        "CRITICAL: This is a cockpit/driver POV shot looking forward through the halo. "
+                        "Any cars visible AHEAD must be driving AWAY from the camera — "
+                        "show their REAR wings, rear diffusers, and exhaust. "
+                        "The viewer sees the BACK of the cars in front, NOT their front. "
+                        "No car should face towards the camera. "
+                    )
+                else:
+                    racing_direction_rule = (
+                        "CRITICAL: All racing cars must drive in the same direction of the race. "
+                        "Cars ahead of the subject must show their REAR to the subject car. "
+                        "No car should face against the flow of the race — all cars travel the same way. "
+                    )
             full_prompt = (
                 f"ANTKF1STYLE {frame_prompt} "
+                f"{racing_direction_rule}"
                 "Satirical caricature art style, dramatic lighting, vibrant colors. "
                 "No text, no words, no letters, no watermarks."
             )
@@ -686,6 +709,10 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             if is_landscape_scene:
                 image_backend = "flux-lora"
                 logger.info(f"Scene {scene_number}: Using flux-lora (landscape/action scene)")
+            elif face_ref_url:
+                # Character scenes WITH a face reference → instant-character for identity consistency
+                image_backend = "instant-character"
+                logger.info(f"Scene {scene_number}: Using instant-character (face reference available)")
 
             if image_backend == "instant-character" and face_ref_url:
                 # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
@@ -964,3 +991,348 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
     result = await _async_scene_video(episode_id, scene_number)
     logger.info(f"Scene {scene_number}: Full regeneration complete")
     return result
+
+
+# ──────────────────────────────────────────────────────────────────
+# Stitch / Upload / Validate jobs
+# ──────────────────────────────────────────────────────────────────
+
+def enqueue_stitch(episode_id: int) -> str:
+    """Enqueue a video stitching job for the given episode."""
+    queue = get_queue()
+    job: Job = queue.enqueue(
+        "app.jobs._run_stitch",
+        episode_id,
+        job_timeout=600,        # 10 minutes
+        result_ttl=86400,
+        failure_ttl=604800,
+        meta={"episode_id": episode_id, "type": "stitch"},
+    )
+    logger.info(f"Enqueued stitch job {job.id} for episode {episode_id}")
+    return job.id
+
+
+def enqueue_youtube_upload(episode_id: int) -> str:
+    """Enqueue a YouTube upload job for the given episode."""
+    queue = get_queue()
+    job: Job = queue.enqueue(
+        "app.jobs._run_youtube_upload",
+        episode_id,
+        job_timeout=1800,       # 30 minutes (large uploads)
+        result_ttl=86400,
+        failure_ttl=604800,
+        meta={"episode_id": episode_id, "type": "youtube_upload"},
+    )
+    logger.info(f"Enqueued YouTube upload job {job.id} for episode {episode_id}")
+    return job.id
+
+
+def enqueue_validate(episode_id: int) -> str:
+    """Enqueue a quality validation job for the given episode."""
+    queue = get_queue()
+    job: Job = queue.enqueue(
+        "app.jobs._run_validate",
+        episode_id,
+        job_timeout=900,        # 15 minutes
+        result_ttl=86400,
+        failure_ttl=604800,
+        meta={"episode_id": episode_id, "type": "validate"},
+    )
+    logger.info(f"Enqueued validation job {job.id} for episode {episode_id}")
+    return job.id
+
+
+def _run_stitch(episode_id: int) -> str:
+    """Worker function: stitch all scene clips into final video."""
+    import asyncio
+    _init_worker_logging()
+    _init_worker_db()
+    return asyncio.run(_async_stitch(episode_id))
+
+
+def _run_youtube_upload(episode_id: int) -> str:
+    """Worker function: upload final video to YouTube."""
+    import asyncio
+    _init_worker_logging()
+    _init_worker_db()
+    return asyncio.run(_async_youtube_upload(episode_id))
+
+
+def _run_validate(episode_id: int) -> str:
+    """Worker function: validate all scenes in an episode."""
+    import asyncio
+    _init_worker_logging()
+    _init_worker_db()
+    return asyncio.run(_async_validate(episode_id))
+
+
+async def _async_stitch(episode_id: int) -> str:
+    """Async worker: stitch all scene clips into a final episode video."""
+    import os
+    from datetime import datetime
+    from sqlalchemy import select
+    from app.database import async_session_maker
+    from app.models.episode import Episode, EpisodeStatus
+    from app.models.scene import Scene, SceneStatus
+    from app.services.stitcher import VideoStitcher
+    from app.services.storage import StorageService
+
+    logger.info(f"Episode {episode_id}: Starting stitch job")
+    storage = StorageService()
+    stitcher = VideoStitcher()
+
+    async with async_session_maker() as db:
+        episode = await db.get(Episode, episode_id)
+        if not episode:
+            raise ValueError(f"Episode {episode_id} not found")
+
+        # Load race for title/subtitle info
+        race = None
+        if episode.race_id:
+            from app.models.race import Race
+            race = await db.get(Race, episode.race_id)
+
+        # Verify all scenes completed
+        stmt = (
+            select(Scene)
+            .where(Scene.episode_id == episode_id, Scene.status == SceneStatus.COMPLETED)
+            .order_by(Scene.scene_number)
+        )
+        result = await db.execute(stmt)
+        scenes = result.scalars().all()
+
+        total_stmt = select(Scene).where(Scene.episode_id == episode_id)
+        total_result = await db.execute(total_stmt)
+        total_scenes = len(total_result.scalars().all())
+
+        if len(scenes) == 0:
+            raise ValueError(f"No completed scenes for episode {episode_id}")
+
+        logger.info(f"Episode {episode_id}: {len(scenes)}/{total_scenes} scenes completed, starting stitch")
+
+        # Update status
+        episode.status = EpisodeStatus.STITCHING
+        await db.commit()
+
+        # Download scene clips to local temp
+        clip_paths = []
+        work_dir = f"/tmp/videos/episode_{episode_id}"
+        os.makedirs(work_dir, exist_ok=True)
+
+        for scene in scenes:
+            if scene.video_clip_path:
+                local_path = os.path.join(work_dir, f"clip_{scene.scene_number:02d}.mp4")
+                bucket, object_name = scene.video_clip_path.split("/", 1)
+                await storage.download_file(bucket, object_name, local_path)
+                clip_paths.append(local_path)
+
+        if not clip_paths:
+            episode.status = EpisodeStatus.FAILED
+            episode.last_error = "No video clips found to stitch"
+            await db.commit()
+            raise ValueError("No video clips found")
+
+        # Build title/subtitle
+        race_name = race.race_name if race else "F1 Race"
+        title = episode.title or race_name
+        subtitle = f"Season {race.season if race else 2026} | Episode {episode_id} | {race_name}"
+
+        # Build outro text
+        next_episode_text = ""
+        if race:
+            from sqlalchemy import and_
+            from app.models.race import Race as RaceModel
+            next_race_stmt = (
+                select(RaceModel)
+                .where(
+                    and_(
+                        RaceModel.season == race.season,
+                        RaceModel.round_number > race.round_number,
+                    )
+                )
+                .order_by(RaceModel.round_number)
+                .limit(1)
+            )
+            next_race_result = await db.execute(next_race_stmt)
+            next_race = next_race_result.scalar_one_or_none()
+            if next_race:
+                next_episode_text = f"Next: {next_race.race_name}"
+
+        # Stitch
+        stitch_result = await stitcher.stitch(
+            episode_id=episode_id,
+            clip_paths=clip_paths,
+            title=title,
+            subtitle=subtitle,
+            next_episode_text=next_episode_text,
+        )
+
+        # Upload final video to MinIO
+        final_path = await storage.upload_final_video(
+            race_id=race.id if race else 0,
+            episode_id=episode_id,
+            file_path=stitch_result.output_path,
+        )
+
+        # Update episode
+        episode.final_video_path = final_path
+        episode.duration_seconds = stitch_result.duration_seconds
+        episode.generation_completed_at = datetime.utcnow()
+
+        if episode.generation_started_at:
+            gen_time = (datetime.utcnow() - episode.generation_started_at).total_seconds()
+            episode.generation_time_seconds = int(gen_time)
+
+        # Stitching complete — stays as STITCHING (not PUBLISHED until YouTube upload)
+        # Dashboard detects final_video_path to show the video player
+        episode.status = EpisodeStatus.STITCHING
+        await db.commit()
+
+        # Cleanup temp files
+        await stitcher.cleanup(episode_id)
+
+        logger.info(f"Episode {episode_id}: Stitch complete → {final_path}")
+        return final_path
+
+
+async def _async_youtube_upload(episode_id: int) -> str:
+    """Async worker: upload final video to YouTube."""
+    import os
+    from datetime import datetime
+    from app.database import async_session_maker
+    from app.models.episode import Episode, EpisodeStatus
+    from app.services.youtube_uploader import YouTubeUploader
+    from app.services.storage import StorageService
+
+    logger.info(f"Episode {episode_id}: Starting YouTube upload job")
+    storage = StorageService()
+
+    async with async_session_maker() as db:
+        episode = await db.get(Episode, episode_id)
+        if not episode:
+            raise ValueError(f"Episode {episode_id} not found")
+
+        if not episode.final_video_path:
+            raise ValueError(f"Episode {episode_id} has no final video to upload")
+
+        # Load race for metadata
+        race = None
+        if episode.race_id:
+            from app.models.race import Race
+            race = await db.get(Race, episode.race_id)
+
+        # Update status
+        episode.status = EpisodeStatus.UPLOADING
+        episode.upload_started_at = datetime.utcnow()
+        await db.commit()
+
+        # Download final video from MinIO
+        local_path = f"/tmp/videos/episode_{episode_id}_final.mp4"
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        bucket, object_name = episode.final_video_path.split("/", 1)
+        await storage.download_file(bucket, object_name, local_path)
+
+        # Build YouTube metadata
+        title = episode.title
+        description = _build_youtube_description(episode, race)
+        tags = ["F1", "Formula 1", "racing", "motorsport", "satire", "comedy"]
+        if race:
+            tags.extend([race.race_name, race.circuit_name or ""])
+
+        # Upload
+        uploader = YouTubeUploader()
+        try:
+            result = await uploader.upload(
+                video_path=local_path,
+                title=title,
+                description=description,
+                tags=tags,
+            )
+
+            episode.youtube_video_id = result.video_id
+            episode.youtube_url = result.youtube_url
+            episode.published_at = datetime.utcnow()
+            episode.status = EpisodeStatus.PUBLISHED
+            await db.commit()
+
+            logger.info(f"Episode {episode_id}: YouTube upload complete → {result.youtube_url}")
+            return result.youtube_url
+
+        except Exception as e:
+            logger.error(f"Episode {episode_id}: YouTube upload failed: {e}")
+            episode.status = EpisodeStatus.FAILED
+            episode.last_error = f"YouTube upload failed: {str(e)}"
+            await db.commit()
+            raise
+        finally:
+            # Clean up temp file
+            if os.path.exists(local_path):
+                os.remove(local_path)
+
+
+async def _async_validate(episode_id: int) -> str:
+    """Async worker: validate all scenes in an episode using Claude Vision."""
+    import json
+    from sqlalchemy import select
+    from app.database import async_session_maker
+    from app.models.scene import Scene, SceneStatus
+    from app.services.scene_validator import SceneValidator
+
+    logger.info(f"Episode {episode_id}: Starting validation job")
+    validator = SceneValidator()
+
+    async with async_session_maker() as db:
+        stmt = (
+            select(Scene)
+            .where(Scene.episode_id == episode_id, Scene.status == SceneStatus.COMPLETED)
+            .order_by(Scene.scene_number)
+        )
+        result = await db.execute(stmt)
+        scenes = result.scalars().all()
+
+        if not scenes:
+            logger.warning(f"Episode {episode_id}: No completed scenes to validate")
+            return "No scenes to validate"
+
+        logger.info(f"Episode {episode_id}: Validating {len(scenes)} scenes")
+
+        episode_validation = await validator.validate_episode(scenes)
+
+        # Update each scene with validation results
+        for scene_result in episode_validation.scene_results:
+            scene_stmt = select(Scene).where(
+                Scene.episode_id == episode_id,
+                Scene.scene_number == scene_result.scene_number,
+            )
+            scene_row = await db.execute(scene_stmt)
+            scene = scene_row.scalar_one_or_none()
+            if scene:
+                scene.validation_status = "passed" if scene_result.passed else "failed"
+                scene.validation_issues = json.dumps(scene_result.issues) if scene_result.issues else None
+
+        await db.commit()
+
+        summary = (
+            f"Validated {episode_validation.total_scenes} scenes: "
+            f"{episode_validation.passed_scenes} passed, "
+            f"{episode_validation.failed_scenes} failed"
+        )
+        logger.info(f"Episode {episode_id}: {summary}")
+        return summary
+
+
+def _build_youtube_description(episode, race) -> str:
+    """Build YouTube video description."""
+    description = f"""{episode.title}
+
+Satirical F1 commentary brought to you by Antikythera Technologies.
+
+#F1 #Formula1 #Racing #Motorsport #Satire
+"""
+    if race:
+        description += f"""
+Race: {race.race_name}
+Circuit: {race.circuit_name or 'Unknown'}
+Season: {race.season} Round {race.round_number}
+"""
+    return description

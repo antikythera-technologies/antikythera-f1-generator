@@ -96,8 +96,9 @@ class VideoPipeline:
                 await self._generate_video_clips(db, scenes)
 
                 # Phase 2c: Generate TTS speech audio and mux onto video clips.
-                # Always runs — LTX AV produces ambient sounds only, not speech.
-                # TTS gives each character a distinct voice with correct dialogue.
+                # Only runs for scenes WITHOUT native audio (non-AV backends).
+                # Audio-capable backends (fal-ltx, fal-ovi, etc.) produce native
+                # audio from the prompt — TTS would overwrite that.
                 if settings.TTS_ENABLED:
                     self.logger.info("PHASE 2c: Audio Generation (TTS + Mux)")
                     await self._generate_audio(db, scenes)
@@ -1245,12 +1246,25 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         audio_silent = 0
         audio_failed = 0
 
+        # Backends that produce native audio — skip TTS for these
+        from app.services.fal_video_generator import FAL_AUDIO_BACKENDS, FalBackend
+        native_audio_backends = {b.value for b in FAL_AUDIO_BACKENDS}
+
         for scene in scenes:
             if scene.status != SceneStatus.COMPLETED or not scene.video_clip_path:
                 self.logger.debug(
                     f"Scene {scene.scene_number}: Skipping audio "
                     f"(status={scene.status}, clip={bool(scene.video_clip_path)})"
                 )
+                continue
+
+            # Skip TTS for backends that generate native audio
+            if scene.video_generator and scene.video_generator in native_audio_backends:
+                self.logger.info(
+                    f"Scene {scene.scene_number}: Native audio from "
+                    f"{scene.video_generator} — skipping TTS"
+                )
+                audio_success += 1
                 continue
 
             if scene.audio_clip_path:
