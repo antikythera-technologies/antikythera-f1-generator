@@ -60,6 +60,7 @@ class StorageService:
         bucket: str,
         object_name: str,
         file_path: str,
+        content_type: str | None = None,
     ) -> str:
         """
         Upload a file to MinIO.
@@ -70,7 +71,10 @@ class StorageService:
         logger.info(f"Uploading to MinIO: {bucket}/{object_name}")
 
         try:
-            self.client.fput_object(bucket, object_name, file_path)
+            self.client.fput_object(
+                bucket, object_name, file_path,
+                content_type=content_type,
+            )
             full_path = f"{bucket}/{object_name}"
             logger.debug(f"Upload complete: {full_path}")
             return full_path
@@ -327,6 +331,7 @@ class StorageService:
             settings.MINIO_BUCKET_FINAL_VIDEOS,
             object_name,
             file_path,
+            content_type="video/mp4",
         )
 
     async def cleanup_old_race(self, race_number: int) -> tuple[int, int]:

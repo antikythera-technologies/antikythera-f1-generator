@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Episode } from "@/lib/api";
-import { cn, formatDateTime, formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { cn, formatDuration, formatCurrency, formatRelativeTime, getMinioUrl } from "@/lib/utils";
 import { Card, CardContent, CardFooter } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { GenerationProgress } from "@/components/ui/GenerationProgress";
@@ -35,6 +35,28 @@ export function EpisodeCard({ episode }: EpisodeCardProps) {
               total={episode.scene_count}
               status={episode.status}
             />
+          )}
+
+          {/* Video Ready Indicator */}
+          {!!episode.final_video_path && (
+            <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success-green/20">
+                <svg className="h-4 w-4 text-success-green" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white">
+                  Video Ready
+                  {episode.duration_seconds ? ` · ${formatDuration(episode.duration_seconds)}` : ""}
+                </p>
+              </div>
+              {episode.youtube_url && (
+                <span className="rounded-full bg-neon-cyan/20 px-2 py-0.5 text-xs font-medium text-neon-cyan">
+                  Published
+                </span>
+              )}
+            </div>
           )}
 
           {/* Stats */}
