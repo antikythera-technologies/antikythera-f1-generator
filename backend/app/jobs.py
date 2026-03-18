@@ -921,17 +921,18 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
     await _async_scene_image(episode_id, scene_number, frame_type="start")
     logger.info(f"Scene {scene_number}: Start image done")
 
-    # Step 1b: Generate end frame if backend supports FLF
+    # Step 1b: Generate end frame only if FLF router approves this scene type
     from app.services.runtime_settings import get_video_generator
     from app.services.fal_video_generator import FalBackend, FAL_FLF_CAPABLE
+    from app.pipeline.flf_router import should_generate_end_frame
     backend_str = get_video_generator()
     try:
         backend_enum = FalBackend(backend_str)
-        if backend_enum in FAL_FLF_CAPABLE:
-            # Check if scene has an end_frame_prompt via DB
+        backend_supports_flf = backend_enum in FAL_FLF_CAPABLE
+        if backend_supports_flf:
             from app.database import async_session_maker
             from app.models.scene import Scene as SceneModel
-            from sqlalchemy import select
+            from sqlalchemy import select, func
             async with async_session_maker() as db:
                 stmt = select(SceneModel).where(
                     SceneModel.episode_id == episode_id,
@@ -939,10 +940,22 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
                 )
                 result = await db.execute(stmt)
                 scene = result.scalar_one_or_none()
-                if scene and scene.end_frame_prompt:
-                    logger.info(f"Scene {scene_number}: Generating end frame for FLF")
+                # Get total scene count for FLF router
+                count_stmt = select(func.count()).select_from(SceneModel).where(
+                    SceneModel.episode_id == episode_id
+                )
+                total = (await db.execute(count_stmt)).scalar() or 0
+                if scene and scene.end_frame_prompt and should_generate_end_frame(
+                    scene_type=scene.scene_type,
+                    scene_index=scene_number - 1,
+                    total_scenes=total,
+                    backend_supports_flf=True,
+                ):
+                    logger.info(f"Scene {scene_number}: Generating end frame for FLF (type={scene.scene_type})")
                     await _async_scene_image(episode_id, scene_number, frame_type="end")
                     logger.info(f"Scene {scene_number}: End frame done")
+                else:
+                    logger.info(f"Scene {scene_number}: FLF not applicable (type={scene.scene_type if scene else '?'})")
     except (ValueError, Exception) as e:
         logger.debug(f"Scene {scene_number}: FLF check skipped: {e}")
 
