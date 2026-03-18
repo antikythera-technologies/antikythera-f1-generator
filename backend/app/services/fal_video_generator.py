@@ -393,9 +393,11 @@ class FalVideoGenerator:
 
     def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None):
         """Build LTX 2.3 arguments with native audio generation."""
-        full_prompt = prompt
         if dialogue:
-            full_prompt += f" The character says: \"{dialogue}\""
+            # Dialogue LEADS the prompt so LTX animates speaking, not just reacting
+            full_prompt = f'Character speaks directly to camera: "{dialogue}" {prompt}'
+        else:
+            full_prompt = prompt
 
         args = {
             "prompt": full_prompt,
