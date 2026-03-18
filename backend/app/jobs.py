@@ -1003,7 +1003,7 @@ def enqueue_stitch(episode_id: int) -> str:
     job: Job = queue.enqueue(
         "app.jobs._run_stitch",
         episode_id,
-        job_timeout=600,        # 10 minutes
+        job_timeout=1800,       # 30 minutes (libx264 encoding is slow on VPS)
         result_ttl=86400,
         failure_ttl=604800,
         meta={"episode_id": episode_id, "type": "stitch"},
