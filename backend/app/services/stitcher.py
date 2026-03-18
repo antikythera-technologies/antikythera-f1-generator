@@ -1,7 +1,7 @@
 """Video stitching service using ffmpeg."""
 
+import asyncio
 import logging
-import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,14 +58,14 @@ class VideoStitcher:
         # Apply title overlay to first clip (intro/title card)
         if title and len(clip_paths) > 0:
             intro_output = str(episode_dir / "clip_01_titled.mp4")
-            clip_paths[0] = self._apply_title_overlay(
+            clip_paths[0] = await self._apply_title_overlay(
                 clip_paths[0], title, subtitle, intro_output
             )
 
         # Apply outro overlay to last clip
         if next_episode_text and len(clip_paths) > 1:
             outro_output = str(episode_dir / f"clip_{len(clip_paths):02d}_outro.mp4")
-            clip_paths[-1] = self._apply_outro_overlay(
+            clip_paths[-1] = await self._apply_outro_overlay(
                 clip_paths[-1], next_episode_text, outro_output
             )
 
@@ -73,7 +73,6 @@ class VideoStitcher:
         file_list_path = episode_dir / "files.txt"
         with open(file_list_path, "w") as f:
             for clip_path in clip_paths:
-                # Escape single quotes in path
                 escaped_path = clip_path.replace("'", "'\\''")
                 f.write(f"file '{escaped_path}'\n")
                 logger.debug(f"Added clip: {clip_path}")
@@ -81,7 +80,7 @@ class VideoStitcher:
         # Output path
         output_path = episode_dir / "final.mp4"
 
-        # Build ffmpeg command
+        # Build ffmpeg command — use -preset fast for acceptable speed on VPS
         cmd = [
             "ffmpeg",
             "-f", "concat",
@@ -89,29 +88,39 @@ class VideoStitcher:
             "-i", str(file_list_path),
             "-c:v", self.codec,
             "-c:a", self.audio_codec,
-            "-preset", "medium",
+            "-preset", "fast",
             "-crf", str(self.crf),
-            "-y",  # Overwrite output
+            "-y",
             str(output_path),
         ]
 
         logger.info(f"Running ffmpeg: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=900,  # 15 minute timeout
+            # Use async subprocess to avoid blocking the event loop
+            # (sync subprocess.run kills DB connections during long encodes)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            if result.returncode != 0:
-                logger.error(f"ffmpeg failed: {result.stderr}")
-                raise VideoStitchError(f"ffmpeg failed: {result.stderr}")
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=900
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                logger.error("ffmpeg timed out after 15 minutes")
+                raise VideoStitchError("Video stitching timed out")
+
+            if proc.returncode != 0:
+                logger.error(f"ffmpeg failed: {stderr.decode()}")
+                raise VideoStitchError(f"ffmpeg failed: {stderr.decode()}")
 
             logger.info(f"Stitch complete: {output_path}")
 
-            # Get file info
             file_size = output_path.stat().st_size
             duration = self._get_duration(str(output_path))
 
@@ -121,9 +130,6 @@ class VideoStitcher:
                 file_size_bytes=file_size,
             )
 
-        except subprocess.TimeoutExpired:
-            logger.error("ffmpeg timed out")
-            raise VideoStitchError("Video stitching timed out")
         except FileNotFoundError:
             logger.error("ffmpeg not found in PATH")
             raise VideoStitchError("ffmpeg not installed or not in PATH")
@@ -144,33 +150,20 @@ class VideoStitcher:
             logger.warning(f"Could not get video duration: {e}")
             return settings.VIDEO_TOTAL_DURATION_SECONDS
 
-    def _apply_title_overlay(
+    async def _apply_title_overlay(
         self,
         clip_path: str,
         title: str,
         subtitle: str,
         output_path: str,
     ) -> str:
-        """Overlay episode title text on the intro clip using ffmpeg drawtext.
-
-        Args:
-            clip_path: Path to the intro video clip
-            title: Episode title (e.g., "MELBOURNE MAYHEM")
-            subtitle: Episode metadata (e.g., "Season 1 | Episode 1 | Australian Grand Prix")
-            output_path: Where to write the processed clip
-
-        Returns:
-            Path to the processed clip with text overlay
-        """
-        # Escape special characters for ffmpeg drawtext
+        """Overlay episode title text on the intro clip using ffmpeg drawtext."""
         title_safe = title.upper().replace("'", "'\\\\''").replace(":", "\\:")
         subtitle_safe = subtitle.replace("'", "'\\\\''").replace(":", "\\:")
 
         font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         font_sub = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
-        # Title: bold, center, white with dark shadow — fades in, holds, fades out
-        # Subtitle: lighter weight, below title — same timing
         filter_complex = (
             f"drawtext=text='{title_safe}'"
             f":fontfile={font}:fontsize=56:fontcolor=white"
@@ -189,39 +182,34 @@ class VideoStitcher:
             "ffmpeg", "-y",
             "-i", clip_path,
             "-vf", filter_complex,
-            "-c:v", self.codec, "-crf", str(self.crf),
+            "-c:v", self.codec, "-crf", str(self.crf), "-preset", "fast",
             "-c:a", "copy",
             output_path,
         ]
 
         logger.info(f"Applying title overlay: {title}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            logger.warning(f"Title overlay failed: {result.stderr[:200]}")
-            return clip_path  # Fall back to original clip
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode != 0:
+            logger.warning(f"Title overlay failed: {stderr.decode()[:200]}")
+            return clip_path
         return output_path
 
-    def _apply_outro_overlay(
+    async def _apply_outro_overlay(
         self,
         clip_path: str,
         next_episode_text: str,
         output_path: str,
     ) -> str:
-        """Overlay outro text and fade-to-black on the final clip.
-
-        Args:
-            clip_path: Path to the outro video clip
-            next_episode_text: Teaser text (e.g., "Next: Shanghai Sprint")
-            output_path: Where to write the processed clip
-
-        Returns:
-            Path to the processed clip with outro overlay
-        """
+        """Overlay outro text and fade-to-black on the final clip."""
         branding = "ANTIKYTHERA F1"
         branding_safe = branding.replace("'", "'\\\\''")
         next_safe = next_episode_text.replace("'", "'\\\\''").replace(":", "\\:")
 
-        # Branding top, "next episode" text below, fade to black at end
         filter_complex = (
             f"drawtext=text='{branding_safe}'"
             f":fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -243,15 +231,20 @@ class VideoStitcher:
             "ffmpeg", "-y",
             "-i", clip_path,
             "-vf", filter_complex,
-            "-c:v", self.codec, "-crf", str(self.crf),
+            "-c:v", self.codec, "-crf", str(self.crf), "-preset", "fast",
             "-c:a", "copy",
             output_path,
         ]
 
         logger.info(f"Applying outro overlay")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            logger.warning(f"Outro overlay failed: {result.stderr[:200]}")
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode != 0:
+            logger.warning(f"Outro overlay failed: {stderr.decode()[:200]}")
             return clip_path
         return output_path
 
