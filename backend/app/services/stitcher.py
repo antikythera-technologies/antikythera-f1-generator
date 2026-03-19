@@ -87,7 +87,7 @@ class VideoStitcher:
             "-safe", "0",
             "-i", str(file_list_path),
             "-c:v", self.codec,
-            "-c:a", self.audio_codec,
+            "-c:a", "copy",
             "-preset", "fast",
             "-crf", str(self.crf),
             "-y",
