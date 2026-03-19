@@ -125,7 +125,7 @@ export default function EpisodeDetailPage() {
   const failedScenes = episode.scenes?.filter(s => s.status === "failed") || [];
   const allScenesCompleted = completedScenes === episode.scene_count && episode.scene_count > 0;
   const hasFinalVideo = !!episode.final_video_path;
-  const finalVideoUrl = getMinioUrl(episode.final_video_path);
+  const finalVideoUrl = getMinioUrl(episode.final_video_path, episode.generation_completed_at || true);
 
   return (
     <div className="space-y-8">
