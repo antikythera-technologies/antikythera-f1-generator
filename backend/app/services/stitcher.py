@@ -60,22 +60,13 @@ class VideoStitcher:
 
         all_clips = []
 
-        # Generate title card as separate clip (prepended)
-        if title:
-            title_path = str(episode_dir / "title_card.mp4")
-            await self._generate_title_card(title, subtitle, title_path)
-            all_clips.append(title_path)
-            logger.info(f"Title card generated: {title_path}")
+        # Title/outro disabled — pure scene concat only for now
+        # TODO: Add title/outro once format compatibility is solved
 
         # Scene clips — untouched
         all_clips.extend(clip_paths)
 
-        # Generate outro card as separate clip (appended)
-        if next_episode_text:
-            outro_path = str(episode_dir / "outro_card.mp4")
-            await self._generate_outro_card(next_episode_text, outro_path)
-            all_clips.append(outro_path)
-            logger.info(f"Outro card generated: {outro_path}")
+        # Outro disabled — pure scene concat only for now
 
         # Create file list for ffmpeg concat demuxer
         file_list_path = episode_dir / "files.txt"
