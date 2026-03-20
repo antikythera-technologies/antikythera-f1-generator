@@ -12,16 +12,6 @@ from app.exceptions import VideoStitchError
 
 logger = logging.getLogger(__name__)
 
-# Must match scene clip format exactly for -c copy concat
-CLIP_WIDTH = 1920
-CLIP_HEIGHT = 1080
-CLIP_FPS = 25
-CLIP_PIX_FMT = "yuv420p"
-CLIP_AUDIO_RATE = 44100
-
-TITLE_DURATION = 4  # seconds
-OUTRO_DURATION = 5  # seconds
-
 
 @dataclass
 class StitchResult:
@@ -49,168 +39,59 @@ class VideoStitcher:
         """
         Stitch video clips into a final episode.
 
-        Scene clips are concatenated with -c copy (zero modification).
-        Title and outro are generated as SEPARATE clips prepended/appended.
-        Scene audio is NEVER touched.
+        Uses MPEG-TS intermediate format to avoid audio drift.
+        Each clip is repackaged to .ts (lossless), concatenated via
+        the concat protocol (which handles timestamps properly),
+        then remuxed to .mp4. Audio/video data is never re-encoded.
         """
         logger.info(f"Episode {episode_id}: Starting stitch of {len(clip_paths)} clips")
 
         episode_dir = self.work_dir / f"episode_{episode_id}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
-        all_clips = []
+        # Step 1: Convert each clip to MPEG-TS (lossless repackage)
+        ts_paths = []
+        for idx, clip_path in enumerate(clip_paths):
+            ts_path = str(episode_dir / f"clip_{idx:02d}.ts")
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", clip_path,
+                "-c", "copy",
+                "-bsf:v", "h264_mp4toannexb",
+                "-f", "mpegts",
+                ts_path,
+            ]
+            await self._run_ffmpeg(cmd, f"ts convert clip {idx+1}")
+            ts_paths.append(ts_path)
 
-        # Title/outro disabled — pure scene concat only for now
-        # TODO: Add title/outro once format compatibility is solved
+        logger.info(f"Converted {len(ts_paths)} clips to MPEG-TS")
 
-        # Scene clips — untouched
-        all_clips.extend(clip_paths)
-
-        # Outro disabled — pure scene concat only for now
-
-        # Create file list for ffmpeg concat demuxer
-        file_list_path = episode_dir / "files.txt"
-        with open(file_list_path, "w") as f:
-            for clip_path in all_clips:
-                escaped_path = clip_path.replace("'", "'\\''")
-                f.write(f"file '{escaped_path}'\n")
-                logger.debug(f"Added clip: {clip_path}")
-
+        # Step 2: Concat via TS protocol + remux to MP4
         output_path = episode_dir / "final.mp4"
+        concat_input = "concat:" + "|".join(ts_paths)
 
-        # Pure stream copy — scene audio untouched
         cmd = [
-            "ffmpeg",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(file_list_path),
+            "ffmpeg", "-y",
+            "-i", concat_input,
             "-c", "copy",
-            "-y",
+            "-bsf:a", "aac_adtstoasc",
             str(output_path),
         ]
 
-        logger.info(f"Running ffmpeg concat: {len(all_clips)} clips")
+        logger.info(f"Concatenating {len(ts_paths)} TS clips to MP4")
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+        await self._run_ffmpeg(cmd, "concat to mp4")
 
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=300
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.communicate()
-                logger.error("ffmpeg concat timed out")
-                raise VideoStitchError("Video stitching timed out")
+        logger.info(f"Stitch complete: {output_path}")
 
-            if proc.returncode != 0:
-                logger.error(f"ffmpeg concat failed: {stderr.decode()}")
-                raise VideoStitchError(f"ffmpeg concat failed: {stderr.decode()}")
+        file_size = output_path.stat().st_size
+        duration = self._get_duration(str(output_path))
 
-            logger.info(f"Stitch complete: {output_path}")
-
-            file_size = output_path.stat().st_size
-            duration = self._get_duration(str(output_path))
-
-            return StitchResult(
-                output_path=str(output_path),
-                duration_seconds=duration,
-                file_size_bytes=file_size,
-            )
-
-        except FileNotFoundError:
-            logger.error("ffmpeg not found in PATH")
-            raise VideoStitchError("ffmpeg not installed or not in PATH")
-
-    async def _generate_title_card(
-        self, title: str, subtitle: str, output_path: str
-    ) -> None:
-        """Generate a title card clip matching scene clip format.
-
-        Black background with centered title text and subtitle.
-        Has silent audio track to match scene clip format.
-        """
-        title_safe = title.upper().replace("'", "'\\\\''").replace(":", "\\:")
-        subtitle_safe = subtitle.replace("'", "'\\\\''").replace(":", "\\:")
-
-        font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        font_reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-
-        # Fade in title, then subtitle
-        vf = (
-            f"drawtext=text='{title_safe}'"
-            f":fontfile={font_bold}:fontsize=58:fontcolor=white"
-            f":x=(w-text_w)/2:y=(h-text_h)/2-30"
-            f":alpha='if(lt(t,0.5),t/0.5,if(gt(t,{TITLE_DURATION-0.5}),({TITLE_DURATION}-t)/0.5,1))'"
-            f",drawtext=text='{subtitle_safe}'"
-            f":fontfile={font_reg}:fontsize=24:fontcolor=white@0.8"
-            f":x=(w-text_w)/2:y=(h-text_h)/2+30"
-            f":alpha='if(lt(t,1),t/1,if(gt(t,{TITLE_DURATION-0.5}),({TITLE_DURATION}-t)/0.5,1))'"
+        return StitchResult(
+            output_path=str(output_path),
+            duration_seconds=duration,
+            file_size_bytes=file_size,
         )
-
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi",
-            "-i", f"color=c=black:s={CLIP_WIDTH}x{CLIP_HEIGHT}:d={TITLE_DURATION}:r={CLIP_FPS}",
-            "-f", "lavfi",
-            "-i", f"anullsrc=r={CLIP_AUDIO_RATE}:cl=stereo",
-            "-vf", vf,
-            "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", CLIP_PIX_FMT,
-            "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "128k", "-ar", str(CLIP_AUDIO_RATE), "-ac", "2",
-            "-t", str(TITLE_DURATION),
-            output_path,
-        ]
-
-        await self._run_ffmpeg(cmd, "title card")
-
-    async def _generate_outro_card(
-        self, next_episode_text: str, output_path: str
-    ) -> None:
-        """Generate an outro card clip matching scene clip format.
-
-        Black background with branding and next episode teaser.
-        Has silent audio track to match scene clip format.
-        """
-        branding = "ANTIKYTHERA F1"
-        branding_safe = branding.replace("'", "'\\\\''")
-        next_safe = next_episode_text.replace("'", "'\\\\''").replace(":", "\\:")
-
-        font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        font_reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-
-        vf = (
-            f"drawtext=text='{branding_safe}'"
-            f":fontfile={font_bold}:fontsize=44:fontcolor=white"
-            f":x=(w-text_w)/2:y=(h-text_h)/2-25"
-            f":alpha='if(lt(t,1),t/1,1)'"
-            f",drawtext=text='{next_safe}'"
-            f":fontfile={font_reg}:fontsize=22:fontcolor=white@0.7"
-            f":x=(w-text_w)/2:y=(h-text_h)/2+25"
-            f":alpha='if(lt(t,1.5),0,if(lt(t,2.5),(t-1.5)/1,1))'"
-            f",fade=t=out:st={OUTRO_DURATION-1.5}:d=1.5"
-        )
-
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi",
-            "-i", f"color=c=black:s={CLIP_WIDTH}x{CLIP_HEIGHT}:d={OUTRO_DURATION}:r={CLIP_FPS}",
-            "-f", "lavfi",
-            "-i", f"anullsrc=r={CLIP_AUDIO_RATE}:cl=stereo",
-            "-vf", vf,
-            "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", CLIP_PIX_FMT,
-            "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "128k", "-ar", str(CLIP_AUDIO_RATE), "-ac", "2",
-            "-t", str(OUTRO_DURATION),
-            output_path,
-        ]
-
-        await self._run_ffmpeg(cmd, "outro card")
 
     async def _run_ffmpeg(self, cmd: list, label: str) -> None:
         """Run an ffmpeg command asynchronously."""
@@ -220,15 +101,15 @@ class VideoStitcher:
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
         except asyncio.TimeoutError:
             proc.kill()
             await proc.communicate()
-            raise VideoStitchError(f"{label} generation timed out")
+            raise VideoStitchError(f"{label} timed out")
 
         if proc.returncode != 0:
             logger.error(f"{label} failed: {stderr.decode()[:300]}")
-            raise VideoStitchError(f"{label} generation failed")
+            raise VideoStitchError(f"{label} failed")
 
     def _get_duration(self, video_path: str) -> int:
         """Get video duration in seconds using ffprobe."""
