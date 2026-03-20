@@ -75,6 +75,7 @@ class VideoStitcher:
             "-i", concat_input,
             "-c", "copy",
             "-bsf:a", "aac_adtstoasc",
+            "-movflags", "+faststart",
             str(output_path),
         ]
 
