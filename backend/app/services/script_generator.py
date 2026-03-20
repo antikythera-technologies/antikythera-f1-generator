@@ -116,8 +116,9 @@ RUNNING GAGS ARE MANDATORY:
 - Visual gags > verbal gags
 
 ACTION_REPLAY SCENE RULES:
-- For on-board shots: describe the COCKPIT VIEW — steering wheel, halo device, visor reflection, car livery colors visible on nose/sidepods
-- For overtake scenes: describe the specific corner, the cars involved by LIVERY COLOR (not face), the racing line
+- CRITICAL DIRECTION RULE: All cars on track MUST be driving AWAY from camera, showing REAR wings, diffusers, exhaust pipes, and tail lights. Include "cars ALL driving away from camera showing only their REAR wings" in EVERY racing prompt. NEVER have cars facing towards camera.
+- For on-board shots: describe the COCKPIT VIEW — steering wheel, halo device, visor reflection, car livery colors visible on nose/sidepods, cars ahead driving AWAY showing rear wings
+- For overtake scenes: describe the specific corner, the cars involved by LIVERY COLOR (not face), the racing line, all cars pointing in the SAME direction away from camera
 - For crash/incident scenes: describe the impact, debris, gravel trap, safety car
 - The character field should be the COMMENTATOR who provides voiceover
 - Dialogue is the commentary: "AND VERSTAPPEN GOES AROUND THE OUTSIDE!"

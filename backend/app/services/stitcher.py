@@ -12,6 +12,16 @@ from app.exceptions import VideoStitchError
 
 logger = logging.getLogger(__name__)
 
+# Must match scene clip format exactly for -c copy concat
+CLIP_WIDTH = 1920
+CLIP_HEIGHT = 1080
+CLIP_FPS = 25
+CLIP_PIX_FMT = "yuv420p"
+CLIP_AUDIO_RATE = 44100
+
+TITLE_DURATION = 4  # seconds
+OUTRO_DURATION = 5  # seconds
+
 
 @dataclass
 class StitchResult:
@@ -37,27 +47,47 @@ class VideoStitcher:
         next_episode_text: str = "",
     ) -> StitchResult:
         """
-        Stitch multiple video clips into a single video.
+        Stitch video clips into a final episode.
 
-        Pure stream copy — no re-encoding of video or audio.
-        Scene clips are concatenated exactly as-is.
+        Scene clips are concatenated with -c copy (zero modification).
+        Title and outro are generated as SEPARATE clips prepended/appended.
+        Scene audio is NEVER touched.
         """
         logger.info(f"Episode {episode_id}: Starting stitch of {len(clip_paths)} clips")
 
         episode_dir = self.work_dir / f"episode_{episode_id}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
+        all_clips = []
+
+        # Generate title card as separate clip (prepended)
+        if title:
+            title_path = str(episode_dir / "title_card.mp4")
+            await self._generate_title_card(title, subtitle, title_path)
+            all_clips.append(title_path)
+            logger.info(f"Title card generated: {title_path}")
+
+        # Scene clips — untouched
+        all_clips.extend(clip_paths)
+
+        # Generate outro card as separate clip (appended)
+        if next_episode_text:
+            outro_path = str(episode_dir / "outro_card.mp4")
+            await self._generate_outro_card(next_episode_text, outro_path)
+            all_clips.append(outro_path)
+            logger.info(f"Outro card generated: {outro_path}")
+
         # Create file list for ffmpeg concat demuxer
         file_list_path = episode_dir / "files.txt"
         with open(file_list_path, "w") as f:
-            for clip_path in clip_paths:
+            for clip_path in all_clips:
                 escaped_path = clip_path.replace("'", "'\\''")
                 f.write(f"file '{escaped_path}'\n")
                 logger.debug(f"Added clip: {clip_path}")
 
         output_path = episode_dir / "final.mp4"
 
-        # Pure stream copy — zero re-encoding, zero audio modification
+        # Pure stream copy — scene audio untouched
         cmd = [
             "ffmpeg",
             "-f", "concat",
@@ -68,7 +98,7 @@ class VideoStitcher:
             str(output_path),
         ]
 
-        logger.info(f"Running ffmpeg: {' '.join(cmd)}")
+        logger.info(f"Running ffmpeg concat: {len(all_clips)} clips")
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -84,12 +114,12 @@ class VideoStitcher:
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
-                logger.error("ffmpeg timed out")
+                logger.error("ffmpeg concat timed out")
                 raise VideoStitchError("Video stitching timed out")
 
             if proc.returncode != 0:
-                logger.error(f"ffmpeg failed: {stderr.decode()}")
-                raise VideoStitchError(f"ffmpeg failed: {stderr.decode()}")
+                logger.error(f"ffmpeg concat failed: {stderr.decode()}")
+                raise VideoStitchError(f"ffmpeg concat failed: {stderr.decode()}")
 
             logger.info(f"Stitch complete: {output_path}")
 
@@ -105,6 +135,109 @@ class VideoStitcher:
         except FileNotFoundError:
             logger.error("ffmpeg not found in PATH")
             raise VideoStitchError("ffmpeg not installed or not in PATH")
+
+    async def _generate_title_card(
+        self, title: str, subtitle: str, output_path: str
+    ) -> None:
+        """Generate a title card clip matching scene clip format.
+
+        Black background with centered title text and subtitle.
+        Has silent audio track to match scene clip format.
+        """
+        title_safe = title.upper().replace("'", "'\\\\''").replace(":", "\\:")
+        subtitle_safe = subtitle.replace("'", "'\\\\''").replace(":", "\\:")
+
+        font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font_reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+        # Fade in title, then subtitle
+        vf = (
+            f"drawtext=text='{title_safe}'"
+            f":fontfile={font_bold}:fontsize=58:fontcolor=white"
+            f":x=(w-text_w)/2:y=(h-text_h)/2-30"
+            f":alpha='if(lt(t,0.5),t/0.5,if(gt(t,{TITLE_DURATION-0.5}),({TITLE_DURATION}-t)/0.5,1))'"
+            f",drawtext=text='{subtitle_safe}'"
+            f":fontfile={font_reg}:fontsize=24:fontcolor=white@0.8"
+            f":x=(w-text_w)/2:y=(h-text_h)/2+30"
+            f":alpha='if(lt(t,1),t/1,if(gt(t,{TITLE_DURATION-0.5}),({TITLE_DURATION}-t)/0.5,1))'"
+        )
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"color=c=black:s={CLIP_WIDTH}x{CLIP_HEIGHT}:d={TITLE_DURATION}:r={CLIP_FPS}",
+            "-f", "lavfi",
+            "-i", f"anullsrc=r={CLIP_AUDIO_RATE}:cl=stereo",
+            "-vf", vf,
+            "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", CLIP_PIX_FMT,
+            "-preset", "fast", "-crf", "18",
+            "-c:a", "aac", "-b:a", "128k", "-ar", str(CLIP_AUDIO_RATE), "-ac", "2",
+            "-t", str(TITLE_DURATION),
+            output_path,
+        ]
+
+        await self._run_ffmpeg(cmd, "title card")
+
+    async def _generate_outro_card(
+        self, next_episode_text: str, output_path: str
+    ) -> None:
+        """Generate an outro card clip matching scene clip format.
+
+        Black background with branding and next episode teaser.
+        Has silent audio track to match scene clip format.
+        """
+        branding = "ANTIKYTHERA F1"
+        branding_safe = branding.replace("'", "'\\\\''")
+        next_safe = next_episode_text.replace("'", "'\\\\''").replace(":", "\\:")
+
+        font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font_reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+        vf = (
+            f"drawtext=text='{branding_safe}'"
+            f":fontfile={font_bold}:fontsize=44:fontcolor=white"
+            f":x=(w-text_w)/2:y=(h-text_h)/2-25"
+            f":alpha='if(lt(t,1),t/1,1)'"
+            f",drawtext=text='{next_safe}'"
+            f":fontfile={font_reg}:fontsize=22:fontcolor=white@0.7"
+            f":x=(w-text_w)/2:y=(h-text_h)/2+25"
+            f":alpha='if(lt(t,1.5),0,if(lt(t,2.5),(t-1.5)/1,1))'"
+            f",fade=t=out:st={OUTRO_DURATION-1.5}:d=1.5"
+        )
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"color=c=black:s={CLIP_WIDTH}x{CLIP_HEIGHT}:d={OUTRO_DURATION}:r={CLIP_FPS}",
+            "-f", "lavfi",
+            "-i", f"anullsrc=r={CLIP_AUDIO_RATE}:cl=stereo",
+            "-vf", vf,
+            "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", CLIP_PIX_FMT,
+            "-preset", "fast", "-crf", "18",
+            "-c:a", "aac", "-b:a", "128k", "-ar", str(CLIP_AUDIO_RATE), "-ac", "2",
+            "-t", str(OUTRO_DURATION),
+            output_path,
+        ]
+
+        await self._run_ffmpeg(cmd, "outro card")
+
+    async def _run_ffmpeg(self, cmd: list, label: str) -> None:
+        """Run an ffmpeg command asynchronously."""
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            raise VideoStitchError(f"{label} generation timed out")
+
+        if proc.returncode != 0:
+            logger.error(f"{label} failed: {stderr.decode()[:300]}")
+            raise VideoStitchError(f"{label} generation failed")
 
     def _get_duration(self, video_path: str) -> int:
         """Get video duration in seconds using ffprobe."""
