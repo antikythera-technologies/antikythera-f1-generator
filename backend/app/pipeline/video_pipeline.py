@@ -109,19 +109,17 @@ class VideoPipeline:
                 await self._update_status(db, EpisodeStatus.STITCHING)
                 final_path = await self._stitch_video(db)
 
-                # Phase 4: Upload to YouTube
-                self.logger.info("PHASE 4: YouTube Upload")
-                await self._update_status(db, EpisodeStatus.UPLOADING)
-                youtube_url = await self._upload_to_youtube(db, final_path)
+                # Phase 4: YouTube Upload — DISABLED (manual only via dashboard)
+                # YouTube upload must be triggered explicitly by the user.
+                # Use POST /episodes/{id}/upload-youtube from the dashboard.
+                self.logger.info("PHASE 4: Skipped — YouTube upload is manual only")
 
                 # Phase 5: Cleanup old assets
                 self.logger.info("PHASE 5: Cleanup")
                 await self._cleanup_old_assets(db)
 
-                # Mark as published
-                await self._update_status(db, EpisodeStatus.PUBLISHED)
-                self.episode.published_at = datetime.utcnow()
-                self.episode.youtube_url = youtube_url
+                # Mark as completed (ready for manual YouTube upload)
+                await self._update_status(db, EpisodeStatus.COMPLETED)
 
                 await db.commit()
 
