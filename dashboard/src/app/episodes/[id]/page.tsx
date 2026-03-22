@@ -9,6 +9,7 @@ import { Header } from "@/components/layout/Header";
 import { Button, StatusBadge, GenerationProgress, LoadingPage, Card, CardContent } from "@/components/ui";
 import { SceneCard } from "@/components/episodes/SceneCard";
 import { SceneDetailModal } from "@/components/episodes/SceneDetailModal";
+import { OperationProgressModal } from "@/components/episodes/OperationProgressModal";
 
 export default function EpisodeDetailPage() {
   const params = useParams();
@@ -23,6 +24,7 @@ export default function EpisodeDetailPage() {
   const [stitching, setStitching] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [progressModal, setProgressModal] = useState<{ title: string; jobId: string } | null>(null);
 
   const fetchEpisode = useCallback(async () => {
     try {
@@ -67,8 +69,11 @@ export default function EpisodeDetailPage() {
     if (!episode) return;
     setStitching(true);
     try {
-      await api.episodes.stitch(episode.id);
-      await fetchEpisode();
+      const result = await api.episodes.stitch(episode.id);
+      setProgressModal({
+        title: "Stitching Episode",
+        jobId: result.rq_job_id,
+      });
     } catch (err) {
       console.error("Stitch failed:", err);
     } finally {
@@ -93,8 +98,11 @@ export default function EpisodeDetailPage() {
     if (!episode) return;
     setValidating(true);
     try {
-      await api.episodes.validate(episode.id);
-      await fetchEpisode();
+      const result = await api.episodes.validate(episode.id);
+      setProgressModal({
+        title: "Validating Scenes",
+        jobId: result.rq_job_id,
+      });
     } catch (err) {
       console.error("Validate failed:", err);
     } finally {
@@ -349,6 +357,17 @@ export default function EpisodeDetailPage() {
         <SceneDetailModal
           scene={selectedScene}
           onClose={() => setSelectedScene(null)}
+        />
+      )}
+
+      {/* Operation Progress Modal (Stitch / Validate) */}
+      {progressModal && episode && (
+        <OperationProgressModal
+          title={progressModal.title}
+          jobId={progressModal.jobId}
+          episodeId={episode.id}
+          onClose={() => setProgressModal(null)}
+          onComplete={() => fetchEpisode()}
         />
       )}
     </div>

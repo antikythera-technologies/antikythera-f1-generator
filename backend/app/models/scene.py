@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -70,6 +70,16 @@ class Scene(Base):
     video_cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 6), default=0)
     image_backend: Mapped[Optional[str]] = mapped_column(String(50))
     scene_type: Mapped[Optional[str]] = mapped_column(String(50))  # TALKING_HEAD, ACTION_REPLAY, etc.
+
+    # Generation metadata (for auditing)
+    face_reference_url: Mapped[Optional[str]] = mapped_column(String(500))
+    lora_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    instant_character_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    regeneration_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # Quality validation
+    validation_status: Mapped[Optional[str]] = mapped_column(String(20))  # passed, failed, skipped
+    validation_issues: Mapped[Optional[str]] = mapped_column(Text)  # JSON string of issues
 
     # Timing
     generation_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

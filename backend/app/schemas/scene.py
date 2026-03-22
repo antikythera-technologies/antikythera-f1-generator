@@ -45,6 +45,12 @@ class SceneResponse(BaseModel):
     generation_time_ms: Optional[int]
     retry_count: int
     last_error: Optional[str]
+    validation_status: Optional[str] = None
+    validation_issues: Optional[str] = None
+    face_reference_url: Optional[str] = None
+    lora_used: bool = False
+    instant_character_used: bool = False
+    regeneration_count: int = 0
     created_at: datetime
 
 

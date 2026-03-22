@@ -48,6 +48,27 @@ async def _log_api_cost(
         logger.warning(f"Failed to log API cost: {e}")
 
 # Queue name used across the project
+
+
+async def _update_episode_costs(db, episode_id: int) -> None:
+    """Sum all scene costs and update Episode.total_cost_usd."""
+    from sqlalchemy import func, select
+    from app.models.scene import Scene
+    from app.models.episode import Episode
+
+    result = await db.execute(
+        select(
+            func.coalesce(func.sum(Scene.image_cost_usd), 0),
+            func.coalesce(func.sum(Scene.video_cost_usd), 0),
+        ).where(Scene.episode_id == episode_id)
+    )
+    img_total, vid_total = result.one()
+    episode = await db.get(Episode, episode_id)
+    if episode:
+        episode.total_cost_usd = img_total + vid_total
+        await db.flush()
+        logger.debug(f"Episode {episode_id}: Updated total cost to ${float(img_total + vid_total):.4f}")
+
 PIPELINE_QUEUE = "f1-pipeline"
 
 # Pipeline jobs can run for up to 2 hours (image gen + stitching is slow)
@@ -394,23 +415,26 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
             scene.generation_time_ms = generation_time_ms
             scene.last_error = None
 
-            # Log video generation cost
-            video_cost_map = {
-                "fal-ovi": 0.20, "fal-ltx": 0.30,
-                "fal-kling-std": 0.42, "fal-kling-std-audio": 0.63,
-                "fal-kling-pro": 0.42, "fal-kling-pro-audio": 0.84,
-                "fal-kling-o1-flf": 0.56, "fal-vidu-q1-flf": 0.50, "fal-wan-flf": 0.50,
-            }
-            scene.video_cost_usd = Decimal(str(video_cost_map.get(backend, 0.20)))
+            # Duration-based video cost (accumulates on regeneration)
+            from app.services.fal_video_generator import FAL_COST_PER_SECOND, FalBackend
+            cost_per_sec = FAL_COST_PER_SECOND.get(
+                FalBackend(backend) if backend.startswith("fal-") else None,
+                0.04,  # fallback
+            )
+            duration = float(scene.duration_seconds or 5)
+            video_cost = Decimal(str(round(duration * cost_per_sec, 6)))
+            scene.video_cost_usd = (scene.video_cost_usd or Decimal(0)) + video_cost
+            scene.regeneration_count = (scene.regeneration_count or 0) + 1
             await _log_api_cost(
                 db, episode_id, scene.id,
                 provider=backend if backend.startswith("fal-") else "ovi",
                 endpoint=f"fal.ai/{backend}",
-                cost_usd=video_cost_map.get(backend, 0.20),
+                cost_usd=float(video_cost),
                 response_time_ms=generation_time_ms,
             )
 
             await db.commit()
+            await _update_episode_costs(db, episode_id)
             logger.info(f"Scene {scene_number}: Video regenerated in {generation_time_ms}ms")
             return f"Scene {scene_number} video regenerated ({backend})"
 
@@ -784,8 +808,11 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 scene.status = SceneStatus.COMPLETED
                 scene.generation_completed_at = datetime.utcnow()
                 scene.generation_time_ms = generation_time_ms
-                scene.image_cost_usd = Decimal("0.04")
+                scene.image_cost_usd = (scene.image_cost_usd or Decimal(0)) + Decimal("0.04")
                 scene.image_backend = "instant-character"
+                scene.instant_character_used = True
+                scene.lora_used = True
+                scene.regeneration_count = (scene.regeneration_count or 0) + 1
                 scene.last_error = None
 
                 await db.commit()
@@ -794,9 +821,10 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                     db, episode_id, scene.id,
                     provider="fal-image",
                     endpoint="fal-ai/instant-character",
-                    cost_usd=0.04,  # instant-character pricing
+                    cost_usd=0.04,
                     response_time_ms=generation_time_ms,
                 )
+                await _update_episode_costs(db, episode_id)
 
                 logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via instant-character")
                 return f"Scene {scene_number} {frame_type} frame generated (instant-character)"
@@ -907,8 +935,10 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             scene.generation_completed_at = datetime.utcnow()
             scene.generation_time_ms = generation_time_ms
             scene.last_error = None
-            scene.image_cost_usd = Decimal("0.035")
+            scene.image_cost_usd = (scene.image_cost_usd or Decimal(0)) + Decimal("0.035")
             scene.image_backend = "flux-lora"
+            scene.lora_used = True
+            scene.regeneration_count = (scene.regeneration_count or 0) + 1
 
             await db.commit()
             # Log image generation cost
@@ -916,9 +946,10 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 db, episode_id, scene.id,
                 provider="fal-image",
                 endpoint="fal-ai/flux-lora",
-                cost_usd=0.035,  # flux-lora pricing
+                cost_usd=0.035,
                 response_time_ms=generation_time_ms,
             )
+            await _update_episode_costs(db, episode_id)
 
             logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via fal.ai")
             return f"Scene {scene_number} {frame_type} frame generated"
@@ -1081,6 +1112,14 @@ async def _async_stitch(episode_id: int) -> str:
     storage = StorageService()
     stitcher = VideoStitcher()
 
+    # Progress tracking via RQ job meta
+    import rq
+    job = rq.get_current_job()
+    def _update_progress(step, message, progress=0, total=0):
+        if job:
+            job.meta = {"step": step, "message": message, "progress": progress, "total": total}
+            job.save_meta()
+
     async with async_session_maker() as db:
         episode = await db.get(Episode, episode_id)
         if not episode:
@@ -1115,6 +1154,7 @@ async def _async_stitch(episode_id: int) -> str:
         await db.commit()
 
         # Download scene clips to local temp
+        _update_progress("downloading", f"Downloading {len(scenes)} clips from storage...", 0, len(scenes))
         clip_paths = []
         work_dir = f"/tmp/videos/episode_{episode_id}"
         os.makedirs(work_dir, exist_ok=True)
@@ -1125,6 +1165,7 @@ async def _async_stitch(episode_id: int) -> str:
                 bucket, object_name = scene.video_clip_path.split("/", 1)
                 await storage.download_file(bucket, object_name, local_path)
                 clip_paths.append(local_path)
+                _update_progress("downloading", f"Downloaded clip {len(clip_paths)}/{len(scenes)}...", len(clip_paths), len(scenes))
 
         if not clip_paths:
             episode.status = EpisodeStatus.FAILED
@@ -1158,7 +1199,8 @@ async def _async_stitch(episode_id: int) -> str:
             if next_race:
                 next_episode_text = f"Next: {next_race.race_name}"
 
-        # Stitch
+        # Stitch (normalize + concat)
+        _update_progress("stitching", f"Stitching {len(clip_paths)} clips (normalize + concat)...", 0, len(clip_paths))
         stitch_result = await stitcher.stitch(
             episode_id=episode_id,
             clip_paths=clip_paths,
@@ -1168,6 +1210,7 @@ async def _async_stitch(episode_id: int) -> str:
         )
 
         # Upload final video to MinIO
+        _update_progress("uploading", "Uploading final video to storage...", 0, 1)
         final_path = await storage.upload_final_video(
             race_id=race.id if race else 0,
             episode_id=episode_id,
@@ -1191,7 +1234,13 @@ async def _async_stitch(episode_id: int) -> str:
         # Cleanup temp files
         await stitcher.cleanup(episode_id)
 
+        # Update episode costs
+        await _update_episode_costs(db, episode_id)
+
         logger.info(f"Episode {episode_id}: Stitch complete → {final_path}")
+        duration = stitch_result.duration_seconds
+        size_mb = stitch_result.file_size_bytes / (1024 * 1024)
+        _update_progress("complete", f"Stitch complete — {duration}s, {size_mb:.1f}MB")
         return final_path
 
 
@@ -1281,6 +1330,14 @@ async def _async_validate(episode_id: int) -> str:
     logger.info(f"Episode {episode_id}: Starting validation job")
     validator = SceneValidator()
 
+    # Progress tracking via RQ job meta
+    import rq as _rq
+    _job = _rq.get_current_job()
+    def _update_progress(step, message, progress=0, total=0):
+        if _job:
+            _job.meta = {"step": step, "message": message, "progress": progress, "total": total}
+            _job.save_meta()
+
     async with async_session_maker() as db:
         stmt = (
             select(Scene)
@@ -1295,10 +1352,12 @@ async def _async_validate(episode_id: int) -> str:
             return "No scenes to validate"
 
         logger.info(f"Episode {episode_id}: Validating {len(scenes)} scenes")
+        _update_progress("validating", f"Validating {len(scenes)} scenes...", 0, len(scenes))
 
         episode_validation = await validator.validate_episode(scenes)
 
         # Update each scene with validation results
+        _done = 0
         for scene_result in episode_validation.scene_results:
             scene_stmt = select(Scene).where(
                 Scene.episode_id == episode_id,
@@ -1309,6 +1368,8 @@ async def _async_validate(episode_id: int) -> str:
             if scene:
                 scene.validation_status = "passed" if scene_result.passed else "failed"
                 scene.validation_issues = json.dumps(scene_result.issues) if scene_result.issues else None
+                _done += 1
+                _update_progress("validating", f"Validated scene {_done}/{len(scenes)}...", _done, len(scenes))
 
         await db.commit()
 
@@ -1318,6 +1379,7 @@ async def _async_validate(episode_id: int) -> str:
             f"{episode_validation.failed_scenes} failed"
         )
         logger.info(f"Episode {episode_id}: {summary}")
+        _update_progress("complete", summary)
         return summary
 
 

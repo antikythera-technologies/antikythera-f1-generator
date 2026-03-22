@@ -225,6 +225,12 @@ export interface Scene {
   generation_time_ms: number | null;
   retry_count: number;
   last_error: string | null;
+  validation_status: string | null;
+  validation_issues: string | null;
+  face_reference_url: string | null;
+  lora_used: boolean;
+  instant_character_used: boolean;
+  regeneration_count: number;
   created_at: string;
 }
 
@@ -379,7 +385,23 @@ export const episodesApi = {
       method: "POST",
       body: JSON.stringify({ scene_ids: sceneIds || [] }),
     }),
+
+  stitch: (id: number) =>
+    request<{ status: string; episode_id: number; rq_job_id: string }>(`/episodes/${id}/stitch`, {
+      method: "POST",
+    }),
+
+  uploadYoutube: (id: number) =>
+    request<{ status: string; episode_id: number; rq_job_id: string }>(`/episodes/${id}/upload-youtube`, {
+      method: "POST",
+    }),
+
+  validate: (id: number) =>
+    request<{ status: string; episode_id: number; rq_job_id: string }>(`/episodes/${id}/validate`, {
+      method: "POST",
+    }),
 };
+
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface CharacterPersonality {
@@ -836,6 +858,11 @@ export const settingsApi = {
 
   getBalances: () => request<ServiceBalances>("/settings/pipeline/balances"),
 };
+
+// SSE progress URL helper (used by OperationProgressModal)
+export function getProgressUrl(episodeId: number, jobId: string): string {
+  return `${API_BASE}/episodes/${episodeId}/progress/${jobId}`;
+}
 
 // Export all APIs
 export const api = {

@@ -52,6 +52,24 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
           #{scene.scene_number.toString().padStart(2, "0")}
         </div>
 
+        {/* Validation badge */}
+        {scene.validation_status && (
+          <div className={cn(
+            "absolute right-2 top-2 rounded-full p-1",
+            scene.validation_status === "passed" ? "bg-success-green/80" : "bg-racing-red/80"
+          )}>
+            {scene.validation_status === "passed" ? (
+              <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </div>
+        )}
+
         {/* Status overlay for active scenes */}
         {isActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -85,22 +103,62 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
           )}
         </div>
 
+        {/* Scene type */}
+        {scene.scene_type && (
+          <span className={cn(
+            "self-start rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+            scene.scene_type === "TALKING_HEAD" ? "bg-electric-blue/15 text-electric-blue" :
+            scene.scene_type === "ACTION_REPLAY" ? "bg-racing-red/15 text-racing-red" :
+            scene.scene_type === "ESTABLISHING" ? "bg-success-green/15 text-success-green" :
+            scene.scene_type === "TITLE_CARD" ? "bg-amber-500/15 text-amber-400" :
+            scene.scene_type === "REACTION" ? "bg-cyber-purple/15 text-cyber-purple" :
+            scene.scene_type === "PODIUM" ? "bg-amber-500/15 text-amber-400" :
+            "bg-white/10 text-white/50"
+          )}>
+            {scene.scene_type.replace(/_/g, " ")}
+          </span>
+        )}
+
         {/* Pipeline & Cost info */}
-        {(scene.video_generator || scene.image_backend || scene.image_cost_usd || scene.video_cost_usd) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {scene.image_backend && (
+            <span className="rounded-full bg-neon-cyan/10 px-2 py-0.5 text-[10px] font-medium text-neon-cyan uppercase tracking-wider">
+              {scene.image_backend}
+            </span>
+          )}
+          {scene.video_generator && (
+            <span className="rounded-full bg-cyber-purple/10 px-2 py-0.5 text-[10px] font-medium text-cyber-purple uppercase tracking-wider">
+              {scene.video_generator}
+            </span>
+          )}
+          {(scene.image_cost_usd || scene.video_cost_usd) && (
+            <span className="ml-auto font-mono text-[10px] text-success-green">
+              ${(Number(scene.image_cost_usd || 0) + Number(scene.video_cost_usd || 0)).toFixed(3)}
+            </span>
+          )}
+        </div>
+
+        {/* Generation metadata (LoRA, IC, face ref, regen count) */}
+        {(scene.lora_used || scene.instant_character_used || scene.face_reference_url || (scene.regeneration_count && scene.regeneration_count > 1)) && (
           <div className="flex flex-wrap items-center gap-1.5">
-            {scene.image_backend && (
-              <span className="rounded-full bg-neon-cyan/10 px-2 py-0.5 text-[10px] font-medium text-neon-cyan uppercase tracking-wider">
-                {scene.image_backend}
+            {scene.lora_used && (
+              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+                LoRA
               </span>
             )}
-            {scene.video_generator && (
-              <span className="rounded-full bg-cyber-purple/10 px-2 py-0.5 text-[10px] font-medium text-cyber-purple uppercase tracking-wider">
-                {scene.video_generator}
+            {scene.instant_character_used && (
+              <span className="rounded-full bg-electric-blue/10 px-2 py-0.5 text-[10px] font-medium text-electric-blue">
+                IC
               </span>
             )}
-            {(scene.image_cost_usd || scene.video_cost_usd) && (
-              <span className="ml-auto font-mono text-[10px] text-white/40">
-                ${(Number(scene.image_cost_usd || 0) + Number(scene.video_cost_usd || 0)).toFixed(3)}
+            {scene.face_reference_url && (
+              <span className="rounded-full bg-cyber-purple/10 px-1.5 py-0.5 text-[10px] text-cyber-purple" title={scene.face_reference_url}>
+                Face
+              </span>
+            )}
+            {scene.regeneration_count && scene.regeneration_count > 1 && (
+              <span className="ml-auto rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400" title={`Regenerated ${scene.regeneration_count} times`}>
+                ×{scene.regeneration_count}
               </span>
             )}
           </div>
