@@ -617,6 +617,23 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                       </div>
                     </div>
 
+                    {/* Face Reference Image */}
+                    {detail.character_image_path && (
+                      <div className="border-t border-white/10 pt-3">
+                        <p className="text-xs text-white/40 mb-2">Face Reference Used</p>
+                        <div className="flex items-start gap-3">
+                          <img
+                            src={getMinioUrl(detail.character_image_path) || ""}
+                            alt="Face reference"
+                            className="h-20 w-20 rounded-lg object-cover border border-white/10"
+                          />
+                          <div className="text-xs text-white/50 break-all">
+                            {detail.character_image_path}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Pipeline & Cost Info */}
                     <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-3">
                       <div>

@@ -268,7 +268,7 @@ async def _get_scene(
     from sqlalchemy.orm import selectinload
     stmt = (
         select(Scene)
-        .options(selectinload(Scene.character))
+        .options(selectinload(Scene.character), selectinload(Scene.character_image))
         .where(
             Scene.episode_id == episode_id,
             Scene.scene_number == scene_number,

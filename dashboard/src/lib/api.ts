@@ -235,6 +235,7 @@ export interface Scene {
 }
 
 export interface SceneDetail extends Scene {
+  character_image_path: string | null;
   script_response: string | null;
   scene_type: string | null;
   source_image_path: string | null;

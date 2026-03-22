@@ -102,6 +102,13 @@ class Scene(Base):
         if self.character:
             return self.character.display_name or self.character.name
         return None
+
+    @property
+    def character_image_path(self) -> str | None:
+        """Path to the character reference image used for this scene."""
+        if self.character_image:
+            return self.character_image.image_path
+        return None
     character_image: Mapped[Optional["CharacterImage"]] = relationship("CharacterImage", back_populates="scenes")
     logs: Mapped[list["GenerationLog"]] = relationship("GenerationLog", back_populates="scene", cascade="all, delete-orphan")
     api_usage: Mapped[list["APIUsage"]] = relationship("APIUsage", back_populates="scene", cascade="all, delete-orphan")

@@ -62,6 +62,7 @@ class SceneDetailResponse(SceneResponse):
     audio_description: Optional[str]
     source_image_path: Optional[str]
     character_image_id: Optional[int]
+    character_image_path: Optional[str] = None
     generation_started_at: Optional[datetime]
     generation_completed_at: Optional[datetime]
 
