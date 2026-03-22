@@ -553,7 +553,7 @@ async def _ensure_runpod_ready(timeout: int = 300) -> None:
     raise RuntimeError(f"RunPod pod did not become ready within {timeout}s")
 
 
-async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str = "start") -> str:
+async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str = "start", set_completed: bool = True) -> str:
     """Async worker: generate a scene image via fal.ai flux-lora."""
     import os
     import tempfile
@@ -844,7 +844,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 else:
                     scene.end_frame_path = image_storage_path
 
-                scene.status = SceneStatus.COMPLETED
+                scene.status = SceneStatus.COMPLETED if set_completed else SceneStatus.GENERATING
                 scene.generation_completed_at = datetime.utcnow()
                 scene.generation_time_ms = generation_time_ms
                 scene.image_cost_usd = (scene.image_cost_usd or Decimal(0)) + Decimal("0.04")
@@ -970,7 +970,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             else:
                 scene.end_frame_path = image_storage_path
 
-            scene.status = SceneStatus.COMPLETED
+            scene.status = SceneStatus.COMPLETED if set_completed else SceneStatus.GENERATING
             scene.generation_completed_at = datetime.utcnow()
             scene.generation_time_ms = generation_time_ms
             scene.last_error = None
@@ -1015,7 +1015,7 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
     logger.info(f"Scene {scene_number}: Starting full regeneration (image + video)")
 
     # Step 1: Generate start frame image
-    await _async_scene_image(episode_id, scene_number, frame_type="start")
+    await _async_scene_image(episode_id, scene_number, frame_type="start", set_completed=False)
     logger.info(f"Scene {scene_number}: Start image done")
 
     # Step 1b: Generate end frame only if FLF router approves this scene type
@@ -1049,7 +1049,7 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
                     backend_supports_flf=True,
                 ):
                     logger.info(f"Scene {scene_number}: Generating end frame for FLF (type={scene.scene_type})")
-                    await _async_scene_image(episode_id, scene_number, frame_type="end")
+                    await _async_scene_image(episode_id, scene_number, frame_type="end", set_completed=False)
                     logger.info(f"Scene {scene_number}: End frame done")
                 else:
                     logger.info(f"Scene {scene_number}: FLF not applicable (type={scene.scene_type if scene else '?'})")
