@@ -128,7 +128,7 @@ export default function EpisodeDetailPage() {
     );
   }
 
-  const isGenerating = ["generating", "stitching", "uploading"].includes(episode.status);
+  const isGenerating = ["generating", "uploading"].includes(episode.status);
   const completedScenes = episode.scenes?.filter(s => s.status === "completed").length || 0;
   const failedScenes = episode.scenes?.filter(s => s.status === "failed") || [];
   const allScenesCompleted = completedScenes === episode.scene_count && episode.scene_count > 0;

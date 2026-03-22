@@ -5,7 +5,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
 
 // Types
-export type EpisodeStatus = "pending" | "generating" | "stitching" | "uploading" | "published" | "failed";
+export type EpisodeStatus = "pending" | "generating" | "stitching" | "completed" | "uploading" | "published" | "failed";
 export type EpisodeType = "pre-race" | "post-race" | "post-fp2" | "post-sprint" | "weekly-recap";
 export type JobStatus = "scheduled" | "running" | "completed" | "failed" | "cancelled";
 export type JobTriggerType = "post-fp2" | "post-sprint" | "post-race" | "weekly-recap" | "manual";

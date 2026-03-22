@@ -12,7 +12,7 @@ interface EpisodeCardProps {
 }
 
 export function EpisodeCard({ episode }: EpisodeCardProps) {
-  const isGenerating = ["generating", "stitching", "uploading"].includes(episode.status);
+  const isGenerating = ["generating", "uploading"].includes(episode.status);
   const completedScenes = episode.scenes
     ? episode.scenes.filter(s => s.status === "completed").length
     : (["stitching", "uploading", "published"].includes(episode.status) || episode.final_video_path)

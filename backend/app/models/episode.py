@@ -25,6 +25,7 @@ class EpisodeStatus(str, enum.Enum):
     PENDING = "pending"
     GENERATING = "generating"
     STITCHING = "stitching"
+    COMPLETED = "completed"
     UPLOADING = "uploading"
     PUBLISHED = "published"
     FAILED = "failed"

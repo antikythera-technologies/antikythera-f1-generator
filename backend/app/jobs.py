@@ -1226,9 +1226,8 @@ async def _async_stitch(episode_id: int) -> str:
             gen_time = (datetime.utcnow() - episode.generation_started_at).total_seconds()
             episode.generation_time_seconds = int(gen_time)
 
-        # Stitching complete — stays as STITCHING (not PUBLISHED until YouTube upload)
-        # Dashboard detects final_video_path to show the video player
-        episode.status = EpisodeStatus.STITCHING
+        # Stitching complete — set to COMPLETED (ready for YouTube upload)
+        episode.status = EpisodeStatus.COMPLETED
         await db.commit()
 
         # Cleanup temp files
