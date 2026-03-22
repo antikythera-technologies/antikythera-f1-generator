@@ -750,6 +750,9 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
                 import fal_client as _fal
 
+                # Generate taller (4:3) to give headroom, then crop to 16:9.
+                # Instant-character inherently zooms into the face reference,
+                # so we give it extra vertical space and crop the excess.
                 _ic_args = {
                         "prompt": full_prompt,
                         "image_url": face_ref_url,
@@ -758,7 +761,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                             "forehead cropped, extreme close-up, tight crop, face filling frame, "
                             "zoomed in, macro, portrait crop, chin to forehead only"
                         ),
-                        "image_size": {"width": 1280, "height": 720},
+                        "image_size": {"width": 1280, "height": 960},
                         "num_inference_steps": 28,
                         "guidance_scale": 3.5,
                         "scale": 0.5,
@@ -789,8 +792,19 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                     _img_resp.raise_for_status()
 
                 tmp_path = os.path.join(tempfile.gettempdir(), f"f1_scene_{episode_id}_{scene_number:02d}_{frame_type}.png")
-                with open(tmp_path, "wb") as f:
-                    f.write(_img_resp.content)
+
+                # Crop from 1280x960 (4:3) to 1280x720 (16:9)
+                # Take the top 720px to preserve head/hair, trim excess below waist
+                from PIL import Image as _PILImage
+                import io as _io
+                _img_full = _PILImage.open(_io.BytesIO(_img_resp.content))
+                if _img_full.height > 720:
+                    _img_cropped = _img_full.crop((0, 0, _img_full.width, 720))
+                    _img_cropped.save(tmp_path, "PNG")
+                    logger.info(f"Scene {scene_number}: Cropped {_img_full.width}x{_img_full.height} -> {_img_cropped.width}x{_img_cropped.height}")
+                else:
+                    with open(tmp_path, "wb") as f:
+                        f.write(_img_resp.content)
 
                 logger.info(f"Scene {scene_number}: Image downloaded ({len(_img_resp.content) / 1024:.0f} KB)")
 
