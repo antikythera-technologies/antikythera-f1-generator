@@ -761,7 +761,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "image_size": {"width": 1280, "height": 720},
                         "num_inference_steps": 28,
                         "guidance_scale": 3.5,
-                        "scale": 0.15,
+                        "scale": 0.5,
                         "output_format": "png",
                         "loras": [{"path": LORA_URL, "scale": 1.0, "trigger_word": "ANTKF1STYLE"}],
                     }
