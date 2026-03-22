@@ -761,7 +761,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                             "forehead cropped, extreme close-up, tight crop, face filling frame, "
                             "zoomed in, macro, portrait crop, chin to forehead only"
                         ),
-                        "image_size": {"width": 1280, "height": 960},
+                        "image_size": {"width": 1280, "height": 1280},
                         "num_inference_steps": 28,
                         "guidance_scale": 3.5,
                         "scale": 0.3,
