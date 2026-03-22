@@ -15,12 +15,13 @@ Previous approaches that FAILED:
 """
 
 import asyncio
+import os
 import json
 import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from app.exceptions import VideoStitchError
 
@@ -62,6 +63,7 @@ class VideoStitcher:
         title: str = "",
         subtitle: str = "",
         next_episode_text: str = "",
+        circuit_name: str = "",
     ) -> StitchResult:
         """
         Stitch video clips into a final episode.
@@ -79,11 +81,11 @@ class VideoStitcher:
         all_clips = list(clip_paths)
         if title:
             title_card_path = str(episode_dir / "title_card.mp4")
-            await self._generate_title_card(title, subtitle, title_card_path)
+            await self._generate_title_card(title, subtitle, title_card_path, circuit_name=circuit_name, episode_dir=episode_dir)
             all_clips.insert(0, title_card_path)
 
             outro_path = str(episode_dir / "outro.mp4")
-            await self._generate_outro(next_episode_text, outro_path)
+            await self._generate_outro(next_episode_text, outro_path, episode_dir=episode_dir)
             all_clips.append(outro_path)
 
             logger.info(
@@ -164,11 +166,75 @@ class VideoStitcher:
         text = text.replace("'", "'\\''")
         return text
 
+    async def _generate_card_image(
+        self, prompt: str, output_image_path: str,
+    ) -> bool:
+        """Generate an image via fal.ai for title card or outro background.
+        
+        Returns True if image was generated, False on failure (fallback to black).
+        """
+        try:
+            import fal_client
+
+            logger.info(f"Generating card image via fal.ai: {prompt[:80]}...")
+            result = await fal_client.run_async(
+                "fal-ai/flux-lora",
+                arguments={
+                    "prompt": prompt,
+                    "image_size": {"width": VIDEO_WIDTH, "height": VIDEO_HEIGHT},
+                    "num_images": 1,
+                    "num_inference_steps": 28,
+                    "guidance_scale": 3.5,
+                    "enable_safety_checker": False,
+                    "loras": [
+                        {
+                            "path": "https://v3b.fal.media/files/b/0a918355/tJadbfWJuPFPPcrwOQ_3W_pytorch_lora_weights.safetensors",
+                            "scale": 1.0,
+                        }
+                    ],
+                },
+            )
+
+            images = result.get("images", [])
+            if not images:
+                logger.warning("fal.ai returned no images for card, falling back to black")
+                return False
+
+            import httpx
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(images[0]["url"])
+                resp.raise_for_status()
+                with open(output_image_path, "wb") as f:
+                    f.write(resp.content)
+
+            logger.info(f"Card image generated: {output_image_path}")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to generate card image, falling back to black: {e}")
+            return False
+
     async def _generate_title_card(
         self, title: str, subtitle: str, output_path: str,
         duration: int = TITLE_CARD_DURATION,
+        circuit_name: str = "",
+        episode_dir: Optional[Path] = None,
     ) -> None:
-        """Generate a title card: black background, centered text, silent audio."""
+        """Generate a title card with AI-generated background image and text overlay."""
+        # Try to generate a background image
+        bg_image_path = str(episode_dir / "title_bg.png") if episode_dir else "/tmp/title_bg.png"
+        circuit_text = circuit_name or "F1 circuit"
+        prompt = (
+            f"ANTKF1STYLE Dramatic aerial view of {circuit_text} at golden hour, "
+            f"F1 cars racing on track driving away from camera showing rear wings, "
+            f"dramatic clouds and sunset sky, satirical caricature art style, "
+            f"vibrant colors, cinematic wide shot"
+        )
+        has_bg = await self._generate_card_image(prompt, bg_image_path)
+
+        # Build drawtext filter
+        drawtext_parts = []
+
         # Split long titles across two lines
         if len(title) > 30:
             mid = len(title) // 2
@@ -179,52 +245,82 @@ class VideoStitcher:
                     break
             line1 = self._escape_drawtext(title[:best].strip())
             line2 = self._escape_drawtext(title[best:].strip().lstrip(":-").strip())
-            drawtext_parts = [
-                f"drawtext=text='{line1}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+            drawtext_parts.extend([
+                f"drawtext=text=\'{line1}\':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f":borderw=3:bordercolor=black"
                 f":x=(w-text_w)/2:y=(h/2)-70",
-                f"drawtext=text='{line2}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f"drawtext=text=\'{line2}\':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f":borderw=3:bordercolor=black"
                 f":x=(w-text_w)/2:y=(h/2)-20",
-            ]
+            ])
         else:
             esc_title = self._escape_drawtext(title)
-            drawtext_parts = [
-                f"drawtext=text='{esc_title}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
-                f":x=(w-text_w)/2:y=(h-text_h)/2-40",
-            ]
+            drawtext_parts.append(
+                f"drawtext=text=\'{esc_title}\':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f":borderw=3:bordercolor=black"
+                f":x=(w-text_w)/2:y=(h-text_h)/2-40"
+            )
 
         if subtitle:
             esc_subtitle = self._escape_drawtext(subtitle)
             drawtext_parts.append(
-                f"drawtext=text='{esc_subtitle}':fontsize={SUBTITLE_FONT_SIZE}"
-                f":fontcolor=white@0.7:x=(w-text_w)/2:y=(h/2)+40"
+                f"drawtext=text=\'{esc_subtitle}\':fontsize={SUBTITLE_FONT_SIZE}"
+                f":fontcolor=white@0.8:borderw=2:bordercolor=black@0.5"
+                f":x=(w-text_w)/2:y=(h/2)+40"
             )
 
-        vf = ",".join(drawtext_parts)
+        if has_bg:
+            # Use image as background with dark gradient overlay for text readability
+            vf_parts = [
+                f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}",
+                "format=yuv420p",
+                # Dark gradient overlay: bottom half darkened for text
+                f"colorkey=color=black:similarity=0",  # no-op to chain
+            ]
+            vf_parts.extend(drawtext_parts)
+            vf = ",".join(vf_parts)
 
-        # Generate at source format so no conversion needed during stitch
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i",
-            f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={OUTPUT_FPS}",
-            "-f", "lavfi", "-i",
-            f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
-            "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-bf", "0", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
-            "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
-            "-t", str(duration), "-shortest",
-            output_path,
-        ]
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", bg_image_path,
+                "-f", "lavfi", "-i",
+                f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
+                "-vf", vf,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-bf", "0", "-pix_fmt", "yuv420p",
+                "-r", str(OUTPUT_FPS),
+                "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
+                "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
+                "-t", str(duration), "-shortest",
+                output_path,
+            ]
+        else:
+            # Fallback: black background
+            vf = ",".join(drawtext_parts)
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i",
+                f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={OUTPUT_FPS}",
+                "-f", "lavfi", "-i",
+                f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
+                "-vf", vf,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-bf", "0", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
+                "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
+                "-t", str(duration), "-shortest",
+                output_path,
+            ]
 
-        logger.info(f"Generating title card: {title!r}")
+        logger.info(f"Generating title card: {title!r} (bg={'image' if has_bg else 'black'})")
         await self._run_ffmpeg(cmd, "title card", timeout=60)
 
     async def _generate_outro(
         self, next_episode_text: str, output_path: str,
         duration: int = TITLE_CARD_DURATION,
+        episode_dir: Optional[Path] = None,
     ) -> None:
-        """Generate an outro clip: black background, closing text, silent audio."""
+        """Generate an outro clip with AI-generated background and closing text."""
         if next_episode_text:
             heading = "NEXT WEEK"
             sub = next_episode_text
@@ -232,32 +328,60 @@ class VideoStitcher:
             heading = "THANKS FOR WATCHING"
             sub = "See you at the next race"
 
+        # Try to generate a background image
+        bg_image_path = str(episode_dir / "outro_bg.png") if episode_dir else "/tmp/outro_bg.png"
+        prompt = (
+            "ANTKF1STYLE Dramatic checkered flag waving against a vibrant sunset sky, "
+            "F1 podium celebration with champagne spray, satirical caricature art style, "
+            "dramatic lighting, cinematic composition"
+        )
+        has_bg = await self._generate_card_image(prompt, bg_image_path)
+
         esc_heading = self._escape_drawtext(heading)
         esc_sub = self._escape_drawtext(sub)
 
-        vf = (
-            f"drawtext=text='{esc_heading}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+        drawtext_filter = (
+            f"drawtext=text=\'{esc_heading}\':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+            f":borderw=3:bordercolor=black"
             f":x=(w-text_w)/2:y=(h-text_h)/2-40,"
-            f"drawtext=text='{esc_sub}':fontsize={SUBTITLE_FONT_SIZE}"
-            f":fontcolor=white@0.7:x=(w-text_w)/2:y=(h-text_h)/2+30"
+            f"drawtext=text=\'{esc_sub}\':fontsize={SUBTITLE_FONT_SIZE}"
+            f":fontcolor=white@0.8:borderw=2:bordercolor=black@0.5"
+            f":x=(w-text_w)/2:y=(h-text_h)/2+30"
         )
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i",
-            f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={OUTPUT_FPS}",
-            "-f", "lavfi", "-i",
-            f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
-            "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-bf", "0", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
-            "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
-            "-t", str(duration), "-shortest",
-            output_path,
-        ]
+        if has_bg:
+            vf = f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},format=yuv420p,{drawtext_filter}"
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", bg_image_path,
+                "-f", "lavfi", "-i",
+                f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
+                "-vf", vf,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-bf", "0", "-pix_fmt", "yuv420p",
+                "-r", str(OUTPUT_FPS),
+                "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
+                "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
+                "-t", str(duration), "-shortest",
+                output_path,
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i",
+                f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={OUTPUT_FPS}",
+                "-f", "lavfi", "-i",
+                f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
+                "-vf", drawtext_filter,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-bf", "0", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
+                "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
+                "-t", str(duration), "-shortest",
+                output_path,
+            ]
 
-        logger.info(f"Generating outro: {heading!r}")
+        logger.info(f"Generating outro: {heading!r} (bg={'image' if has_bg else 'black'})")
         await self._run_ffmpeg(cmd, "outro", timeout=60)
 
     # -- Utilities ------------------------------------------------------------

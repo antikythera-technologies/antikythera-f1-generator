@@ -1246,6 +1246,7 @@ async def _async_stitch(episode_id: int) -> str:
             title=title,
             subtitle=subtitle,
             next_episode_text=next_episode_text,
+            circuit_name=race.circuit_name if race else "",
         )
 
         # Upload final video to MinIO
