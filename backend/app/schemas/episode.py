@@ -54,6 +54,10 @@ class EpisodeResponse(BaseModel):
     status: EpisodeStatus
     youtube_url: Optional[str]
     total_cost_usd: Decimal
+    scene_count: int = 0
+    final_video_path: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    ovi_calls: int = 0
     created_at: datetime
     published_at: Optional[datetime]
 

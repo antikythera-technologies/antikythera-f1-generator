@@ -3,13 +3,14 @@
  */
 
 // Format currency
-export function formatCurrency(amount: number, currency = "USD"): string {
+export function formatCurrency(amount: number | string | null | undefined, currency = "USD"): string {
+  const num = Number(amount || 0);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
-  }).format(amount);
+  }).format(num);
 }
 
 // Format date

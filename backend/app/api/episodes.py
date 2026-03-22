@@ -111,6 +111,10 @@ async def list_episodes(
             status=ep.status,
             youtube_url=ep.youtube_url,
             total_cost_usd=ep.total_cost_usd,
+            scene_count=ep.scene_count,
+            final_video_path=ep.final_video_path,
+            duration_seconds=ep.duration_seconds,
+            ovi_calls=ep.ovi_calls,
             created_at=ep.created_at,
             published_at=ep.published_at,
         )
