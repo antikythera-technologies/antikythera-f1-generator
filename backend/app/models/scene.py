@@ -77,6 +77,10 @@ class Scene(Base):
     instant_character_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     regeneration_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
+    # Face visibility (determines image backend routing)
+    face_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    voiceover_character_id: Mapped[Optional[int]] = mapped_column(ForeignKey("characters.id"), nullable=True)
+
     # Quality validation
     validation_status: Mapped[Optional[str]] = mapped_column(String(20))  # passed, failed, skipped
     validation_issues: Mapped[Optional[str]] = mapped_column(Text)  # JSON string of issues
@@ -110,6 +114,7 @@ class Scene(Base):
             return self.character_image.image_path
         return None
     character_image: Mapped[Optional["CharacterImage"]] = relationship("CharacterImage", back_populates="scenes")
+    voiceover_character: Mapped[Optional["Character"]] = relationship("Character", foreign_keys="[Scene.voiceover_character_id]")
     logs: Mapped[list["GenerationLog"]] = relationship("GenerationLog", back_populates="scene", cascade="all, delete-orphan")
     api_usage: Mapped[list["APIUsage"]] = relationship("APIUsage", back_populates="scene", cascade="all, delete-orphan")
 

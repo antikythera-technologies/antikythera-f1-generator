@@ -636,24 +636,11 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         f"Scene {scene_number}: Using episode appearance for {scene.character.name}"
                     )
 
-        # Detect if this is a scene that should NOT show a character face
-        # (ACTION_REPLAY, ESTABLISHING, TITLE_CARD — even if a character provides voiceover)
-        is_landscape_scene = not scene.character_id  # No character = always landscape
-        if scene.character_id and frame_prompt:
-            landscape_keywords = [
-                "COCKPIT POV", "ACTION_REPLAY", "TITLE_CARD",
-                "ESTABLISHING", "AERIAL", "ON-BOARD", "ONBOARD",
-                "HELMET CAM", "CIRCUIT VIEW",
-            ]
-            if any(kw in frame_prompt.upper() for kw in landscape_keywords):
-                is_landscape_scene = True
-                logger.info(
-                    f"Scene {scene_number}: Landscape/action scene detected — "
-                    f"no face, no LoRA, clean cinematic prompt"
-                )
+        # Determine if face reference is needed for this scene
+        use_face_reference = getattr(scene, 'face_visible', True) and scene.character_id is not None
 
         # Build prompt based on scene type
-        if is_landscape_scene:
+        if not use_face_reference:
             # Landscape prompt WITH LoRA trigger for consistent caricature style
             racing_direction_rule = ""
             racing_keywords = ["car", "cars", "race", "racing", "overtake", "track", "circuit",
@@ -715,7 +702,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
 
             # Upload face reference to fal CDN — only for character scenes
             face_ref_url = None
-            if scene.character and not is_landscape_scene:
+            if scene.character and use_face_reference:
                 face_local = await storage.download_face_reference(scene.character.name)
                 if face_local:
                     import fal_client
@@ -746,14 +733,18 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             from app.services.runtime_settings import get_image_generator
             image_backend = get_image_generator()
 
-            # Landscape/action scenes always use flux-lora (no face reference needed)
-            if is_landscape_scene:
+            if not use_face_reference:
+                # No face visible — flux-lora (LoRA style only, no face reference)
                 image_backend = "flux-lora"
-                logger.info(f"Scene {scene_number}: Using flux-lora (landscape/action scene)")
+                logger.info(f"Scene {scene_number}: Using flux-lora (face_visible={getattr(scene, 'face_visible', True)}, no character face)")
             elif face_ref_url:
-                # Character scenes WITH a face reference → instant-character for identity consistency
+                # Face visible + character assigned + face ref available — instant-character
                 image_backend = "instant-character"
-                logger.info(f"Scene {scene_number}: Using instant-character (face reference available)")
+                logger.info(f"Scene {scene_number}: Using instant-character (face_visible=True, face ref available)")
+            else:
+                # Face visible but no face ref file — fall back to flux-lora
+                image_backend = "flux-lora"
+                logger.info(f"Scene {scene_number}: Using flux-lora (face_visible=True but no face ref file)")
 
             if image_backend == "instant-character" and face_ref_url:
                 # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---

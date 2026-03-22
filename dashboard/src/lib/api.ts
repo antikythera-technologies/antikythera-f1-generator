@@ -231,6 +231,8 @@ export interface Scene {
   lora_used: boolean;
   instant_character_used: boolean;
   regeneration_count: number;
+  face_visible: boolean;
+  voiceover_character_id: number | null;
   created_at: string;
 }
 

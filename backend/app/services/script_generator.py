@@ -27,6 +27,8 @@ class SceneScript:
     camera_direction: str
     video_prompt: str
     scene_type: str = "TALKING_HEAD"
+    face_visible: bool = True
+    voiceover_character: Optional[str] = None  # character slug for narrator when face not visible
     # Keep action for backward compatibility (derived from camera_direction)
     action: Optional[str] = None
 
@@ -84,6 +86,29 @@ SCENE MIX REQUIREMENTS:
 - NEVER have more than 3 TALKING_HEAD scenes in a row — break them up with action or establishing shots
 - NEVER use EXTREME CLOSE-UP, CLOSE-UP, or MEDIUM CLOSE-UP as the shot type — the closest allowed framing is MEDIUM SHOT. The full head, hair, and shoulders MUST be visible in every character frame. Tight crops lose hair detail and distort the caricature style.
 - NEVER have two consecutive scenes with the same character at the same framing — vary the shot types
+
+FACE VISIBILITY RULE (CRITICAL — determines how images are generated):
+- Every scene MUST specify "face_visible": true or false
+- true = a character's face is clearly visible in the frame. The system will use instant-character with a face reference image for identity consistency.
+- false = no face visible (cars racing, helmet shots, cockpit POV, wide circuit views, crowd shots). The system will use standard LoRA image generation.
+
+When to use face_visible: true:
+  - TALKING_HEAD, TWO_SHOT, OVER_THE_SHOULDER, PODIUM, REACTION — almost always true
+  - Any scene where we SEE the character's face
+
+When to use face_visible: false:
+  - ESTABLISHING — always false (wide shots, no faces)
+  - TITLE_CARD — always false
+  - ACTION_REPLAY showing cars/helmets/cockpit — false
+  - ACTION_REPLAY showing a driver celebrating with face visible — true
+
+VISIBLE CHARACTER vs VOICEOVER CHARACTER:
+- "character" field = the person whose FACE is visible in the frame. Set to null if no face is shown.
+- "voiceover_character" field = the person NARRATING over the scene (e.g., commentator providing voiceover for racing footage). Set to null if the visible character is speaking.
+- Example: ACTION_REPLAY of a car chase with David Croft commentary → character: null, voiceover_character: "david_croft", face_visible: false
+- Example: TALKING_HEAD of Jenson Button speaking → character: "jenson_button", voiceover_character: null, face_visible: true
+- Example: TWO_SHOT of Croft and Button in studio → character: "david_croft", voiceover_character: null, face_visible: true (TWO_SHOT implies both faces visible, pick the primary one)
+
 
 CHARACTER RULES:
 - Use EXACTLY 3-4 characters per episode
@@ -168,6 +193,8 @@ Output EXACTLY this JSON format:
       "scene_number": 1,
       "scene_type": "TITLE_CARD",
       "character": "narrator",
+      "voiceover_character": null,
+      "face_visible": false,
       "dialogue": "Episode tagline (max 15 words)",
       "audio_description": "Epic orchestral intro, engine roar building",
       "start_frame_prompt": "Full cinematographic description",
@@ -184,7 +211,9 @@ FINAL RULES:
 - Output valid JSON ONLY — no markdown, no commentary
 - Exactly 26 scenes
 - Dialogue max 15 words per scene
-- character field uses the character's slug (for ACTION_REPLAY use the commentator providing voiceover)
+- character field = the person whose FACE is visible (null if no face shown)
+- voiceover_character field = the person narrating when face is not shown (null if visible character is speaking)
+- face_visible field MUST be true or false for every scene
 - scene_type field MUST be one of: TITLE_CARD, TALKING_HEAD, TWO_SHOT, OVER_THE_SHOULDER, ACTION_REPLAY, PODIUM, ESTABLISHING, REACTION
 - Scene 1 MUST be TITLE_CARD, Scene 26 MUST be an outro
 - At least 3 ACTION_REPLAY scenes required
@@ -288,6 +317,8 @@ class ScriptGenerator:
                     camera_direction=s.get("camera_direction", ""),
                     video_prompt=s.get("video_prompt", ""),
                     scene_type=s.get("scene_type", "TALKING_HEAD"),
+                    face_visible=s.get("face_visible", True),
+                    voiceover_character=s.get("voiceover_character"),
                     action=s.get("action"),  # backward compat
                 )
                 for s in script_data["scenes"]

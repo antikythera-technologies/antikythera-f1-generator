@@ -51,6 +51,8 @@ class SceneResponse(BaseModel):
     lora_used: bool = False
     instant_character_used: bool = False
     regeneration_count: int = 0
+    face_visible: bool = True
+    voiceover_character_id: Optional[int] = None
     created_at: datetime
 
 

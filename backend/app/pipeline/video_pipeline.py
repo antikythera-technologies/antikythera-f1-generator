@@ -270,10 +270,19 @@ class VideoPipeline:
                 None,
             )
 
+            # Determine face visibility and character assignment
+            face_visible = getattr(scene_script, "face_visible", True)
+            voiceover_slug = getattr(scene_script, "voiceover_character", None)
+            voiceover_char = next(
+                (c for c in characters if c.name == voiceover_slug),
+                None,
+            ) if voiceover_slug else None
+
             scene = Scene(
                 episode_id=self.episode_id,
                 scene_number=scene_script.scene_number,
-                character_id=character.id if character else None,
+                # character_id = who is VISIBLE (face on screen)
+                character_id=character.id if character and face_visible else None,
                 dialogue=scene_script.dialogue,
                 action_description=scene_script.action,
                 audio_description=scene_script.audio_description,
@@ -283,6 +292,8 @@ class VideoPipeline:
                 camera_direction=scene_script.camera_direction or None,
                 video_prompt=scene_script.video_prompt or None,
                 scene_type=getattr(scene_script, "scene_type", None),
+                face_visible=face_visible,
+                voiceover_character_id=voiceover_char.id if voiceover_char else None,
                 status=SceneStatus.PENDING,
             )
             db.add(scene)

@@ -18,6 +18,12 @@ TARGET_SAMPLE_RATE = 44100
 TARGET_AUDIO_BITRATE = "192k"
 # Keyframe every 2 seconds at 24fps
 KEYFRAME_INTERVAL = TARGET_FPS * 2  # 48
+# Title/outro settings
+TITLE_CARD_DURATION = 5
+TITLE_FONT_SIZE = 48
+SUBTITLE_FONT_SIZE = 24
+VIDEO_WIDTH = 1280
+VIDEO_HEIGHT = 720
 
 
 @dataclass
@@ -58,16 +64,32 @@ class VideoStitcher:
         episode_dir = self.work_dir / f"episode_{episode_id}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
+        # Step 0: Generate title card and outro if title is provided.
+        all_clips = list(clip_paths)
+        if title:
+            title_card_path = str(episode_dir / "title_card.mp4")
+            await self._generate_title_card(title, subtitle, title_card_path)
+            all_clips.insert(0, title_card_path)
+
+            outro_path = str(episode_dir / "outro.mp4")
+            await self._generate_outro(next_episode_text, outro_path)
+            all_clips.append(outro_path)
+
+            logger.info(
+                f"Episode {episode_id}: Added title card + outro "
+                f"({len(clip_paths)} scenes + 2 bookends = {len(all_clips)} total clips)"
+            )
+
         # Step 1: Diagnose + normalize each clip to identical format.
         # This eliminates per-clip A/V duration mismatch, VFR, different
         # sample rates, missing audio — any property that causes drift.
         normalized_paths = []
-        for idx, clip_path in enumerate(clip_paths):
+        for idx, clip_path in enumerate(all_clips):
             # Log clip properties for diagnosis
             await self._log_clip_properties(clip_path, idx + 1)
 
             norm_path = str(episode_dir / f"norm_{idx:02d}.mp4")
-            await self._normalize_clip(clip_path, norm_path, idx + 1, len(clip_paths))
+            await self._normalize_clip(clip_path, norm_path, idx + 1, len(all_clips))
             normalized_paths.append(norm_path)
 
         logger.info(f"Episode {episode_id}: Normalized {len(normalized_paths)} clips")
@@ -111,6 +133,83 @@ class VideoStitcher:
             duration_seconds=duration,
             file_size_bytes=file_size,
         )
+
+
+    @staticmethod
+    def _escape_drawtext(text: str) -> str:
+        """Escape text for FFmpeg drawtext filter (colons, backslashes, quotes)."""
+        text = text.replace("\\", "\\\\")
+        text = text.replace(":", "\\:")
+        text = text.replace("'", "'\\''")
+        return text
+
+    async def _generate_title_card(
+        self, title: str, subtitle: str, output_path: str, duration: int = TITLE_CARD_DURATION
+    ) -> None:
+        """Generate a title card clip: black background with centered text and silent audio."""
+        esc_title = self._escape_drawtext(title)
+        esc_subtitle = self._escape_drawtext(subtitle)
+
+        drawtext_parts = [
+            f"drawtext=text='{esc_title}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+            f":x=(w-text_w)/2:y=(h-text_h)/2-40",
+        ]
+        if subtitle:
+            drawtext_parts.append(
+                f"drawtext=text='{esc_subtitle}':fontsize={SUBTITLE_FONT_SIZE}"
+                f":fontcolor=white@0.7:x=(w-text_w)/2:y=(h-text_h)/2+30"
+            )
+
+        vf = ",".join(drawtext_parts)
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={TARGET_FPS}",
+            "-f", "lavfi", "-i", f"anullsrc=r={TARGET_SAMPLE_RATE}:cl=stereo",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", TARGET_AUDIO_BITRATE, "-ar", str(TARGET_SAMPLE_RATE), "-ac", "2",
+            "-t", str(duration), "-shortest",
+            output_path,
+        ]
+
+        logger.info(f"Generating title card: {title!r}")
+        await self._run_ffmpeg(cmd, "title card", timeout=60)
+
+    async def _generate_outro(
+        self, next_episode_text: str, output_path: str, duration: int = TITLE_CARD_DURATION
+    ) -> None:
+        """Generate an outro clip: black background with closing text and silent audio."""
+        if next_episode_text:
+            heading = "NEXT WEEK"
+            sub = next_episode_text
+        else:
+            heading = "THANKS FOR WATCHING"
+            sub = "See you at the next race"
+
+        esc_heading = self._escape_drawtext(heading)
+        esc_sub = self._escape_drawtext(sub)
+
+        vf = (
+            f"drawtext=text='{esc_heading}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+            f":x=(w-text_w)/2:y=(h-text_h)/2-40,"
+            f"drawtext=text='{esc_sub}':fontsize={SUBTITLE_FONT_SIZE}"
+            f":fontcolor=white@0.7:x=(w-text_w)/2:y=(h-text_h)/2+30"
+        )
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={TARGET_FPS}",
+            "-f", "lavfi", "-i", f"anullsrc=r={TARGET_SAMPLE_RATE}:cl=stereo",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", TARGET_AUDIO_BITRATE, "-ar", str(TARGET_SAMPLE_RATE), "-ac", "2",
+            "-t", str(duration), "-shortest",
+            output_path,
+        ]
+
+        logger.info(f"Generating outro: {heading!r}")
+        await self._run_ffmpeg(cmd, "outro", timeout=60)
 
     async def _normalize_clip(
         self, input_path: str, output_path: str, clip_num: int, total: int
