@@ -725,6 +725,23 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                     _elapsed_face = int((time.monotonic() - _t0_face) * 1000)
                     logger.info(f"[API:fal-image] Face reference uploaded in {_elapsed_face}ms: {face_ref_url[:80]}...")
 
+                    # Track which face reference was used
+                    scene.face_reference_url = face_ref_url
+
+                    # Link to the CharacterImage record (primary image for this character)
+                    from app.models.character import CharacterImage
+                    ci_stmt = (
+                        select(CharacterImage)
+                        .where(CharacterImage.character_id == scene.character_id)
+                        .order_by(CharacterImage.is_primary.desc(), CharacterImage.id)
+                        .limit(1)
+                    )
+                    ci_result = await db.execute(ci_stmt)
+                    ci = ci_result.scalar_one_or_none()
+                    if ci:
+                        scene.character_image_id = ci.id
+                        logger.debug(f"Scene {scene_number}: Linked to CharacterImage {ci.id}")
+
             # Choose image backend
             from app.services.runtime_settings import get_image_generator
             image_backend = get_image_generator()
