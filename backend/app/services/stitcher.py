@@ -270,12 +270,10 @@ class VideoStitcher:
             )
 
         if has_bg:
-            # Use image as background with dark gradient overlay for text readability
+            # Use image as background with text overlay
             vf_parts = [
                 f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}",
                 "format=yuv420p",
-                # Dark gradient overlay: bottom half darkened for text
-                f"colorkey=color=black:similarity=0",  # no-op to chain
             ]
             vf_parts.extend(drawtext_parts)
             vf = ",".join(vf_parts)
@@ -450,7 +448,7 @@ class VideoStitcher:
             raise VideoStitchError(f"{label} timed out")
 
         if proc.returncode != 0:
-            error_msg = stderr.decode()[:500]
+            error_msg = stderr.decode()[-1500:]
             logger.error(f"{label} failed: {error_msg}")
             raise VideoStitchError(f"{label} failed: {error_msg}")
 
