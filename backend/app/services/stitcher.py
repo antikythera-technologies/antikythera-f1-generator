@@ -12,6 +12,9 @@ from app.exceptions import VideoStitchError
 
 logger = logging.getLogger(__name__)
 
+# Keyframe interval: 1 keyframe every 2 seconds at 25fps
+KEYFRAME_INTERVAL = 50
+
 
 @dataclass
 class StitchResult:
@@ -39,78 +42,83 @@ class VideoStitcher:
         """
         Stitch video clips into a final episode.
 
-        Uses MPEG-TS intermediate format to avoid audio drift.
-        Each clip is repackaged to .ts (lossless), concatenated via
-        the concat protocol (which handles timestamps properly),
-        then remuxed to .mp4. Audio/video data is never re-encoded.
+        Video is re-encoded with regular keyframes for browser playback.
+        Audio is copied bit-identical — NEVER re-encoded or modified.
+        Scene clips in MinIO are NEVER modified.
         """
         logger.info(f"Episode {episode_id}: Starting stitch of {len(clip_paths)} clips")
 
         episode_dir = self.work_dir / f"episode_{episode_id}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
-        # Step 1: Convert each clip to MPEG-TS (lossless repackage)
-        ts_paths = []
-        for idx, clip_path in enumerate(clip_paths):
-            ts_path = str(episode_dir / f"clip_{idx:02d}.ts")
-            cmd = [
-                "ffmpeg", "-y",
-                "-i", clip_path,
-                "-c", "copy",
-                "-bsf:v", "h264_mp4toannexb",
-                "-f", "mpegts",
-                ts_path,
-            ]
-            await self._run_ffmpeg(cmd, f"ts convert clip {idx+1}")
-            ts_paths.append(ts_path)
+        # Create file list for ffmpeg concat demuxer
+        file_list_path = episode_dir / "files.txt"
+        with open(file_list_path, "w") as f:
+            for clip_path in clip_paths:
+                escaped_path = clip_path.replace("'", "'\\''")
+                f.write(f"file '{escaped_path}'\n")
+                logger.debug(f"Added clip: {clip_path}")
 
-        logger.info(f"Converted {len(ts_paths)} clips to MPEG-TS")
-
-        # Step 2: Concat via TS protocol + remux to MP4
         output_path = episode_dir / "final.mp4"
-        concat_input = "concat:" + "|".join(ts_paths)
 
+        # Re-encode video with regular keyframes for browser playback.
+        # Audio is copied exactly as-is — not touched.
+        # -g 50 = keyframe every 2 seconds at 25fps
+        # -crf 18 = high quality (visually lossless)
+        # -movflags +faststart = moov atom at start for streaming
         cmd = [
             "ffmpeg", "-y",
-            "-i", concat_input,
-            "-c", "copy",
-            "-bsf:a", "aac_adtstoasc",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(file_list_path),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
+            "-g", str(KEYFRAME_INTERVAL),
+            "-keyint_min", str(KEYFRAME_INTERVAL),
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
             "-movflags", "+faststart",
             str(output_path),
         ]
 
-        logger.info(f"Concatenating {len(ts_paths)} TS clips to MP4")
+        logger.info(f"Running ffmpeg stitch: {len(clip_paths)} clips, keyframe every {KEYFRAME_INTERVAL} frames")
 
-        await self._run_ffmpeg(cmd, "concat to mp4")
-
-        logger.info(f"Stitch complete: {output_path}")
-
-        file_size = output_path.stat().st_size
-        duration = self._get_duration(str(output_path))
-
-        return StitchResult(
-            output_path=str(output_path),
-            duration_seconds=duration,
-            file_size_bytes=file_size,
-        )
-
-    async def _run_ffmpeg(self, cmd: list, label: str) -> None:
-        """Run an ffmpeg command asynchronously."""
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.communicate()
-            raise VideoStitchError(f"{label} timed out")
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
 
-        if proc.returncode != 0:
-            logger.error(f"{label} failed: {stderr.decode()[:300]}")
-            raise VideoStitchError(f"{label} failed")
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=1800
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                logger.error("ffmpeg stitch timed out")
+                raise VideoStitchError("Video stitching timed out")
+
+            if proc.returncode != 0:
+                logger.error(f"ffmpeg stitch failed: {stderr.decode()[:500]}")
+                raise VideoStitchError(f"ffmpeg stitch failed: {stderr.decode()[:500]}")
+
+            logger.info(f"Stitch complete: {output_path}")
+
+            file_size = output_path.stat().st_size
+            duration = self._get_duration(str(output_path))
+
+            return StitchResult(
+                output_path=str(output_path),
+                duration_seconds=duration,
+                file_size_bytes=file_size,
+            )
+
+        except FileNotFoundError:
+            logger.error("ffmpeg not found in PATH")
+            raise VideoStitchError("ffmpeg not installed or not in PATH")
 
     def _get_duration(self, video_path: str) -> int:
         """Get video duration in seconds using ffprobe."""
