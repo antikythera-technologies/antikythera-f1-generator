@@ -1,19 +1,23 @@
 """Video stitching service using ffmpeg."""
 
 import asyncio
+import json
 import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from app.config import settings
 from app.exceptions import VideoStitchError
 
 logger = logging.getLogger(__name__)
 
-# Keyframe interval: 1 keyframe every 2 seconds at 25fps
-KEYFRAME_INTERVAL = 50
+# Target format for normalized clips
+TARGET_FPS = 24
+TARGET_SAMPLE_RATE = 44100
+TARGET_AUDIO_BITRATE = "192k"
+# Keyframe every 2 seconds at 24fps
+KEYFRAME_INTERVAL = TARGET_FPS * 2  # 48
 
 
 @dataclass
@@ -42,83 +46,173 @@ class VideoStitcher:
         """
         Stitch video clips into a final episode.
 
-        Video is re-encoded with regular keyframes for browser playback.
-        Audio is copied bit-identical — NEVER re-encoded or modified.
-        Scene clips in MinIO are NEVER modified.
+        Two-step process to eliminate audio drift:
+        1. Normalize each clip: re-encode to identical format with matching
+           audio/video durations.
+        2. Concatenate normalized clips via concat demuxer with stream copy.
+
+        Scene clips in MinIO are NEVER modified — only temp copies are used.
         """
         logger.info(f"Episode {episode_id}: Starting stitch of {len(clip_paths)} clips")
 
         episode_dir = self.work_dir / f"episode_{episode_id}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create file list for ffmpeg concat demuxer
+        # Step 1: Diagnose + normalize each clip to identical format.
+        # This eliminates per-clip A/V duration mismatch, VFR, different
+        # sample rates, missing audio — any property that causes drift.
+        normalized_paths = []
+        for idx, clip_path in enumerate(clip_paths):
+            # Log clip properties for diagnosis
+            await self._log_clip_properties(clip_path, idx + 1)
+
+            norm_path = str(episode_dir / f"norm_{idx:02d}.mp4")
+            await self._normalize_clip(clip_path, norm_path, idx + 1, len(clip_paths))
+            normalized_paths.append(norm_path)
+
+        logger.info(f"Episode {episode_id}: Normalized {len(normalized_paths)} clips")
+
+        # Step 2: Concatenate normalized clips.
+        # All clips now have identical format — safe to stream-copy.
         file_list_path = episode_dir / "files.txt"
         with open(file_list_path, "w") as f:
-            for clip_path in clip_paths:
-                escaped_path = clip_path.replace("'", "'\\''")
+            for norm_path in normalized_paths:
+                escaped_path = norm_path.replace("'", "'\\''")
                 f.write(f"file '{escaped_path}'\n")
-                logger.debug(f"Added clip: {clip_path}")
 
         output_path = episode_dir / "final.mp4"
 
-        # Re-encode video with regular keyframes for browser playback.
-        # Audio is copied exactly as-is — not touched.
-        # -g 50 = keyframe every 2 seconds at 25fps
-        # -crf 18 = high quality (visually lossless)
-        # -movflags +faststart = moov atom at start for streaming
         cmd = [
             "ffmpeg", "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", str(file_list_path),
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "18",
-            "-g", str(KEYFRAME_INTERVAL),
-            "-keyint_min", str(KEYFRAME_INTERVAL),
-            "-pix_fmt", "yuv420p",
-            "-c:a", "copy",
+            "-c", "copy",
             "-movflags", "+faststart",
             str(output_path),
         ]
 
-        logger.info(f"Running ffmpeg stitch: {len(clip_paths)} clips, keyframe every {KEYFRAME_INTERVAL} frames")
+        logger.info(f"Episode {episode_id}: Concatenating {len(normalized_paths)} normalized clips")
+        await self._run_ffmpeg(cmd, "concat", timeout=600)
 
+        # Verify final output A/V sync
+        await self._log_clip_properties(str(output_path), label="FINAL")
+
+        file_size = output_path.stat().st_size
+        duration = self._get_duration(str(output_path))
+
+        logger.info(
+            f"Episode {episode_id}: Stitch complete — "
+            f"{duration}s, {file_size / (1024*1024):.1f}MB"
+        )
+
+        return StitchResult(
+            output_path=str(output_path),
+            duration_seconds=duration,
+            file_size_bytes=file_size,
+        )
+
+    async def _normalize_clip(
+        self, input_path: str, output_path: str, clip_num: int, total: int
+    ) -> None:
+        """
+        Re-encode a clip to a canonical format with matching A/V duration.
+
+        - Video: H.264, CFR 24fps, yuv420p, CRF 18, keyframes every 2s
+        - Audio: AAC 192k, 44100 Hz, stereo, resampled to match video timing
+        - aresample=async=1: actively corrects audio timing to match video
+        - -shortest: trims to the shorter stream
+        """
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            # Video: constant frame rate with keyframes
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
+            "-r", str(TARGET_FPS),
+            "-g", str(KEYFRAME_INTERVAL),
+            "-keyint_min", str(KEYFRAME_INTERVAL),
+            "-pix_fmt", "yuv420p",
+            # Audio: standardized format with active sync correction
+            "-af", "aresample=async=1:first_pts=0",
+            "-c:a", "aac",
+            "-b:a", TARGET_AUDIO_BITRATE,
+            "-ar", str(TARGET_SAMPLE_RATE),
+            "-ac", "2",
+            # Trim to shorter stream
+            "-shortest",
+            output_path,
+        ]
+
+        logger.debug(f"Normalizing clip {clip_num}/{total}: {input_path}")
+        await self._run_ffmpeg(cmd, f"normalize clip {clip_num}/{total}", timeout=300)
+
+    async def _log_clip_properties(self, path: str, clip_num=None, label=None) -> None:
+        """Log audio/video properties of a clip for drift diagnosis."""
+        tag = f"clip {clip_num}" if clip_num else label or "clip"
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-show_entries",
+                "stream=codec_type,codec_name,duration,r_frame_rate,sample_rate,channels",
+                "-print_format", "json",
+                path,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            data = json.loads(result.stdout)
+            streams = data.get("streams", [])
+
+            v_dur = a_dur = "N/A"
+            v_fps = a_rate = "N/A"
+            for s in streams:
+                if s.get("codec_type") == "video":
+                    v_dur = s.get("duration", "N/A")
+                    v_fps = s.get("r_frame_rate", "N/A")
+                elif s.get("codec_type") == "audio":
+                    a_dur = s.get("duration", "N/A")
+                    a_rate = s.get("sample_rate", "N/A")
+
+            # Calculate mismatch
+            mismatch = ""
+            try:
+                diff_ms = (float(a_dur) - float(v_dur)) * 1000
+                mismatch = f" mismatch={diff_ms:+.1f}ms"
+            except (ValueError, TypeError):
+                pass
+
+            logger.info(
+                f"[{tag}] video={v_dur}s@{v_fps}fps  audio={a_dur}s@{a_rate}Hz{mismatch}  {path}"
+            )
+        except Exception as e:
+            logger.warning(f"[{tag}] Could not probe: {e}")
+
+    async def _run_ffmpeg(self, cmd: list, label: str, timeout: int = 300) -> None:
+        """Run an ffmpeg command asynchronously."""
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=1800
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.communicate()
-                logger.error("ffmpeg stitch timed out")
-                raise VideoStitchError("Video stitching timed out")
-
-            if proc.returncode != 0:
-                logger.error(f"ffmpeg stitch failed: {stderr.decode()[:500]}")
-                raise VideoStitchError(f"ffmpeg stitch failed: {stderr.decode()[:500]}")
-
-            logger.info(f"Stitch complete: {output_path}")
-
-            file_size = output_path.stat().st_size
-            duration = self._get_duration(str(output_path))
-
-            return StitchResult(
-                output_path=str(output_path),
-                duration_seconds=duration,
-                file_size_bytes=file_size,
-            )
-
         except FileNotFoundError:
             logger.error("ffmpeg not found in PATH")
             raise VideoStitchError("ffmpeg not installed or not in PATH")
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            logger.error(f"{label} timed out after {timeout}s")
+            raise VideoStitchError(f"{label} timed out")
+
+        if proc.returncode != 0:
+            error_msg = stderr.decode()[:500]
+            logger.error(f"{label} failed: {error_msg}")
+            raise VideoStitchError(f"{label} failed: {error_msg}")
 
     def _get_duration(self, video_path: str) -> int:
         """Get video duration in seconds using ffprobe."""
