@@ -153,7 +153,7 @@ For each scene, provide FULL cinematographic direction:
 
 start_frame_prompt and end_frame_prompt must include:
 - Scene type (from the list above)
-- Shot type (WIDE, MEDIUM, CLOSE-UP, EXTREME CLOSE-UP, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING, INSERT, COCKPIT POV)
+- Shot type (WIDE SHOT, MEDIUM WIDE SHOT, MEDIUM SHOT, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING, INSERT, COCKPIT POV) — NEVER use CLOSE-UP or tighter
 - Camera angle (eye-level, low angle heroic, high angle diminishing, Dutch angle tension)
 - For character scenes: position, pose, facial expression, clothing from character_appearances
 - For ACTION_REPLAY: car livery, helmet design, circuit location, racing action

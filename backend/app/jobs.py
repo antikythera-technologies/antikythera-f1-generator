@@ -689,7 +689,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             frame_prompt = _re.sub(r'(?i)CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
 
             physical = character_traits.get("physical_features", "")
-            prompt_parts = ["ANTKF1STYLE", "Full body from waist up, camera 3 meters away.", frame_prompt]
+            prompt_parts = ["ANTKF1STYLE", "WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
             # If no episode_appearance, try team overalls as fallback
             if not episode_appearance and scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
                 from app.models.team import Team
@@ -704,7 +704,9 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             prompt_parts.append(
                 "Satirical caricature style with oversized head, "
                 "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
-                "Full head, hair, and shoulders must be visible in frame. Do not crop the top of the head. "
+                "CRITICAL FRAMING: The character must be shown from the knees or waist up. "
+                "Full head, all hair, and both shoulders MUST be visible with clear space above the head. "
+                "NEVER crop the top of the head. Camera is far back, NOT close to the face. "
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
             full_prompt = " ".join(prompt_parts)
