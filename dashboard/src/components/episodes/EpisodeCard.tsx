@@ -13,7 +13,11 @@ interface EpisodeCardProps {
 
 export function EpisodeCard({ episode }: EpisodeCardProps) {
   const isGenerating = ["generating", "stitching", "uploading"].includes(episode.status);
-  const completedScenes = episode.scenes?.filter(s => s.status === "completed").length || 0;
+  const completedScenes = episode.scenes
+    ? episode.scenes.filter(s => s.status === "completed").length
+    : (["stitching", "uploading", "published"].includes(episode.status) || episode.final_video_path)
+      ? episode.scene_count
+      : 0;
 
   return (
     <Link href={`/episodes/${episode.id}`}>
@@ -29,7 +33,7 @@ export function EpisodeCard({ episode }: EpisodeCardProps) {
           </div>
 
           {/* Progress for generating episodes */}
-          {isGenerating && (
+          {isGenerating && !episode.final_video_path && (
             <GenerationProgress
               current={completedScenes}
               total={episode.scene_count}
@@ -67,7 +71,7 @@ export function EpisodeCard({ episode }: EpisodeCardProps) {
                 "text-sm font-medium",
                 episode.episode_type === "pre-race" ? "text-electric-blue" : "text-cyber-purple"
               )}>
-                {episode.episode_type === "pre-race" ? "Pre-Race" : "Post-Race"}
+                {episode.episode_type.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
               </p>
             </div>
             <div>

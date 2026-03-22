@@ -19,7 +19,7 @@ interface ProgressEvent {
   status: string;
 }
 
-const STITCH_STEPS = ["downloading", "normalizing", "concatenating", "uploading", "complete"];
+const STITCH_STEPS = ["downloading", "stitching", "uploading", "complete"];
 const VALIDATE_STEPS = ["validating", "complete"];
 
 function getSteps(title: string): string[] {
@@ -84,7 +84,7 @@ export function OperationProgressModal({
           setFinalMessage(data.message || "Operation completed successfully.");
           es.close();
           onComplete?.();
-        } else if (data.status === "failed" || data.status === "stopped") {
+        } else if (data.status === "failed" || data.status === "stopped" || data.step === "error") {
           setStatus("error");
           setFinalMessage(data.message || "Operation failed.");
           es.close();

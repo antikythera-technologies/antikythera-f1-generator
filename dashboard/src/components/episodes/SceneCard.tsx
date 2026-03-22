@@ -156,7 +156,7 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
                 Face
               </span>
             )}
-            {scene.regeneration_count && scene.regeneration_count > 1 && (
+            {scene.regeneration_count > 1 && (
               <span className="ml-auto rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400" title={`Regenerated ${scene.regeneration_count} times`}>
                 ×{scene.regeneration_count}
               </span>
@@ -187,24 +187,7 @@ export function SceneCard({ scene, onRegenerate, onView }: SceneCardProps) {
           </div>
         )}
 
-        {/* Actions */}
-        {(isFailed || isComplete) && onRegenerate && (
-          <Button
-            variant={isFailed ? "danger" : "ghost"}
-            size="sm"
-            className="w-full"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onRegenerate(scene.id);
-            }}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {isFailed ? "Retry" : "Regenerate"}
-          </Button>
-        )}
+
       </CardContent>
     </Card>
   );

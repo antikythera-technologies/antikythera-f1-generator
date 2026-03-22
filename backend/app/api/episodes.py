@@ -251,7 +251,7 @@ async def validate_episode(
 
 async def _progress_stream(job_id: str) -> AsyncGenerator[str, None]:
     """Async generator that polls an RQ job and yields SSE events."""
-    max_iterations = 150  # 5 min timeout at 2s intervals
+    max_iterations = 450  # 15 min timeout at 2s intervals
 
     for _ in range(max_iterations):
         status_data = get_job_status(job_id)
