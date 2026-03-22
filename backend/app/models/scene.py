@@ -98,7 +98,7 @@ class Scene(Base):
 
     # Relationships
     episode: Mapped["Episode"] = relationship("Episode", back_populates="scenes")
-    character: Mapped[Optional["Character"]] = relationship("Character", back_populates="scenes")
+    character: Mapped[Optional["Character"]] = relationship("Character", foreign_keys="[Scene.character_id]", back_populates="scenes")
 
     @property
     def character_name(self) -> str | None:

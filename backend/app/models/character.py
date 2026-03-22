@@ -47,7 +47,7 @@ class Character(Base):
     # Relationships
     character_type: Mapped[Optional["CharacterType"]] = relationship("CharacterType", back_populates="characters")
     images: Mapped[List["CharacterImage"]] = relationship("CharacterImage", back_populates="character", cascade="all, delete-orphan")
-    scenes: Mapped[List["Scene"]] = relationship("Scene", back_populates="character")
+    scenes: Mapped[List["Scene"]] = relationship("Scene", foreign_keys="[Scene.character_id]", back_populates="character")
 
     def __repr__(self) -> str:
         return f"<Character {self.name}>"
