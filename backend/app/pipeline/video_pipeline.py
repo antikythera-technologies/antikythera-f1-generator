@@ -988,8 +988,10 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         backend = settings.VIDEO_GENERATOR_DEFAULT
         fal_gen = FalVideoGenerator(backend=backend)
 
-        # ----- Phase 2a: Generate all scene images via ComfyUI -----
-        self.logger.info("PHASE 2a: Image Generation (ComfyUI)")
+        # ----- Phase 2a: Generate all scene images via fal.ai -----
+        self.logger.info("PHASE 2a: Image Generation (fal.ai)")
+
+        from app.jobs import _async_scene_image
 
         image_paths: dict[int, str] = {}
 
@@ -1000,7 +1002,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 )
                 continue
 
-            if scene.source_image_path:
+            if scene.start_frame_path:
                 self.logger.info(
                     f"Scene {scene.scene_number}/{len(scenes)} already has image — skipping"
                 )
@@ -1009,7 +1011,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     f"_scene_{scene.scene_number:02d}_resume.png"
                 )
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                bucket, object_name = scene.source_image_path.split("/", 1)
+                bucket, object_name = scene.start_frame_path.split("/", 1)
                 await self.storage.download_file(bucket, object_name, local_path)
                 image_paths[scene.scene_number] = local_path
                 continue
@@ -1019,18 +1021,31 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             )
 
             try:
-                scene.status = SceneStatus.GENERATING
-                scene.generation_started_at = datetime.utcnow()
-                await db.flush()
+                # Delegate to jobs._async_scene_image which handles both
+                # flux-lora (landscape) and instant-character (face reference)
+                await _async_scene_image(
+                    self.episode_id, scene.scene_number,
+                    frame_type="start", set_completed=False,
+                )
 
-                source_image = await self._get_scene_image_fal(db, scene)
-                image_paths[scene.scene_number] = source_image
+                # Reload scene to get updated paths
+                await db.refresh(scene)
+
+                if scene.start_frame_path:
+                    local_path = (
+                        f"/tmp/f1-images/episode_{self.episode_id}"
+                        f"_scene_{scene.scene_number:02d}_start.png"
+                    )
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    bucket, obj = scene.start_frame_path.split("/", 1)
+                    await self.storage.download_file(bucket, obj, local_path)
+                    image_paths[scene.scene_number] = local_path
 
                 self.logger.info(f"Scene {scene.scene_number}: Image ready")
-                await db.flush()
 
             except Exception as e:
                 self.logger.error(f"Scene {scene.scene_number} image failed: {e}")
+                await db.refresh(scene)
                 scene.status = SceneStatus.FAILED
                 scene.last_error = f"Image generation: {e}"
                 scene.retry_count += 1
