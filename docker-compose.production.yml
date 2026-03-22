@@ -24,7 +24,7 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - video-temp:/tmp/videos
-      - youtube-credentials:/root/.credentials
+      - /root/.credentials:/root/.credentials:ro
       - ./character-system:/character-system:ro
     depends_on:
       - redis
@@ -93,7 +93,7 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - video-temp:/tmp/videos
-      - youtube-credentials:/root/.credentials
+      - /root/.credentials:/root/.credentials:ro
       - ./character-system:/character-system:ro
     depends_on:
       - redis
@@ -111,4 +111,3 @@ networks:
 volumes:
   redis-data:
   video-temp:
-  youtube-credentials:

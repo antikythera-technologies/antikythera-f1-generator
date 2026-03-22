@@ -1082,12 +1082,13 @@ def enqueue_stitch(episode_id: int) -> str:
     return job.id
 
 
-def enqueue_youtube_upload(episode_id: int) -> str:
+def enqueue_youtube_upload(episode_id: int, privacy_status: str = "public") -> str:
     """Enqueue a YouTube upload job for the given episode."""
     queue = get_queue()
     job: Job = queue.enqueue(
         "app.jobs._run_youtube_upload",
         episode_id,
+        privacy_status,
         job_timeout=1800,       # 30 minutes (large uploads)
         result_ttl=86400,
         failure_ttl=604800,
@@ -1120,12 +1121,12 @@ def _run_stitch(episode_id: int) -> str:
     return asyncio.run(_async_stitch(episode_id))
 
 
-def _run_youtube_upload(episode_id: int) -> str:
+def _run_youtube_upload(episode_id: int, privacy_status: str = "public") -> str:
     """Worker function: upload final video to YouTube."""
     import asyncio
     _init_worker_logging()
     _init_worker_db()
-    return asyncio.run(_async_youtube_upload(episode_id))
+    return asyncio.run(_async_youtube_upload(episode_id, privacy_status=privacy_status))
 
 
 def _run_validate(episode_id: int) -> str:
@@ -1283,7 +1284,7 @@ async def _async_stitch(episode_id: int) -> str:
         return final_path
 
 
-async def _async_youtube_upload(episode_id: int) -> str:
+async def _async_youtube_upload(episode_id: int, privacy_status: str = "public") -> str:
     """Async worker: upload final video to YouTube."""
     import os
     from datetime import datetime
@@ -1335,6 +1336,7 @@ async def _async_youtube_upload(episode_id: int) -> str:
                 title=title,
                 description=description,
                 tags=tags,
+                privacy_status=privacy_status,
             )
 
             episode.youtube_video_id = result.video_id

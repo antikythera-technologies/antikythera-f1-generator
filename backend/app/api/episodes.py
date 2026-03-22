@@ -201,6 +201,7 @@ async def stitch_episode(
 @router.post("/{episode_id}/upload-youtube")
 async def upload_youtube(
     episode_id: int,
+    privacy: str = "public",
     db: AsyncSession = Depends(get_db),
 ):
     """Upload stitched video to YouTube."""
@@ -215,7 +216,7 @@ async def upload_youtube(
 
     logger.info(f"YouTube upload request for episode {episode_id}")
 
-    rq_job_id = enqueue_youtube_upload(episode_id)
+    rq_job_id = enqueue_youtube_upload(episode_id, privacy_status=privacy)
     return {"status": "upload_started", "episode_id": episode_id, "rq_job_id": rq_job_id}
 
 
