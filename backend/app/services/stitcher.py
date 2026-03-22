@@ -1,4 +1,18 @@
-"""Video stitching service using ffmpeg."""
+"""Video stitching service using ffmpeg.
+
+Single-pass re-encode approach: concat demuxer feeds all clips into one
+ffmpeg process that re-encodes both video and audio. This guarantees:
+- Both streams start at PTS 0 (no edit list offset)
+- 0% VFR (perfect CFR from the encoder)
+- No B-frame PTS reordering issues
+- Unified timestamp timeline for A/V sync
+
+Previous approaches that FAILED:
+- -c copy concat: creates edit list offset (video starts 23ms late),
+  Chrome accumulates this during playback causing progressive drift
+- Two-step normalize + -c copy concat: same edit list problem
+- -c:a copy with -c:v re-encode: audio/video on different timelines
+"""
 
 import asyncio
 import json
@@ -12,12 +26,12 @@ from app.exceptions import VideoStitchError
 
 logger = logging.getLogger(__name__)
 
-# Target format for normalized clips
-TARGET_FPS = 24
-TARGET_SAMPLE_RATE = 44100
-TARGET_AUDIO_BITRATE = "192k"
-# Keyframe every 2 seconds at 24fps
-KEYFRAME_INTERVAL = TARGET_FPS * 2  # 48
+# Stitch output settings — match fal-LTX source format to avoid conversion
+OUTPUT_FPS = 25          # fal-LTX produces 25fps
+OUTPUT_SAMPLE_RATE = 48000  # fal-LTX produces 48kHz
+OUTPUT_AUDIO_BITRATE = "192k"
+KEYFRAME_INTERVAL = OUTPUT_FPS * 2  # keyframe every 2 seconds
+
 # Title/outro settings
 TITLE_CARD_DURATION = 5
 TITLE_FONT_SIZE = 48
@@ -52,19 +66,16 @@ class VideoStitcher:
         """
         Stitch video clips into a final episode.
 
-        Two-step process to eliminate audio drift:
-        1. Normalize each clip: re-encode to identical format with matching
-           audio/video durations.
-        2. Concatenate normalized clips via concat demuxer with stream copy.
-
-        Scene clips in MinIO are NEVER modified — only temp copies are used.
+        Single-pass re-encode: concat demuxer → re-encode both streams.
+        No normalize step, no -c copy. Both streams get fresh timestamps
+        from a single encoder timeline, eliminating all drift sources.
         """
         logger.info(f"Episode {episode_id}: Starting stitch of {len(clip_paths)} clips")
 
         episode_dir = self.work_dir / f"episode_{episode_id}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
-        # Step 0: Generate title card and outro if title is provided.
+        # Generate title card and outro if title is provided
         all_clips = list(clip_paths)
         if title:
             title_card_path = str(episode_dir / "title_card.mp4")
@@ -76,48 +87,57 @@ class VideoStitcher:
             all_clips.append(outro_path)
 
             logger.info(
-                f"Episode {episode_id}: Added title card + outro "
-                f"({len(clip_paths)} scenes + 2 bookends = {len(all_clips)} total clips)"
+                f"Episode {episode_id}: {len(clip_paths)} scenes + title + outro = "
+                f"{len(all_clips)} total clips"
             )
 
-        # Step 1: Diagnose + normalize each clip to identical format.
-        # This eliminates per-clip A/V duration mismatch, VFR, different
-        # sample rates, missing audio — any property that causes drift.
-        normalized_paths = []
+        # Log clip properties for diagnosis
         for idx, clip_path in enumerate(all_clips):
-            # Log clip properties for diagnosis
             await self._log_clip_properties(clip_path, idx + 1)
 
-            norm_path = str(episode_dir / f"norm_{idx:02d}.mp4")
-            await self._normalize_clip(clip_path, norm_path, idx + 1, len(all_clips))
-            normalized_paths.append(norm_path)
-
-        logger.info(f"Episode {episode_id}: Normalized {len(normalized_paths)} clips")
-
-        # Step 2: Concatenate normalized clips.
-        # All clips now have identical format — safe to stream-copy.
+        # Create file list for concat demuxer
         file_list_path = episode_dir / "files.txt"
         with open(file_list_path, "w") as f:
-            for norm_path in normalized_paths:
-                escaped_path = norm_path.replace("'", "'\\''")
+            for clip_path in all_clips:
+                escaped_path = clip_path.replace("'", "'\\''")
                 f.write(f"file '{escaped_path}'\n")
 
         output_path = episode_dir / "final.mp4"
 
+        # Single-pass re-encode: both streams get fresh, synchronized PTS.
+        # -bf 0: no B-frames (prevents PTS reordering)
+        # No -c copy: avoids edit list offset that causes browser drift
         cmd = [
             "ffmpeg", "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", str(file_list_path),
-            "-c", "copy",
+            # Video
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
+            "-r", str(OUTPUT_FPS),
+            "-g", str(KEYFRAME_INTERVAL),
+            "-keyint_min", str(KEYFRAME_INTERVAL),
+            "-bf", "0",
+            "-pix_fmt", "yuv420p",
+            # Audio
+            "-c:a", "aac",
+            "-b:a", OUTPUT_AUDIO_BITRATE,
+            "-ar", str(OUTPUT_SAMPLE_RATE),
+            "-ac", "2",
+            # Output
             "-movflags", "+faststart",
             str(output_path),
         ]
 
-        logger.info(f"Episode {episode_id}: Concatenating {len(normalized_paths)} normalized clips")
-        await self._run_ffmpeg(cmd, "concat", timeout=600)
+        logger.info(
+            f"Episode {episode_id}: Stitching {len(all_clips)} clips "
+            f"(single-pass re-encode, {OUTPUT_FPS}fps, {OUTPUT_SAMPLE_RATE}Hz)"
+        )
+        await self._run_ffmpeg(cmd, "stitch", timeout=1800)
 
-        # Verify final output A/V sync
+        # Verify final output
         await self._log_clip_properties(str(output_path), label="FINAL")
 
         file_size = output_path.stat().st_size
@@ -134,24 +154,24 @@ class VideoStitcher:
             file_size_bytes=file_size,
         )
 
+    # -- Title card / outro --------------------------------------------------
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
-        """Escape text for FFmpeg drawtext filter (colons, backslashes, quotes)."""
+        """Escape text for FFmpeg drawtext filter."""
         text = text.replace("\\", "\\\\")
         text = text.replace(":", "\\:")
         text = text.replace("'", "'\\''")
         return text
 
     async def _generate_title_card(
-        self, title: str, subtitle: str, output_path: str, duration: int = TITLE_CARD_DURATION
+        self, title: str, subtitle: str, output_path: str,
+        duration: int = TITLE_CARD_DURATION,
     ) -> None:
-        """Generate a title card clip: black background with centered text and silent audio."""
-        # Split long titles into two lines at a natural break point
+        """Generate a title card: black background, centered text, silent audio."""
+        # Split long titles across two lines
         if len(title) > 30:
-            # Find the best split point near the middle
             mid = len(title) // 2
-            # Look for a space, colon, or dash near the middle
             best = mid
             for i in range(mid - 10, mid + 10):
                 if 0 <= i < len(title) and title[i] in " :-":
@@ -181,13 +201,18 @@ class VideoStitcher:
 
         vf = ",".join(drawtext_parts)
 
+        # Generate at source format so no conversion needed during stitch
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={TARGET_FPS}",
-            "-f", "lavfi", "-i", f"anullsrc=r={TARGET_SAMPLE_RATE}:cl=stereo",
+            "-f", "lavfi", "-i",
+            f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={OUTPUT_FPS}",
+            "-f", "lavfi", "-i",
+            f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", TARGET_AUDIO_BITRATE, "-ar", str(TARGET_SAMPLE_RATE), "-ac", "2",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-bf", "0", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
+            "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
             "-t", str(duration), "-shortest",
             output_path,
         ]
@@ -196,9 +221,10 @@ class VideoStitcher:
         await self._run_ffmpeg(cmd, "title card", timeout=60)
 
     async def _generate_outro(
-        self, next_episode_text: str, output_path: str, duration: int = TITLE_CARD_DURATION
+        self, next_episode_text: str, output_path: str,
+        duration: int = TITLE_CARD_DURATION,
     ) -> None:
-        """Generate an outro clip: black background with closing text and silent audio."""
+        """Generate an outro clip: black background, closing text, silent audio."""
         if next_episode_text:
             heading = "NEXT WEEK"
             sub = next_episode_text
@@ -218,11 +244,15 @@ class VideoStitcher:
 
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={TARGET_FPS}",
-            "-f", "lavfi", "-i", f"anullsrc=r={TARGET_SAMPLE_RATE}:cl=stereo",
+            "-f", "lavfi", "-i",
+            f"color=c=black:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={duration}:r={OUTPUT_FPS}",
+            "-f", "lavfi", "-i",
+            f"anullsrc=r={OUTPUT_SAMPLE_RATE}:cl=stereo",
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", TARGET_AUDIO_BITRATE, "-ar", str(TARGET_SAMPLE_RATE), "-ac", "2",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-bf", "0", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", OUTPUT_AUDIO_BITRATE,
+            "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "2",
             "-t", str(duration), "-shortest",
             output_path,
         ]
@@ -230,42 +260,7 @@ class VideoStitcher:
         logger.info(f"Generating outro: {heading!r}")
         await self._run_ffmpeg(cmd, "outro", timeout=60)
 
-    async def _normalize_clip(
-        self, input_path: str, output_path: str, clip_num: int, total: int
-    ) -> None:
-        """
-        Re-encode a clip to a canonical format with matching A/V duration.
-
-        - Video: H.264, CFR 24fps, yuv420p, CRF 18, keyframes every 2s
-        - Audio: AAC 192k, 44100 Hz, stereo, resampled to match video timing
-        - aresample=async=1: actively corrects audio timing to match video
-        - -shortest: trims to the shorter stream
-        """
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", input_path,
-            # Video: constant frame rate with keyframes
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "18",
-            "-r", str(TARGET_FPS),
-            "-g", str(KEYFRAME_INTERVAL),
-            "-keyint_min", str(KEYFRAME_INTERVAL),
-            "-bf", "0",
-            "-pix_fmt", "yuv420p",
-            # Audio: standardized format with active sync correction
-            "-af", "aresample=async=1:first_pts=0",
-            "-c:a", "aac",
-            "-b:a", TARGET_AUDIO_BITRATE,
-            "-ar", str(TARGET_SAMPLE_RATE),
-            "-ac", "2",
-            # Trim to shorter stream
-            "-shortest",
-            output_path,
-        ]
-
-        logger.debug(f"Normalizing clip {clip_num}/{total}: {input_path}")
-        await self._run_ffmpeg(cmd, f"normalize clip {clip_num}/{total}", timeout=300)
+    # -- Utilities ------------------------------------------------------------
 
     async def _log_clip_properties(self, path: str, clip_num=None, label=None) -> None:
         """Log audio/video properties of a clip for drift diagnosis."""
@@ -274,7 +269,7 @@ class VideoStitcher:
             cmd = [
                 "ffprobe", "-v", "error",
                 "-show_entries",
-                "stream=codec_type,codec_name,duration,r_frame_rate,sample_rate,channels",
+                "stream=codec_type,codec_name,duration,r_frame_rate,sample_rate,channels,start_time",
                 "-print_format", "json",
                 path,
             ]
@@ -282,17 +277,18 @@ class VideoStitcher:
             data = json.loads(result.stdout)
             streams = data.get("streams", [])
 
-            v_dur = a_dur = "N/A"
-            v_fps = a_rate = "N/A"
+            v_dur = a_dur = v_start = a_start = "?"
+            v_fps = a_rate = "?"
             for s in streams:
                 if s.get("codec_type") == "video":
-                    v_dur = s.get("duration", "N/A")
-                    v_fps = s.get("r_frame_rate", "N/A")
+                    v_dur = s.get("duration", "?")
+                    v_fps = s.get("r_frame_rate", "?")
+                    v_start = s.get("start_time", "?")
                 elif s.get("codec_type") == "audio":
-                    a_dur = s.get("duration", "N/A")
-                    a_rate = s.get("sample_rate", "N/A")
+                    a_dur = s.get("duration", "?")
+                    a_rate = s.get("sample_rate", "?")
+                    a_start = s.get("start_time", "?")
 
-            # Calculate mismatch
             mismatch = ""
             try:
                 diff_ms = (float(a_dur) - float(v_dur)) * 1000
@@ -301,7 +297,8 @@ class VideoStitcher:
                 pass
 
             logger.info(
-                f"[{tag}] video={v_dur}s@{v_fps}fps  audio={a_dur}s@{a_rate}Hz{mismatch}  {path}"
+                f"[{tag}] v={v_dur}s@{v_fps}fps(start={v_start})  "
+                f"a={a_dur}s@{a_rate}Hz(start={a_start}){mismatch}  {path}"
             )
         except Exception as e:
             logger.warning(f"[{tag}] Could not probe: {e}")
@@ -337,8 +334,7 @@ class VideoStitcher:
         """Get video duration in seconds using ffprobe."""
         try:
             cmd = [
-                "ffprobe",
-                "-v", "quiet",
+                "ffprobe", "-v", "quiet",
                 "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 video_path,
