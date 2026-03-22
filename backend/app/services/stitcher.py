@@ -147,17 +147,36 @@ class VideoStitcher:
         self, title: str, subtitle: str, output_path: str, duration: int = TITLE_CARD_DURATION
     ) -> None:
         """Generate a title card clip: black background with centered text and silent audio."""
-        esc_title = self._escape_drawtext(title)
-        esc_subtitle = self._escape_drawtext(subtitle)
+        # Split long titles into two lines at a natural break point
+        if len(title) > 30:
+            # Find the best split point near the middle
+            mid = len(title) // 2
+            # Look for a space, colon, or dash near the middle
+            best = mid
+            for i in range(mid - 10, mid + 10):
+                if 0 <= i < len(title) and title[i] in " :-":
+                    best = i
+                    break
+            line1 = self._escape_drawtext(title[:best].strip())
+            line2 = self._escape_drawtext(title[best:].strip().lstrip(":-").strip())
+            drawtext_parts = [
+                f"drawtext=text='{line1}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f":x=(w-text_w)/2:y=(h/2)-70",
+                f"drawtext=text='{line2}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f":x=(w-text_w)/2:y=(h/2)-20",
+            ]
+        else:
+            esc_title = self._escape_drawtext(title)
+            drawtext_parts = [
+                f"drawtext=text='{esc_title}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
+                f":x=(w-text_w)/2:y=(h-text_h)/2-40",
+            ]
 
-        drawtext_parts = [
-            f"drawtext=text='{esc_title}':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
-            f":x=(w-text_w)/2:y=(h-text_h)/2-40",
-        ]
         if subtitle:
+            esc_subtitle = self._escape_drawtext(subtitle)
             drawtext_parts.append(
                 f"drawtext=text='{esc_subtitle}':fontsize={SUBTITLE_FONT_SIZE}"
-                f":fontcolor=white@0.7:x=(w-text_w)/2:y=(h-text_h)/2+30"
+                f":fontcolor=white@0.7:x=(w-text_w)/2:y=(h/2)+40"
             )
 
         vf = ",".join(drawtext_parts)
@@ -232,6 +251,7 @@ class VideoStitcher:
             "-r", str(TARGET_FPS),
             "-g", str(KEYFRAME_INTERVAL),
             "-keyint_min", str(KEYFRAME_INTERVAL),
+            "-bf", "0",
             "-pix_fmt", "yuv420p",
             # Audio: standardized format with active sync correction
             "-af", "aresample=async=1:first_pts=0",
