@@ -18,7 +18,11 @@ from app.exceptions import YouTubeUploadError
 logger = logging.getLogger(__name__)
 
 # OAuth2 scopes required for YouTube upload
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+]
 
 
 @dataclass

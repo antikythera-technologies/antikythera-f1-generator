@@ -1323,10 +1323,23 @@ async def _async_youtube_upload(episode_id: int, privacy_status: str = "public")
 
         # Build YouTube metadata
         title = episode.title
-        description = _build_youtube_description(episode, race)
-        tags = ["F1", "Formula 1", "racing", "motorsport", "satire", "comedy"]
         if race:
-            tags.extend([race.race_name, race.circuit_name or ""])
+            title = f"{episode.title} | F1 {race.season} Round {race.round_number}"
+        description = _build_youtube_description(episode, race)
+        tags = [
+            "F1", "Formula 1", "Formula One", "racing", "motorsport",
+            "satire", "comedy", "AI generated", "caricature",
+            "F1 highlights", "race recap", "F1 commentary",
+            "Antikythera", "AI video", "animated F1",
+        ]
+        if race:
+            tags.extend([
+                race.race_name,
+                race.circuit_name or "",
+                race.country or "",
+                f"{race.season} F1",
+                f"F1 {race.season}",
+            ])
 
         # Upload
         uploader = YouTubeUploader()
@@ -1426,16 +1439,33 @@ async def _async_validate(episode_id: int) -> str:
 
 def _build_youtube_description(episode, race) -> str:
     """Build YouTube video description."""
-    description = f"""{episode.title}
+    lines = [
+        episode.title,
+        "",
+        "Satirical AI-generated F1 commentary. Every driver, every team, "
+        "every dramatic moment \u2014 reimagined in caricature.",
+        "",
+    ]
 
-Satirical F1 commentary brought to you by Antikythera Technologies.
-
-#F1 #Formula1 #Racing #Motorsport #Satire
-"""
     if race:
-        description += f"""
-Race: {race.race_name}
-Circuit: {race.circuit_name or 'Unknown'}
-Season: {race.season} Round {race.round_number}
-"""
-    return description
+        lines.extend([
+            f"\U0001f3c6 {race.season} F1 Season | Round {race.round_number} \u2014 {race.race_name}",
+            f"\U0001f4cd {race.circuit_name or 'Unknown'}, {race.country or ''}",
+            f"\U0001f4c5 Season {race.season}",
+            "",
+        ])
+
+    lines.extend([
+        "\u2500" * 40,
+        "",
+        "\u26a0\ufe0f DISCLAIMER: This video is entirely AI-generated satire \u2014 "
+        "all characters, voices, and commentary are fictional parodies "
+        "created by AI. No real people were harmed in the making of this chaos.",
+        "",
+        "Built with \u2764\ufe0f by Antikythera Technologies",
+        "\U0001f310 https://antikythera.co.za",
+        "",
+        "#F1 #Formula1 #Racing #Motorsport #F12026 #Satire #AIGenerated #Comedy",
+    ])
+
+    return "\n".join(lines)
