@@ -803,6 +803,41 @@ export const storylinesApi = {
     }),
 };
 
+
+// Team types
+export interface Team {
+  id: number;
+  name: string;
+  short_name: string;
+  season: number;
+  livery_description: string | null;
+  car_description: string | null;
+  overalls_description: string | null;
+  primary_colour: string | null;
+  secondary_colour: string | null;
+  accent_colour: string | null;
+  principal_name: string | null;
+  engine_supplier: string | null;
+  constructor_name: string | null;
+  headquarters: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export const teamsApi = {
+  list: (params?: { season?: number; active_only?: boolean }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.season) searchParams.set("season", String(params.season));
+    if (params?.active_only !== undefined) searchParams.set("active_only", String(params.active_only));
+    const query = searchParams.toString();
+    return request<Team[]>(`/teams${query ? `?${query}` : ""}`);
+  },
+  get: (id: number) => request<Team>(`/teams/${id}`),
+  create: (data: Omit<Team, "id" | "is_active" | "created_at">) =>
+    request<Team>("/teams", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<Team>) =>
+    request<Team>(`/teams/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+};
 // Pipeline Settings types
 export type VideoGenerator = "fal-ovi" | "fal-ltx" | "fal-kling-std" | "fal-kling-std-audio" | "fal-kling-pro" | "fal-kling-pro-audio" | "fal-kling-o1-flf" | "fal-vidu-q1-flf" | "fal-wan-flf";
 export type ImageGenerator = "flux-lora" | "instant-character";
@@ -878,6 +913,7 @@ export const api = {
   gags: gagsApi,
   scenes: scenesApi,
   storylines: storylinesApi,
+  teams: teamsApi,
   settings: settingsApi,
 };
 

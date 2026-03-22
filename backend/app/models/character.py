@@ -43,9 +43,11 @@ class Character(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     character_type_id: Mapped[Optional[int]] = mapped_column(ForeignKey("character_types.id"))
     team: Mapped[Optional[str]] = mapped_column(String(100))
+    team_id: Mapped[Optional[int]] = mapped_column(ForeignKey("teams.id"))
 
     # Relationships
     character_type: Mapped[Optional["CharacterType"]] = relationship("CharacterType", back_populates="characters")
+    team_rel: Mapped[Optional["Team"]] = relationship("Team", back_populates="characters")
     images: Mapped[List["CharacterImage"]] = relationship("CharacterImage", back_populates="character", cascade="all, delete-orphan")
     scenes: Mapped[List["Scene"]] = relationship("Scene", foreign_keys="[Scene.character_id]", back_populates="character")
 
@@ -76,3 +78,6 @@ class CharacterImage(Base):
 
 # Import Scene here to avoid circular imports
 from app.models.scene import Scene
+
+# Import Team here to avoid circular imports
+from app.models.team import Team

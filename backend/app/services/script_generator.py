@@ -239,6 +239,7 @@ class ScriptGenerator:
         episode_type: str = "post-race",
         news_context: Optional[List[dict]] = None,
         running_gags: Optional[List[dict]] = None,
+        teams: Optional[List[dict]] = None,
     ) -> EpisodeScript:
         """
         Generate a 26-scene script for an episode.
@@ -263,6 +264,7 @@ class ScriptGenerator:
         prompt = self._build_prompt(
             race_context, characters, episode_type,
             news_context=news_context, running_gags=running_gags,
+            teams=teams,
         )
         logger.debug(f"Prompt length: {len(prompt)} characters")
 
@@ -363,6 +365,7 @@ class ScriptGenerator:
         episode_type: str,
         news_context: Optional[List[dict]] = None,
         running_gags: Optional[List[dict]] = None,
+        teams: Optional[List[dict]] = None,
     ) -> str:
         """Build the prompt for script generation."""
         # Build rich character info from personality JSON
@@ -432,6 +435,38 @@ class ScriptGenerator:
         if running_gags:
             gags_section = self._format_running_gags(running_gags)
             prompt_parts.append(f"\n{gags_section}")
+
+        # Team livery reference for prompt injection
+        if teams:
+            team_lines = []
+            for t in teams:
+                if t.get("car_description"):
+                    team_lines.append(f"- {t['short_name']}: {t['car_description']}")
+            if team_lines:
+                team_livery_block = f"""\n
+TEAM LIVERY REFERENCE (use these EXACT descriptions when showing cars on track):
+{chr(10).join(team_lines)}
+
+ACTION_REPLAY RULES:
+- When describing a car on track, use the team's car_description from above VERBATIM
+- When two cars are racing, describe BOTH cars with their correct liveries
+- Cars MUST be driving AWAY from camera showing REAR wings and rear diffusers
+- Include dynamic motion: "diving down the inside", "outbraking into Turn X",
+  "slipstreaming on the main straight", "wheel-to-wheel through the corner"
+- The video_prompt MUST describe motion: "car accelerating", "overtaking maneuver",
+  "crossing the finish line at speed", "braking hard into the corner"
+
+ACTION SCENE MOTION TEMPLATES (use these for video_prompt in ACTION_REPLAY scenes):
+- OVERTAKE: "Car A dives down the inside of Car B into the corner, aggressive late braking, both cars wheel-to-wheel through the apex, Car A pulls ahead on exit"
+- FINISH LINE: "Car crosses the finish line at speed, checkered flag waving, sparks flying from the floor, victory weaving on the straight"
+- CHASE: "Two cars in close formation through high-speed corners, slipstreaming, DRS flap open on the following car, closing the gap rapidly"
+- INCIDENT: "Car locks up into the corner, tire smoke billowing, gravel spray, dramatic camera angle"
+
+DRIVER APPEARANCE RULES:
+- When a driver's face is shown (TALKING_HEAD, PODIUM, TWO_SHOT), they ALWAYS wear their team race suit
+- Never describe a driver in casual clothes unless explicitly at a media/press event
+"""
+                prompt_parts.append(team_livery_block)
 
         prompt_parts.append(
             "\nGenerate a 26-scene satirical commentary script with full cinematographic direction. "

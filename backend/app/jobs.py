@@ -663,8 +663,18 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "Cars ahead of the subject must show their REAR to the subject car. "
                         "No car should face against the flow of the race — all cars travel the same way. "
                     )
+            # Enrich with team livery for racing scenes
+            team_livery_text = ""
+            if scene.character_id and scene.character:
+                team_obj = None
+                if hasattr(scene.character, 'team_id') and scene.character.team_id:
+                    from app.models.team import Team
+                    team_obj = await db.get(Team, scene.character.team_id)
+                if team_obj and team_obj.car_description:
+                    team_livery_text = f"The car is a {team_obj.car_description}. "
+
             full_prompt = (
-                f"ANTKF1STYLE {frame_prompt} "
+                f"ANTKF1STYLE {team_livery_text}{frame_prompt} "
                 f"{racing_direction_rule}"
                 "Satirical caricature art style, dramatic lighting, vibrant colors. "
                 "No text, no words, no letters, no watermarks."
@@ -680,6 +690,13 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
 
             physical = character_traits.get("physical_features", "")
             prompt_parts = ["ANTKF1STYLE", "Full body from waist up, camera 3 meters away.", frame_prompt]
+            # If no episode_appearance, try team overalls as fallback
+            if not episode_appearance and scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
+                from app.models.team import Team
+                team_obj = await db.get(Team, scene.character.team_id)
+                if team_obj and team_obj.overalls_description:
+                    episode_appearance = team_obj.overalls_description
+
             if episode_appearance:
                 prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
             elif physical:

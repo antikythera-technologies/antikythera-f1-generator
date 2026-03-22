@@ -20,6 +20,7 @@ from app.models.gag import GagStatus, GagUsage, RunningGag
 from app.models.logs import APIProvider, APIUsage, GenerationLog, LogComponent, LogLevel
 from app.models.race import Race
 from app.models.scene import Scene, SceneStatus
+from app.models.team import Team
 # Personality traits loaded from DB via load_personality_traits_from_db()
 from app.services.script_generator import ScriptGenerator
 from app.services.image_generator import ImageGenerator
@@ -231,12 +232,29 @@ class VideoPipeline:
         if running_gags:
             self.logger.info(f"Loaded {len(running_gags)} running gags for script generation")
 
+        # Load team data for livery injection
+        teams_stmt = select(Team).where(Team.is_active == True)
+        teams_result = await db.execute(teams_stmt)
+        teams_list = [
+            {
+                "name": t.name,
+                "short_name": t.short_name,
+                "car_description": t.car_description,
+                "overalls_description": t.overalls_description,
+                "livery_description": t.livery_description,
+            }
+            for t in teams_result.scalars().all()
+        ]
+        if teams_list:
+            self.logger.info(f"Loaded {len(teams_list)} teams for livery injection")
+
         # Generate script
         script = await self.script_generator.generate_script(
             race_context=race_context,
             characters=character_data,
             episode_type=self.episode.episode_type.value,
             running_gags=running_gags,
+            teams=teams_list,
         )
 
         # Update episode with script metadata
