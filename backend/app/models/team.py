@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -37,7 +37,7 @@ class Team(Base):
     headquarters: Mapped[Optional[str]] = mapped_column(String(100))
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # Relationships
     characters: Mapped[List["Character"]] = relationship(
