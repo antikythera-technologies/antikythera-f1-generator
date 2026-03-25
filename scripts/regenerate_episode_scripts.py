@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.database import async_session_maker
 from app.services.script_generator import ScriptGenerator
-from app.services.personality import find_personality_file, load_personality_traits
+from app.services.personality import load_personality_traits_from_db
 from sqlalchemy import text
 
 
@@ -108,8 +108,7 @@ Kimi Antonelli replaced Hamilton at Mercedes for 2026. These are established fac
                 continue
 
             # Load personality from JSON files
-            pfile = find_personality_file(char_name)
-            traits = load_personality_traits(pfile) if pfile else {}
+            traits = load_personality_traits_from_db(character.personality) if character.personality else {}
 
             char_info = {
                 "name": row[1],

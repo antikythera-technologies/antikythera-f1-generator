@@ -97,7 +97,7 @@ def estimate_speech_duration(dialogue: str | None, words_per_second: float = 2.0
     if not dialogue:
         return 0.0
     word_count = len(dialogue.split())
-    return (word_count / words_per_second) + 1.0
+    return (word_count / words_per_second) + 2.0  # 2s buffer for pauses + audio fade
 
 
 def calculate_scene_duration(
@@ -186,12 +186,14 @@ class FalVideoGenerator:
         self.has_audio = self.backend in FAL_AUDIO_BACKENDS
         self.display_name = FAL_DISPLAY_NAMES[self.backend]
 
-        # Validate FAL_KEY is set
-        if not os.environ.get("FAL_KEY"):
+        # Ensure FAL_KEY is in environment for fal_client SDK
+        from app.config import settings as _settings
+        if not _settings.FAL_KEY:
             raise FalVideoError(
-                "FAL_KEY environment variable not set. "
+                "FAL_KEY not configured in settings. "
                 "Get your key at https://fal.ai/dashboard/keys"
             )
+        # FAL_KEY is set in os.environ by config.py at startup
 
     async def generate_clip(
         self,
@@ -249,22 +251,28 @@ class FalVideoGenerator:
         log_api_request(logger, "fal-video", self.model_id, arguments)
         start_time = time.monotonic()
 
-        try:
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: fal_client.subscribe(
+        # Retry up to 3 times — fal CDN can return transient 503s
+        last_error = None
+        for attempt in range(3):
+            try:
+                result = await asyncio.to_thread(
+                    fal_client.subscribe,
                     self.model_id,
                     arguments=arguments,
                     with_logs=True,
-                    on_queue_update=lambda u: self._log_progress(scene_number, u),
-                ),
-            )
-        except Exception as e:
-            elapsed_ms = int((time.monotonic() - start_time) * 1000)
-            log_api_response(logger, "fal-video", self.model_id, f"ERROR: {type(e).__name__}: {e}", elapsed_ms=elapsed_ms)
-            raise FalVideoError(
-                f"Scene {scene_number}: fal.ai {self.display_name} failed: {e}"
-            )
+                )
+                break  # Success
+            except Exception as e:
+                last_error = e
+                elapsed_ms = int((time.monotonic() - start_time) * 1000)
+                log_api_response(logger, "fal-video", self.model_id, f"ERROR (attempt {attempt+1}/3): {type(e).__name__}: {e}", elapsed_ms=elapsed_ms)
+                if attempt < 2:
+                    logger.info(f"Scene {scene_number}: Retrying in 5s (CDN may recover)...")
+                    await asyncio.sleep(5)
+                else:
+                    raise FalVideoError(
+                        f"Scene {scene_number}: fal.ai {self.display_name} failed after 3 attempts: {last_error}"
+                    )
 
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
         log_api_response(logger, "fal-video", self.model_id, "ok", result, elapsed_ms)
@@ -404,7 +412,7 @@ class FalVideoGenerator:
             "image_url": image_url,
             "num_inference_steps": 30,
             "generate_audio": True,
-            "duration": duration,  # LTX accepts even values: 6, 8, 10, ..., 20
+            "duration": max(6, duration if duration % 2 == 0 else duration + 1),  # LTX: min 6, must be even
         }
         if end_image_url is not None:
             args["end_image_url"] = end_image_url

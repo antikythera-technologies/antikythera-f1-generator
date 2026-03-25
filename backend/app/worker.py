@@ -73,6 +73,8 @@ def _scheduler_poll_loop(interval_seconds: int = 60) -> None:
 
 async def _process_pending_jobs() -> None:
     """Find and enqueue any ScheduledJob records that are due."""
+    from sqlalchemy import select
+
     from app.database import async_session_maker
     from app.models import ScheduledJob, JobStatus, Episode, EpisodeStatus
     from app.services.scheduler import SchedulerService
@@ -90,6 +92,26 @@ async def _process_pending_jobs() -> None:
             try:
                 # Determine episode type from trigger
                 episode_type = service.map_trigger_to_episode_type(job.trigger_type)
+
+                # Check if episode already exists for this race + type
+                existing_stmt = select(Episode).where(
+                    Episode.race_id == job.race_id,
+                    Episode.episode_type == episode_type,
+                )
+                existing_result = await session.execute(existing_stmt)
+                existing_episode = existing_result.scalar_one_or_none()
+
+                if existing_episode:
+                    logger.info(
+                        f"Episode already exists for race {job.race_id} "
+                        f"type {episode_type.value}: episode {existing_episode.id} "
+                        f"(status={existing_episode.status.value}) — skipping"
+                    )
+                    job.status = JobStatus.COMPLETED
+                    job.completed_at = datetime.utcnow()
+                    job.episode_id = existing_episode.id
+                    await session.commit()
+                    continue
 
                 # Build a title
                 title = job.description or f"Scheduled {episode_type.value} episode"

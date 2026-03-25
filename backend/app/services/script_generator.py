@@ -263,6 +263,7 @@ class ScriptGenerator:
         news_context: Optional[List[dict]] = None,
         running_gags: Optional[List[dict]] = None,
         teams: Optional[List[dict]] = None,
+        storylines: Optional[List[dict]] = None,
     ) -> EpisodeScript:
         """
         Generate a 26-scene script for an episode.
@@ -287,7 +288,7 @@ class ScriptGenerator:
         prompt = self._build_prompt(
             race_context, characters, episode_type,
             news_context=news_context, running_gags=running_gags,
-            teams=teams,
+            teams=teams, storylines=storylines,
         )
         logger.debug(f"Prompt length: {len(prompt)} characters")
 
@@ -389,6 +390,7 @@ class ScriptGenerator:
         news_context: Optional[List[dict]] = None,
         running_gags: Optional[List[dict]] = None,
         teams: Optional[List[dict]] = None,
+        storylines: Optional[List[dict]] = None,
     ) -> str:
         """Build the prompt for script generation."""
         # Build rich character info from personality JSON
@@ -459,6 +461,28 @@ class ScriptGenerator:
             gags_section = self._format_running_gags(running_gags)
             prompt_parts.append(f"\n{gags_section}")
 
+        # Add active storylines for narrative continuity
+        if storylines:
+            storyline_lines = []
+            for sl in storylines:
+                line = f"- {sl['title']} ({sl['type']}): {sl['description']}"
+                if sl.get('comedy_notes'):
+                    line += f"\n  Comedy direction: {sl['comedy_notes']}"
+                if sl.get('plot_points'):
+                    beats = sl['plot_points']
+                    current = sl.get('current_beat', 0)
+                    if current < len(beats):
+                        line += f"\n  Current beat: {beats[current]}"
+                    if current + 1 < len(beats):
+                        line += f"\n  Next beat: {beats[current + 1]}"
+                storyline_lines.append(line)
+            storylines_block = (
+                "\nACTIVE STORYLINES (weave these into the episode naturally — "
+                "advance the plot, reference previous beats, build continuity):\n"
+                + "\n".join(storyline_lines)
+            )
+            prompt_parts.append(storylines_block)
+
         # Team livery reference for prompt injection
         if teams:
             team_lines = []
@@ -478,6 +502,11 @@ ACTION_REPLAY RULES:
   "slipstreaming on the main straight", "wheel-to-wheel through the corner"
 - The video_prompt MUST describe motion: "car accelerating", "overtaking maneuver",
   "crossing the finish line at speed", "braking hard into the corner"
+- TRACK LAYOUT: The race track has tarmac in the centre with kerbs (red-white or yellow) on BOTH EDGES only.
+  There is NEVER a kerb, barrier, or divider in the middle of the track. The track is one continuous surface.
+  Cars race side by side on the same piece of tarmac, not in separate lanes.
+- GRID SIZE: There are exactly 22 cars on the F1 grid (11 teams, 2 drivers each). Never describe more than 22 cars on track.
+- CAR DESIGN: F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar, NOT a canopy.
 
 ACTION SCENE MOTION TEMPLATES (use these for video_prompt in ACTION_REPLAY scenes):
 - OVERTAKE: "Car A dives down the inside of Car B into the corner, aggressive late braking, both cars wheel-to-wheel through the apex, Car A pulls ahead on exit"

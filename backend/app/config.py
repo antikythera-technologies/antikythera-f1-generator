@@ -193,3 +193,10 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+# Propagate FAL_KEY to os.environ immediately so fal_client SDK picks it up.
+# fal_client caches auth on first use — if FAL_KEY isn't in the environment
+# before any fal_client import, all fal_client calls silently fail.
+import os as _os
+if settings.FAL_KEY:
+    _os.environ["FAL_KEY"] = settings.FAL_KEY

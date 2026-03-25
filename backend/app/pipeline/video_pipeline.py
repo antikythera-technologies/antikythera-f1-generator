@@ -104,6 +104,9 @@ class VideoPipeline:
                     self.logger.info("PHASE 2c: Audio Generation (TTS + Mux)")
                     await self._generate_audio(db, scenes)
 
+                # Update episode total costs from all scene costs
+                await self._update_total_costs(db)
+
                 # Phase 3: Stitch final video
                 self.logger.info("PHASE 3: Video Stitching")
                 await self._update_status(db, EpisodeStatus.STITCHING)
@@ -246,13 +249,81 @@ class VideoPipeline:
         if teams_list:
             self.logger.info(f"Loaded {len(teams_list)} teams for livery injection")
 
+        # Load news articles for topical comedy material
+        news_context = None
+        try:
+            from app.services.news_scraper import NewsScraperService
+            from app.models.scheduler import JobTriggerType
+            news_service = NewsScraperService(db)
+            # Map episode type to trigger type for news filtering
+            trigger_map = {
+                "post-race": JobTriggerType.POST_RACE,
+                "post-sprint": JobTriggerType.POST_SPRINT,
+                "post-fp2": JobTriggerType.POST_FP2,
+                "weekly-recap": JobTriggerType.WEEKLY_RECAP,
+            }
+            trigger_type = trigger_map.get(
+                self.episode.episode_type.value, JobTriggerType.POST_RACE
+            )
+            articles = await news_service.get_articles_for_episode(
+                trigger_type=trigger_type,
+                race_id=self.race.id if self.race else None,
+                limit=10,
+            )
+            if articles:
+                news_context = [
+                    {
+                        "title": a.title,
+                        "summary": a.summary or "",
+                        "source": a.source_name or "",
+                        "published_at": a.published_at.isoformat() if a.published_at else "",
+                    }
+                    for a in articles
+                ]
+                self.logger.info(f"Loaded {len(news_context)} news articles for script context")
+            else:
+                self.logger.info("No recent news articles found for this episode")
+        except Exception as e:
+            self.logger.warning(f"Failed to load news articles: {e} — proceeding without news")
+
+        # Load active storylines for narrative continuity
+        storylines_context = None
+        try:
+            from app.models.storyline import Storyline
+            storylines_stmt = (
+                select(Storyline)
+                .where(Storyline.is_active == True, Storyline.status == "active")
+                .order_by(Storyline.priority.desc())
+            )
+            storylines_result = await db.execute(storylines_stmt)
+            active_storylines = storylines_result.scalars().all()
+            if active_storylines:
+                storylines_context = [
+                    {
+                        "title": s.title,
+                        "description": s.description,
+                        "type": s.storyline_type.value if s.storyline_type else "general",
+                        "comedy_notes": s.comedy_notes or "",
+                        "current_beat": s.current_beat,
+                        "plot_points": s.plot_points or [],
+                    }
+                    for s in active_storylines
+                ]
+                self.logger.info(f"Loaded {len(storylines_context)} active storylines for script context")
+            else:
+                self.logger.info("No active storylines found")
+        except Exception as e:
+            self.logger.warning(f"Failed to load storylines: {e} — proceeding without storylines")
+
         # Generate script
         script = await self.script_generator.generate_script(
             race_context=race_context,
             characters=character_data,
             episode_type=self.episode.episode_type.value,
+            news_context=news_context,
             running_gags=running_gags,
             teams=teams_list,
+            storylines=storylines_context,
         )
 
         # Update episode with script metadata
@@ -325,27 +396,51 @@ class VideoPipeline:
         return scenes
 
     async def _load_race_results_context(self, db) -> str:
-        """Load actual race results from DB for accurate script generation."""
+        """Load race results from DB for accurate script generation.
+
+        Automatically selects the correct session type based on episode type:
+        - post-sprint → sprint results + sprint qualifying
+        - post-race → race results + qualifying
+        - post-fp2 → FP2 results (practice)
+        """
         from sqlalchemy import select as _sel
         from app.models.race_result import RaceResult, RaceSessionSummary, SessionType
 
         if not self.race:
             return ""
 
+        # Determine which session results to load based on episode type
+        episode_type = self.episode.episode_type.value if self.episode else "post-race"
+
+        if episode_type == "post-sprint":
+            primary_session = SessionType.SPRINT
+            quali_session = SessionType.SPRINT_QUALIFYING
+            session_label = "SPRINT RACE"
+            quali_label = "SPRINT QUALIFYING"
+        else:
+            primary_session = SessionType.RACE
+            quali_session = SessionType.QUALIFYING
+            session_label = "RACE"
+            quali_label = "QUALIFYING"
+
+        self.logger.info(
+            f"Loading {session_label} results for episode type '{episode_type}'"
+        )
+
         lines = []
 
-        # Get race results
+        # Get primary session results
         stmt = (
             _sel(RaceResult)
             .where(RaceResult.race_id == self.race.id)
-            .where(RaceResult.session_type == SessionType.RACE)
+            .where(RaceResult.session_type == primary_session)
             .order_by(RaceResult.position)
         )
         result = await db.execute(stmt)
         race_results = result.scalars().all()
 
         if race_results:
-            lines.append("\nACTUAL RACE RESULTS (use these EXACT positions — do NOT invent results):")
+            lines.append(f"\nACTUAL {session_label} RESULTS (use these EXACT positions — do NOT invent results):")
             for r in race_results[:20]:
                 status = f" ({r.status})" if r.status != "Finished" else ""
                 grid = f" (started P{r.grid_position})" if r.grid_position else ""
@@ -356,19 +451,23 @@ class VideoPipeline:
                 )
                 if r.fastest_lap:
                     lines.append(f"    ^ Fastest lap: {r.fastest_lap_time or 'yes'}")
+        else:
+            self.logger.warning(
+                f"No {session_label} results found for race {self.race.id}"
+            )
 
         # Get qualifying results
         stmt = (
             _sel(RaceResult)
             .where(RaceResult.race_id == self.race.id)
-            .where(RaceResult.session_type == SessionType.QUALIFYING)
+            .where(RaceResult.session_type == quali_session)
             .order_by(RaceResult.position)
         )
         result = await db.execute(stmt)
         quali_results = result.scalars().all()
 
         if quali_results:
-            lines.append("\nQUALIFYING GRID:")
+            lines.append(f"\n{quali_label} GRID:")
             for r in quali_results[:10]:
                 lines.append(
                     f"  P{r.position}: {r.driver_display_name or r.driver_name}"
@@ -378,13 +477,13 @@ class VideoPipeline:
         stmt = (
             _sel(RaceSessionSummary)
             .where(RaceSessionSummary.race_id == self.race.id)
-            .where(RaceSessionSummary.session_type == SessionType.RACE)
+            .where(RaceSessionSummary.session_type == primary_session)
         )
         result = await db.execute(stmt)
         summary = result.scalar_one_or_none()
 
         if summary:
-            lines.append(f"\nRACE SUMMARY:")
+            lines.append(f"\n{session_label} SUMMARY:")
             lines.append(f"  Podium: P1 {summary.winner}, P2 {summary.second}, P3 {summary.third}")
             if summary.total_overtakes:
                 lines.append(f"  Total overtakes: {summary.total_overtakes}")
@@ -396,8 +495,8 @@ class VideoPipeline:
                 lines.append(f"  DNFs: {summary.total_dnfs}")
 
         if lines:
-            lines.append("\nCRITICAL: Use ONLY the race results above. Do NOT invent or guess positions.")
-        
+            lines.append(f"\nCRITICAL: Use ONLY the {session_label.lower()} results above. Do NOT invent or guess positions.")
+
         return "\n".join(lines)
 
     def _build_race_context(self) -> str:
@@ -1199,7 +1298,8 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 scene.generation_completed_at = datetime.utcnow()
                 scene.generation_time_ms = generation_time_ms
 
-                # Log fal.ai cost (per-video pricing)
+                # Track video cost on scene
+                from decimal import Decimal as _VDec
                 fal_cost_map = {
                     "fal-ovi": 0.20,
                     "fal-ltx": 0.30,
@@ -1212,6 +1312,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     "fal-wan-flf": 0.50,
                 }
                 cost = fal_cost_map.get(backend, 0.20)
+                scene.video_cost_usd = (scene.video_cost_usd or _VDec(0)) + _VDec(str(cost))
                 provider_map = {
                     "fal-ovi": APIProvider.FAL_OVI,
                     "fal-ltx": APIProvider.FAL_LTX,
@@ -1467,20 +1568,30 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
     FAL_LORA_URL = "https://v3b.fal.media/files/b/0a918355/tJadbfWJuPFPPcrwOQ_3W_pytorch_lora_weights.safetensors"
 
     async def _get_scene_image_fal(self, db: AsyncSession, scene: Scene, frame_type: str = "start") -> str:
-        """Generate scene image via fal.ai flux-lora (LoRA only, no face ref).
+        """Generate scene image via fal.ai with smart backend routing.
 
-        Uses fal-ai/flux-lora with ANTKF1STYLE LoRA. No face reference —
-        flux-general's IP-Adapter warps faces badly. Character consistency
-        comes from LoRA + detailed prompt descriptions instead.
+        Routes based on scene type and face visibility:
+        - face_visible=False (ACTION_REPLAY, ESTABLISHING without character):
+          → flux-lora (LoRA style only, no face reference)
+        - face_visible=True + character with face ref available:
+          → instant-character (face ref + LoRA for identity preservation)
+        - face_visible=True but no face ref file:
+          → flux-lora fallback (LoRA + detailed prompt description)
         """
+        import re
         import tempfile
         import httpx
 
         from app.services.personality import load_personality_traits_from_db
 
+        fal_key = settings.FAL_KEY
+        if not fal_key:
+            raise RuntimeError("FAL_KEY not configured")
+
         # Load character context
         character_name = "generic_commentator"
         character_traits: dict = {}
+        character = None
 
         if scene.character_id:
             stmt = select(Character).where(Character.id == scene.character_id)
@@ -1498,99 +1609,290 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 else:
                     character_traits = {"display_name": character.display_name, "team": character.team}
 
-                # No face reference — flux-general IP-Adapter warps faces.
-                # Character consistency via LoRA + prompt description only.
+        # Load episode-level character appearance for clothing consistency
+        episode_appearance = ""
+        if character and self.episode and hasattr(self.episode, "character_appearances"):
+            if self.episode.character_appearances:
+                episode_appearance = self.episode.character_appearances.get(
+                    character.name, ""
+                )
+                if episode_appearance:
+                    self.logger.info(
+                        f"Scene {scene.scene_number}: Using episode appearance for {character.name}"
+                    )
 
-        # Build prompt with LoRA trigger + scene description + character traits
+        # Determine which prompt to use
         if frame_type == "end":
             frame_prompt = scene.end_frame_prompt or scene.action_description or "Character speaking to camera"
         else:
             frame_prompt = scene.start_frame_prompt or scene.action_description or "Character speaking to camera"
-        physical = character_traits.get("physical_features", "")
-        prompt_parts = ["ANTKF1STYLE", frame_prompt]
-        if physical:
-            prompt_parts.append(f"Character physical traits: {physical}")
-        prompt_parts.append(
-            "Satirical caricature style with oversized head, "
-            "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
-            "No text, no words, no letters, no logos, no watermarks on clothing or background."
-        )
-        full_prompt = " ".join(prompt_parts)
 
-        endpoint = "fal-ai/flux-lora"
-        self.logger.info(f"Scene {scene.scene_number}: Submitting to {endpoint}")
+        # Determine if face reference is needed
+        use_face_reference = getattr(scene, "face_visible", True) and scene.character_id is not None
 
-        fal_payload = {
-            "prompt": full_prompt,
-            "image_size": {"width": 1280, "height": 720},
-            "num_images": 1,
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
-            "loras": [{"path": self.FAL_LORA_URL, "scale": 1.0}],
-            "output_format": "png",
-        }
-        fal_key = settings.FAL_KEY
-        if not fal_key:
-            raise RuntimeError("FAL_KEY not configured")
+        # Upload face reference to fal CDN for character scenes
+        face_ref_url = None
+        if character and use_face_reference:
+            face_local = await self.storage.download_face_reference(character.name)
+            if face_local:
+                import fal_client
+                self.logger.info(f"Scene {scene.scene_number}: Uploading face reference for {character.name}")
+                face_ref_url = await asyncio.get_event_loop().run_in_executor(
+                    None, fal_client.upload_file, face_local
+                )
+                scene.face_reference_url = face_ref_url
+
+                # Link to CharacterImage record
+                from app.models.character import CharacterImage
+                ci_stmt = (
+                    select(CharacterImage)
+                    .where(CharacterImage.character_id == scene.character_id)
+                    .order_by(CharacterImage.is_primary.desc(), CharacterImage.id)
+                    .limit(1)
+                )
+                ci_result = await db.execute(ci_stmt)
+                ci = ci_result.scalar_one_or_none()
+                if ci:
+                    scene.character_image_id = ci.id
+
+        # Choose image backend based on scene properties
+        if not use_face_reference:
+            image_backend = "flux-lora"
+            self.logger.info(
+                f"Scene {scene.scene_number}: Using flux-lora "
+                f"(face_visible={getattr(scene, 'face_visible', True)}, scene_type={scene.scene_type})"
+            )
+        elif face_ref_url:
+            image_backend = "instant-character"
+            self.logger.info(
+                f"Scene {scene.scene_number}: Using instant-character "
+                f"(face_visible=True, face ref available for {character_name})"
+            )
+        else:
+            image_backend = "flux-lora"
+            self.logger.info(
+                f"Scene {scene.scene_number}: Using flux-lora fallback "
+                f"(face_visible=True but no face ref file for {character_name})"
+            )
+
+        # Build prompt based on backend
+        if image_backend == "flux-lora" and not use_face_reference:
+            # --- Landscape/action prompt with racing direction rules ---
+            racing_direction_rule = ""
+            racing_keywords = [
+                "car", "cars", "race", "racing", "overtake", "track", "circuit",
+                "straight", "corner", "grid", "cockpit", "onboard", "on-board",
+            ]
+            if any(kw in (frame_prompt or "").lower() for kw in racing_keywords):
+                pov_keywords = ["cockpit pov", "onboard", "on-board", "helmet cam", "driver pov"]
+                is_pov = any(kw in (frame_prompt or "").lower() for kw in pov_keywords)
+                if is_pov:
+                    racing_direction_rule = (
+                        "CRITICAL: This is a cockpit/driver POV shot looking forward through the halo. "
+                        "Any cars visible AHEAD must be driving AWAY from the camera — "
+                        "show their REAR wings, rear diffusers, and exhaust. "
+                        "The viewer sees the BACK of the cars in front, NOT their front. "
+                        "No car should face towards the camera. "
+                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES of the track only. "
+                        "There is NO kerb, barrier, or divider in the middle of the track. The track is one continuous surface. "
+                        "GRID SIZE: Maximum 22 cars on track (11 teams x 2 drivers). Never show more than 22 cars. "
+                    )
+                else:
+                    racing_direction_rule = (
+                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
+                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
+                        "NO car faces towards the camera. NO car faces the opposite direction. "
+                        "Cars ahead of the subject must show their REAR to the subject car. "
+                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
+                        "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
+                        "Maximum 22 cars on track (11 teams x 2 drivers). "
+                        "F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar above the driver, NOT a canopy or roof. "
+                    )
+            full_prompt = (
+                f"ANTKF1STYLE {racing_direction_rule} "
+                f"{frame_prompt} "
+                "Satirical caricature art style, dramatic lighting, vibrant colors. "
+                "No text, no words, no letters, no watermarks."
+            )
+        else:
+            # --- Character scene: rewrite close-ups + add traits ---
+            frame_prompt = re.sub(r'(?i)\bMEDIUM\s+CLOSE[- ]?UP\b', 'MEDIUM SHOT', frame_prompt)
+            frame_prompt = re.sub(r'(?i)\bEXTREME\s+CLOSE[- ]?UP\b', 'MEDIUM SHOT', frame_prompt)
+            frame_prompt = re.sub(r'(?i)\bCLOSE[- ]?UP\b', 'MEDIUM SHOT', frame_prompt)
+
+            physical = character_traits.get("physical_features", "")
+            prompt_parts = ["ANTKF1STYLE", "Full body from waist up, camera 3 meters away. Character MUST wear their team racing suit.", frame_prompt]
+            if episode_appearance:
+                prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
+            elif physical:
+                prompt_parts.append(f"Character physical traits: {physical}")
+            prompt_parts.append(
+                "Satirical caricature style with oversized head, "
+                "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
+                "Full head, hair, and shoulders must be visible in frame. Do not crop the top of the head. "
+                "Any vehicles visible MUST be Formula 1 open-cockpit cars in the character team livery. No road cars. "
+                "No text, no words, no letters, no logos, no watermarks on clothing or background."
+            )
+            full_prompt = " ".join(prompt_parts)
 
         start_time = datetime.utcnow()
 
-        async with httpx.AsyncClient(timeout=300) as client:
-            # Submit request
-            submit_resp = await client.post(
-                f"https://queue.fal.run/{endpoint}",
-                headers={"Authorization": f"Key {fal_key}", "Content-Type": "application/json"},
-                json=fal_payload,
+        # ---- Generate via instant-character ----
+        if image_backend == "instant-character" and face_ref_url:
+            import fal_client as _fal
+
+            ic_args = {
+                "prompt": full_prompt,
+                "image_url": face_ref_url,
+                "negative_prompt": (
+                    "cropped head, cut off head, cut off hair, top of head missing, "
+                    "forehead cropped, extreme close-up, tight crop, face filling frame, "
+                    "zoomed in, macro, portrait crop, chin to forehead only"
+                ),
+                "image_size": {"width": 1280, "height": 1280},
+                "num_inference_steps": 28,
+                "guidance_scale": 3.5,
+                "scale": 0.3,
+                "output_format": "png",
+                "loras": [{"path": self.FAL_LORA_URL, "scale": 1.0, "trigger_word": "ANTKF1STYLE"}],
+            }
+
+            self.logger.info(f"Scene {scene.scene_number}: Submitting to fal-ai/instant-character")
+
+            # Run synchronous fal_client.subscribe in executor to avoid blocking async event loop
+            import functools
+            ic_result = await asyncio.get_event_loop().run_in_executor(
+                None,
+                functools.partial(
+                    _fal.subscribe,
+                    "fal-ai/instant-character",
+                    arguments=ic_args,
+                    with_logs=True,
+                ),
             )
-            submit_resp.raise_for_status()
-            submit_data = submit_resp.json()
-            request_id = submit_data.get("request_id")
-            status_url = submit_data.get("status_url", f"https://queue.fal.run/{endpoint}/requests/{request_id}/status")
-            response_url = submit_data.get("response_url", f"https://queue.fal.run/{endpoint}/requests/{request_id}")
 
-            self.logger.info(f"Scene {scene.scene_number}: fal.ai request {request_id} submitted")
-
-            # Poll for completion (max 5 minutes)
-            for i in range(60):
-                await asyncio.sleep(5)
-                status_resp = await client.get(status_url, headers={"Authorization": f"Key {fal_key}"})
-                status_data = status_resp.json()
-                status = status_data.get("status", "")
-
-                if status == "COMPLETED":
-                    break
-                elif status in ("FAILED", "CANCELLED"):
-                    error_msg = status_data.get("error", "fal.ai generation failed")
-                    raise RuntimeError(f"fal.ai image: {error_msg}")
-
-                if (i + 1) % 6 == 0:
-                    self.logger.info(f"Scene {scene.scene_number}: Waiting for fal.ai... {(i+1)*5}s")
-            else:
-                raise RuntimeError("fal.ai image generation timed out after 5 minutes")
-
-            # Get result
-            result_resp = await client.get(response_url, headers={"Authorization": f"Key {fal_key}"})
-            result_resp.raise_for_status()
-            result_data = result_resp.json()
-
-            images = result_data.get("images", [])
-            if not images:
-                raise RuntimeError("fal.ai returned no images")
+            ic_images = ic_result.get("images", [])
+            if not ic_images:
+                raise RuntimeError("fal.ai instant-character returned no images")
 
             # Download image
-            img_resp = await client.get(images[0]["url"])
-            img_resp.raise_for_status()
+            async with httpx.AsyncClient(timeout=120) as dl:
+                img_resp = await dl.get(ic_images[0]["url"])
+                img_resp.raise_for_status()
+
+            tmp_path = os.path.join(
+                tempfile.gettempdir(),
+                f"f1_scene_{self.episode_id}_{scene.scene_number:02d}_{frame_type}.png",
+            )
+            os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+
+            # Crop from 1280x1280 to 1280x720 — keep top to preserve head/hair
+            from PIL import Image as PILImage
+            import io
+            img_full = PILImage.open(io.BytesIO(img_resp.content))
+            if img_full.height > 720:
+                img_cropped = img_full.crop((0, 0, img_full.width, 720))
+                img_cropped.save(tmp_path, "PNG")
+                self.logger.info(
+                    f"Scene {scene.scene_number}: Cropped {img_full.width}x{img_full.height} "
+                    f"-> {img_cropped.width}x{img_cropped.height}"
+                )
+            else:
+                with open(tmp_path, "wb") as f:
+                    f.write(img_resp.content)
+
+            cost = 0.04
+            endpoint_name = "fal-ai/instant-character"
+
+            scene.image_backend = "instant-character"
+            scene.instant_character_used = True
+            scene.lora_used = True
+
+        # ---- Generate via flux-lora ----
+        else:
+            endpoint_name = "fal-ai/flux-lora"
+            self.logger.info(f"Scene {scene.scene_number}: Submitting to {endpoint_name}")
+
+            fal_payload = {
+                "prompt": full_prompt,
+                "image_size": {"width": 1280, "height": 720},
+                "num_images": 1,
+                "num_inference_steps": 28,
+                "guidance_scale": 3.5,
+                "loras": [{"path": self.FAL_LORA_URL, "scale": 1.0}],
+                "output_format": "png",
+            }
+
+            async with httpx.AsyncClient(timeout=300) as client:
+                submit_resp = await client.post(
+                    f"https://queue.fal.run/{endpoint_name}",
+                    headers={"Authorization": f"Key {fal_key}", "Content-Type": "application/json"},
+                    json=fal_payload,
+                )
+                submit_resp.raise_for_status()
+                submit_data = submit_resp.json()
+                request_id = submit_data.get("request_id")
+                status_url = submit_data.get(
+                    "status_url",
+                    f"https://queue.fal.run/{endpoint_name}/requests/{request_id}/status",
+                )
+                response_url = submit_data.get(
+                    "response_url",
+                    f"https://queue.fal.run/{endpoint_name}/requests/{request_id}",
+                )
+
+                self.logger.info(f"Scene {scene.scene_number}: fal.ai request {request_id} submitted")
+
+                # Poll for completion (max 5 minutes)
+                for i in range(60):
+                    await asyncio.sleep(5)
+                    status_resp = await client.get(
+                        status_url, headers={"Authorization": f"Key {fal_key}"}
+                    )
+                    status_data = status_resp.json()
+                    gen_status = status_data.get("status", "")
+
+                    if gen_status == "COMPLETED":
+                        break
+                    elif gen_status in ("FAILED", "CANCELLED"):
+                        error_msg = status_data.get("error", "fal.ai generation failed")
+                        raise RuntimeError(f"fal.ai image: {error_msg}")
+
+                    if (i + 1) % 6 == 0:
+                        self.logger.info(
+                            f"Scene {scene.scene_number}: Waiting for fal.ai... {(i+1)*5}s"
+                        )
+                else:
+                    raise RuntimeError("fal.ai image generation timed out after 5 minutes")
+
+                # Get result
+                result_resp = await client.get(
+                    response_url, headers={"Authorization": f"Key {fal_key}"}
+                )
+                result_resp.raise_for_status()
+                result_data = result_resp.json()
+
+                images = result_data.get("images", [])
+                if not images:
+                    raise RuntimeError("fal.ai returned no images")
+
+                # Download image
+                img_resp = await client.get(images[0]["url"])
+                img_resp.raise_for_status()
+
+            tmp_path = os.path.join(
+                tempfile.gettempdir(),
+                f"f1_scene_{self.episode_id}_{scene.scene_number:02d}_{frame_type}.png",
+            )
+            os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+            with open(tmp_path, "wb") as f:
+                f.write(img_resp.content)
+
+            cost = 0.035
+            scene.image_backend = "flux-lora"
+            scene.lora_used = True
 
         generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-
-        # Save to temp file
-        tmp_path = os.path.join(
-            tempfile.gettempdir(),
-            f"f1_scene_{self.episode_id}_{scene.scene_number:02d}_{frame_type}.png",
-        )
-        os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
-        with open(tmp_path, "wb") as f:
-            f.write(img_resp.content)
 
         # Upload to MinIO
         image_storage_path = await self.storage.upload_scene_image(
@@ -1607,19 +1909,20 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             scene.source_image_path = image_storage_path
             scene.start_frame_path = image_storage_path
 
-        # Log cost (~$0.035/megapixel, 1280x720 = 0.92MP ≈ $0.035)
-        cost = 0.035
+        from decimal import Decimal as _Dec
+        scene.image_cost_usd = (scene.image_cost_usd or _Dec(0)) + _Dec(str(cost))
+
         await self._log_api_usage(
             db,
             provider=APIProvider.FAL_IMAGE,
-            endpoint=f"fal.ai/{endpoint}",
+            endpoint=endpoint_name,
             cost_usd=cost,
             response_time_ms=generation_time_ms,
         )
 
         self.logger.info(
             f"Scene {scene.scene_number}: fal.ai image generated in {generation_time_ms}ms "
-            f"(flux-lora, ${cost:.3f})"
+            f"({image_backend}, ${cost:.3f})"
         )
 
         return tmp_path
@@ -1628,6 +1931,29 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
     # ------------------------------------------------------------------
     # Phases 3-5 (unchanged)
     # ------------------------------------------------------------------
+
+    async def _update_total_costs(self, db: AsyncSession) -> None:
+        """Sum all scene image + video costs and update episode total."""
+        from decimal import Decimal
+        stmt = (
+            select(Scene)
+            .where(Scene.episode_id == self.episode_id)
+        )
+        result = await db.execute(stmt)
+        scenes = result.scalars().all()
+
+        total_image = sum((s.image_cost_usd or Decimal(0)) for s in scenes)
+        total_video = sum((s.video_cost_usd or Decimal(0)) for s in scenes)
+        total = total_image + total_video + (self.episode.anthropic_cost_usd or Decimal(0))
+
+        self.episode.total_cost_usd = total
+        await db.commit()
+        self.logger.info(
+            f"Episode costs: images=${float(total_image):.3f}, "
+            f"videos=${float(total_video):.3f}, "
+            f"script=${float(self.episode.anthropic_cost_usd or 0):.3f}, "
+            f"total=${float(total):.3f}"
+        )
 
     async def _stitch_video(self, db: AsyncSession) -> str:
         """Stitch all scene clips into final video."""

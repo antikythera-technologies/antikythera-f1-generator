@@ -27,7 +27,7 @@ from sqlalchemy import text
 
 from app.database import async_session_maker
 from app.services.image_generator import ImageGenerator
-from app.services.personality import find_personality_file, load_personality_traits
+from app.services.personality import load_personality_traits_from_db
 from app.services.storage import StorageService
 
 
@@ -102,8 +102,7 @@ async def main(episode_id: int, start_scene: int = 1, single_scene: int = 0):
                 continue
 
             # Load personality traits
-            pfile = find_personality_file(char_name)
-            traits = load_personality_traits(pfile) if pfile else {}
+            traits = load_personality_traits_from_db(character.personality) if character.personality else {}
             if not traits:
                 # Fallback: get basic info from DB
                 cr = await db.execute(text(

@@ -4,109 +4,85 @@
 
 ## What This Workspace Does
 
-The video generation pipeline -- 5 sequential phases that turn a race event into a 2-minute satirical F1 video. Each episode generates 24 x 5-second scenes.
+The video generation pipeline -- 5 sequential phases that turn a race event into a 2-minute satirical F1 video. Each episode generates ~26 x 5-second scenes.
 
 ## Pipeline Phases
 
-1. **Script Generation** -- Anthropic Haiku generates 24 scene scripts (dialogue, action, audio descriptions) given race context and character personalities.
-2. **Video Clip Generation** -- Two sub-phases, two engine options (LTX or Ovi):
-   - Phase 2a: Generate scene images via ComfyUI (Flux Dev fp8 + ANTKF1STYLE LoRA + PuLID).
-   - Phase 2b: Generate videos from images (LTX via ComfyUI, or Ovi via Gradio).
-   - Phase 2c: Generate TTS audio from dialogue (Edge TTS) and mux onto video clips (ffmpeg).
-3. **Stitching** -- ffmpeg concatenates 24 clips into final video (libx264, CRF 23, aac audio).
-4. **YouTube Upload** -- OAuth2 resumable upload with metadata (title, description, tags).
-5. **Cleanup** -- Delete MinIO assets older than 3 races.
+1. **Script Generation** -- Anthropic Haiku generates scene scripts (dialogue, action, audio descriptions, face_visible flags) given race context and character personalities.
+2. **Video Clip Generation** -- Three sub-phases:
+   - Phase 2a: Generate scene images via fal.ai (flux-lora OR instant-character based on scene type).
+   - Phase 2a-bis: Generate end frames for FLF-capable video backends.
+   - Phase 2b: Generate videos from images via configured fal.ai video backend.
+   - Phase 2c: Generate TTS audio (Edge TTS) and mux -- only for non-AV backends. Skipped when video backend produces native audio.
+3. **Stitching** -- ffmpeg concatenates all clips into final video (libx264, CRF 23, aac audio).
+4. **YouTube Upload** -- OAuth2 resumable upload with metadata (title, description, tags). Currently DISABLED (auto-upload off).
+5. **Cleanup** -- Delete MinIO assets older than retention policy.
 
-## Video Generators
+## Image Generation Routing (CRITICAL)
 
-Selected by `VIDEO_GENERATOR_DEFAULT` in `config.py` (currently `"ovi"` — LTX blocked as of 2026-03-12).
+The pipeline routes scene images to different fal.ai backends based on `face_visible` field:
 
-| Engine | File | Class | Output | Status |
-|--------|------|-------|--------|--------|
-| LTX | `../services/ltx_video_generator.py` | `LTXVideoGenerator` | .webm | BLOCKED — ComfyUI integration failed after 20h testing (2026-03-12) |
-| Ovi | `../services/ovi_video_generator.py` | `OviVideoGenerator` | .mp4 | **ACTIVE** — production engine |
+| Scene Property | Image Backend | What Happens |
+|---|---|---|
+| `face_visible=False` (ACTION_REPLAY, ESTABLISHING) | **flux-lora** | LoRA style only, racing direction rules, no character face |
+| `face_visible=True` + face ref exists | **instant-character** | Face ref + LoRA, identity preservation, scale=0.3, 1280x1280->720 crop |
+| `face_visible=True` + no face ref file | **flux-lora fallback** | LoRA + detailed prompt description |
 
-## GPU Sharing Model
+Additional image prompt features:
+- Close-up -> MEDIUM SHOT rewriting (prevents head cropping)
+- "Camera 3 meters away" framing guard for character scenes
+- Racing direction rules (all cars same direction, show rear wings)
+- POV/cockpit detection for in-car shots
+- Episode appearance/clothing consistency from episode-level metadata
+- Negative prompts for head cropping prevention (instant-character)
 
-ComfyUI and Ovi share 1x RTX A6000 48GB on RunPod pod `tims42v3eaqrz7`. They CANNOT run simultaneously.
+**RULE: Image generation routing MUST have feature parity between `video_pipeline.py::_get_scene_image_fal` and `jobs.py::_async_scene_image`. If one has a feature, the other must too.**
 
-- **Phase 2a**: ComfyUI generates images (Ovi stopped).
-- **Between phases**: Free ComfyUI VRAM via `POST /api/free`.
-- **Phase 2b (LTX)**: Same ComfyUI instance runs the LTX workflow.
-- **Phase 2b (Ovi)**: Start Ovi via GPU manager, generate videos via Gradio.
-- **GPU manager endpoints** (on ComfyUI port 19123): `/ovi/start`, `/ovi/stop`, `/ovi/status`, `/gpu/memory`.
+## Video Backends
 
-## RunPod Access
+Selected by `VIDEO_GENERATOR_DEFAULT` in `config.py`. 8 options:
 
-- Pod ID: `tims42v3eaqrz7`, GPU: RTX A6000 48GB
-- ComfyUI: port 19123 (proxy: `https://tims42v3eaqrz7-19123.proxy.runpod.net`)
-- Ovi: port 8888 (proxy: `https://tims42v3eaqrz7-8888.proxy.runpod.net`)
-- Startup: `bash /workspace/start-comfyui.sh` (NOT auto-started after pod restart)
-- Ovi MUST use `--cpu_offload` (without it, OOMs at inference)
-
-## Image Generation Settings
-
-- Model: Flux Dev fp8 + ANTKF1STYLE LoRA (strength 1.4) + PuLID (weight 0.7)
-- Trigger word: `ANTKF1STYLE`
-- Resolution: 768x1344 (portrait/characters), 1344x768 (landscape/scenes)
-- Steps: 20, sampler: euler/simple, CFG: 1.0
-- Face references: stored in MinIO `f1-characters/face-references/`, synced to ComfyUI before generation
-- CLIP text encode MUST use DualCLIPLoader output directly (NOT LoRA-modified clip)
-
-## LTX 2.3 Workflow (17 nodes)
-
-```
-CheckpointLoaderSimple -> CLIPTextEncode (pos/neg) -> LTXVConditioning -> EmptyLTXVLatentVideo
-  -> LTXVAddGuide (start frame, idx=0) -> LTXVAddGuide (end frame, idx=-1)
-  -> LTXVApplySTG -> STGGuiderAdvanced -> LTXVScheduler -> KSamplerSelect
-  -> RandomNoise -> SamplerCustomAdvanced -> LTXVSpatioTemporalTiledVAEDecode -> SaveWEBM
-```
-
-Node names that DO NOT exist (from old broken code -- never use these):
-`LTXVLoader`, `LTXVTextEncode`, `LTXVSampler`, `LTXVDecode`, `VHS_VideoCombine`
+| Backend | Model | Cost/clip | Status |
+|---------|-------|-----------|--------|
+| `fal-ovi` | fal.ai Ovi | $0.20 | Active |
+| `fal-ltx` | fal.ai LTX 2.3 | $0.30 | Available |
+| `fal-kling-std` | fal.ai Kling 3.0 Std | $0.42 | Available |
+| `fal-kling-pro` | fal.ai Kling 3.0 Pro | $0.42 | Available |
+| `fal-kling-o1-flf` | fal.ai Kling O1 (FLF) | $0.56 | Available |
+| `fal-vidu-q1-flf` | fal.ai Vidu Q1 (FLF) | $0.50 | Available |
+| `fal-wan-flf` | fal.ai Wan (FLF) | $0.50 | Available |
+| `ovi` | Self-hosted RunPod Ovi | ~free | Legacy (RunPod pod needed) |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `video_pipeline.py` | Orchestrator -- runs all 5 phases |
-| `../services/image_generator.py` | ComfyUI image gen (Flux + LoRA + PuLID) |
-| `../services/comfyui_client.py` | Shared HTTP client for ComfyUI API |
-| `../services/ltx_video_generator.py` | LTX 2.3 video engine |
-| `../services/ovi_video_generator.py` | Ovi video engine (**ACTIVE**) |
-| `../services/ovi_space_manager.py` | HuggingFace space lifecycle for Ovi |
+| `video_pipeline.py` | Orchestrator -- runs all 5 phases, routes image backends |
+| `flf_router.py` | Determines which scenes get end frames (FLF-capable backends) |
+| `../services/fal_video_generator.py` | fal.ai video gen (all fal-* backends) |
+| `../services/image_generator.py` | ComfyUI image gen (legacy, used for character caricatures) |
 | `../services/script_generator.py` | Anthropic Haiku script generation |
-| `../services/tts_generator.py` | Edge TTS speech generation + character voice mapping |
-| `../services/audio_mixer.py` | Mux TTS audio onto silent video clips |
+| `../services/tts_generator.py` | Edge TTS speech generation + 42 character voice mappings |
+| `../services/audio_mixer.py` | Mux TTS audio onto video clips via ffmpeg |
 | `../services/stitcher.py` | ffmpeg concatenation |
 | `../services/storage.py` | MinIO object storage |
-| `../services/personality.py` | Character personality trait loader |
-| `../config.py` | All settings (`VIDEO_GENERATOR_DEFAULT`, `LTX23_*`, `OVI_*`, `COMFYUI_*`) |
+| `../services/scene_validator.py` | Post-gen validation (ffmpeg screenshots + Claude Vision) |
+| `../jobs.py` | RQ job wrappers for scene regen, stitch, validate, YouTube upload |
+| `../worker.py` | RQ worker + scheduler poll (with duplicate episode prevention) |
+| `../config.py` | All settings |
 
-## Intermediate Commits
+## Duplicate Episode Prevention
 
-Pipeline commits to DB after Phase 2a (all images) and after each video clip in Phase 2b. This means:
-- If the process crashes during video gen, images are preserved.
-- Resume picks up where it left off (skips completed scenes).
+`worker.py::_process_pending_jobs` checks `Episode.race_id + episode_type` before creating. If an episode already exists, the scheduled job is marked COMPLETED and skipped. The API endpoint `episodes.py::generate_episode` also has this guard (409 conflict unless `force=true`).
 
 ## MinIO Storage Paths
 
 ```
 f1-scene-images/race_{id:03d}/episode_{id}/scene_{num:02d}_{suffix}.png
-f1-video-clips/race_{id:03d}/episode_{id}/scene_{num:02d}.{mp4|webm}
+f1-video-clips/race_{id:03d}/episode_{id}/scene_{num:02d}.mp4
 f1-final-videos/race_{id:03d}/episode_{id}/final.mp4
 ```
 
 ## Current Development State
 
-Manually testing scene generation one scene at a time:
-1. Generate scene -> review -> iterate on prompts/params
-2. Continue through all scenes
-3. Once satisfied, run full pipeline end-to-end
-4. Then automate with scheduler
-
-Image generation: tested and working.
-LTX video generation: BLOCKED — ComfyUI workflow fails to produce valid output after 20h of debugging. Parked for separate audit.
-Ovi video generation: **ACTIVE production engine.** Testing scene-by-scene starting with scene_01.
-Audio (TTS): Edge TTS with 42 character voice mappings. Controlled by `TTS_ENABLED` in config. Audio failures are now FATAL (no more silent error swallowing). Post-mux validation confirms audio track exists.
-Running gags: Fully wired into pipeline — fetched from DB, passed to script generator, usage tracked after generation.
+Pipeline image routing fixed (2026-03-23): instant-character for character scenes, flux-lora for action/landscape. Previously all scenes used flux-lora, requiring manual regeneration. Stitching works. YouTube upload disabled for now (manual review before publishing). Scene validation exists as separate job but not yet wired into pipeline flow.

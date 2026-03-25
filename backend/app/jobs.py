@@ -656,12 +656,20 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "show their REAR wings, rear diffusers, and exhaust. "
                         "The viewer sees the BACK of the cars in front, NOT their front. "
                         "No car should face towards the camera. "
+                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES of the track only. "
+                        "There is NO kerb, barrier, or divider in the middle of the track. The track is one continuous surface. "
+                        "GRID SIZE: Maximum 22 cars on track (11 teams x 2 drivers). Never show more than 22 cars. "
                     )
                 else:
                     racing_direction_rule = (
-                        "CRITICAL: All racing cars must drive in the same direction of the race. "
+                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
+                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
+                        "NO car faces towards the camera. NO car faces the opposite direction. "
                         "Cars ahead of the subject must show their REAR to the subject car. "
-                        "No car should face against the flow of the race — all cars travel the same way. "
+                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
+                        "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
+                        "Maximum 22 cars on track (11 teams x 2 drivers). "
+                        "F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar above the driver, NOT a canopy or roof. "
                     )
             # Enrich with team livery for racing scenes
             team_livery_text = ""
