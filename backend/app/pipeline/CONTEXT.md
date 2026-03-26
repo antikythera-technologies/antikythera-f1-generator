@@ -30,7 +30,8 @@ The pipeline routes scene images to different fal.ai backends based on `face_vis
 
 Additional image prompt features:
 - Close-up -> MEDIUM SHOT rewriting (prevents head cropping)
-- "Camera 3 meters away" framing guard for character scenes
+- "WIDE MEDIUM SHOT, camera 5 meters away" framing guard for character scenes
+- Team overalls fallback when no episode appearance set
 - Racing direction rules (all cars same direction, show rear wings)
 - POV/cockpit detection for in-car shots
 - Episode appearance/clothing consistency from episode-level metadata

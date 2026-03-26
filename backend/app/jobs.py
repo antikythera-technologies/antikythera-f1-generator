@@ -272,6 +272,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
     from app.database import async_session_maker
     from app.models.scene import Scene, SceneStatus
     from app.services.storage import StorageService
+    from app.services.fal_video_generator import build_f1_video_prompt as _build_f1_prompt
 
     logger.info(
         f"Scene {scene_number}: Starting video regeneration "
@@ -359,13 +360,28 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                         except Exception as e:
                             logger.warning(f"Scene {scene_number}: Could not load end frame for FLF: {e}")
 
+                # Load team data for F1 colour context in video prompt
+                _scene_team = None
+                if scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
+                    from app.models.team import Team as _TeamModel
+                    _scene_team = await db.get(_TeamModel, scene.character.team_id)
+
                 # Generate video
                 clip = await fal_gen.generate_clip(
                     scene_number=scene_number,
                     image_url=image_url,
-                    prompt=(scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
+                    prompt=_build_f1_prompt(
+                        (scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
+                        scene_type=str(scene.scene_type) if scene.scene_type else None,
+                        face_visible=bool(scene.face_visible),
+                        dialogue=scene.dialogue,
+                        team_name=_scene_team.name if _scene_team else None,
+                        car_description=_scene_team.car_description if _scene_team else None,
+                        overalls_description=_scene_team.overalls_description if _scene_team else None,
+                    ),
                     dialogue=scene.dialogue,
                     audio_description=rich_audio,
+                    face_visible=bool(scene.face_visible),
                     end_image_url=end_image_url,
                 )
                 video_local = clip.video_path
@@ -786,7 +802,8 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "negative_prompt": (
                             "cropped head, cut off head, cut off hair, top of head missing, "
                             "forehead cropped, extreme close-up, tight crop, face filling frame, "
-                            "zoomed in, macro, portrait crop, chin to forehead only"
+                            "zoomed in, macro, portrait crop, chin to forehead only, "
+                            "shoulder-up only, passport photo, mugshot, headshot, face only"
                         ),
                         "image_size": {"width": 1280, "height": 1280},
                         "num_inference_steps": 28,

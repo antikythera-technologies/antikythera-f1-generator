@@ -1080,7 +1080,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         Images are still generated via ComfyUI on RunPod. Only the video
         generation step uses fal.ai's hosted API. No GPU management needed.
         """
-        from app.services.fal_video_generator import FalVideoGenerator
+        from app.services.fal_video_generator import FalVideoGenerator, build_f1_video_prompt as _build_f1_prompt
 
         backend = settings.VIDEO_GENERATOR_DEFAULT
         fal_gen = FalVideoGenerator(backend=backend)
@@ -1241,6 +1241,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 local_image = image_paths[scene.scene_number]
                 image_url = await fal_gen.upload_image(local_image)
 
+                # Load team data for F1 colour context in video prompt
+                _scene_team = None
+                if scene.character_id:
+                    _char_for_team, _, _ = await self._load_character_context(db, scene)
+                    if _char_for_team and hasattr(_char_for_team, 'team_id') and _char_for_team.team_id:
+                        from app.models.team import Team as _TeamModel
+                        _scene_team = await db.get(_TeamModel, _char_for_team.team_id)
+
                 # Generate video
                 start_time = datetime.utcnow()
                 # Build rich audio prompt with character voice description
@@ -1275,9 +1283,18 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 clip = await fal_gen.generate_clip(
                     scene_number=scene.scene_number,
                     image_url=image_url,
-                    prompt=(scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
+                    prompt=_build_f1_prompt(
+                        (scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip(),
+                        scene_type=str(scene.scene_type) if scene.scene_type else None,
+                        face_visible=bool(scene.face_visible),
+                        dialogue=scene.dialogue,
+                        team_name=_scene_team.name if _scene_team else None,
+                        car_description=_scene_team.car_description if _scene_team else None,
+                        overalls_description=_scene_team.overalls_description if _scene_team else None,
+                    ),
                     dialogue=scene.dialogue,
                     audio_description=rich_audio,
+                    face_visible=bool(scene.face_visible),
                     end_image_url=end_image_url,
                 )
                 generation_time_ms = int(
@@ -1721,7 +1738,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             frame_prompt = re.sub(r'(?i)\bCLOSE[- ]?UP\b', 'MEDIUM SHOT', frame_prompt)
 
             physical = character_traits.get("physical_features", "")
-            prompt_parts = ["ANTKF1STYLE", "Full body from waist up, camera 3 meters away. Character MUST wear their team racing suit.", frame_prompt]
+            prompt_parts = ["ANTKF1STYLE", "WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
+            # If no episode_appearance, try team overalls as fallback
+            if not episode_appearance and character and hasattr(character, 'team_id') and character.team_id:
+                from app.models.team import Team as _Team
+                _team_obj = await db.get(_Team, character.team_id)
+                if _team_obj and _team_obj.overalls_description:
+                    episode_appearance = _team_obj.overalls_description
+
             if episode_appearance:
                 prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
             elif physical:
@@ -1729,7 +1753,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             prompt_parts.append(
                 "Satirical caricature style with oversized head, "
                 "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
-                "Full head, hair, and shoulders must be visible in frame. Do not crop the top of the head. "
+                "CRITICAL FRAMING: The character must be shown from the knees or waist up. "
+                "Full head, all hair, and both shoulders MUST be visible with clear space above the head. "
+                "NEVER crop the top of the head. Camera is far back, NOT close to the face. "
                 "Any vehicles visible MUST be Formula 1 open-cockpit cars in the character team livery. No road cars. "
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
@@ -1747,7 +1773,8 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 "negative_prompt": (
                     "cropped head, cut off head, cut off hair, top of head missing, "
                     "forehead cropped, extreme close-up, tight crop, face filling frame, "
-                    "zoomed in, macro, portrait crop, chin to forehead only"
+                    "zoomed in, macro, portrait crop, chin to forehead only, "
+                    "shoulder-up only, passport photo, mugshot, headshot, face only"
                 ),
                 "image_size": {"width": 1280, "height": 1280},
                 "num_inference_steps": 28,
@@ -1786,7 +1813,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             )
             os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
 
-            # Crop from 1280x1280 to 1280x720 — keep top to preserve head/hair
+            # Crop from 1280x1280 to 1280x720 — keep top to preserve head/hair — keep top to preserve head/hair
             from PIL import Image as PILImage
             import io
             img_full = PILImage.open(io.BytesIO(img_resp.content))

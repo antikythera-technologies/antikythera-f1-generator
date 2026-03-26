@@ -153,6 +153,88 @@ class FalVideoClip:
     seed: Optional[int] = None
 
 
+
+def build_f1_video_prompt(
+    video_prompt: str,
+    scene_type: str | None = None,
+    face_visible: bool = False,
+    dialogue: str | None = None,
+    team_name: str | None = None,
+    car_description: str | None = None,
+    overalls_description: str | None = None,
+) -> str:
+    """Wrap a video prompt with Formula 1 context and team colours.
+
+    This is an F1 series. Every video prompt MUST reinforce the F1 environment
+    and use the correct team colours from the database.
+    """
+    parts = []
+
+    st = (scene_type or "").upper()
+    # Strip enum prefixes like "SceneType."
+    if "." in st:
+        st = st.split(".")[-1]
+
+    # Team colour context — injected from DB
+    team_colour_ctx = ""
+    if team_name and car_description:
+        team_colour_ctx = (
+            f"This is the {team_name} garage. "
+            f"Team car: {car_description}. "
+        )
+        if overalls_description:
+            team_colour_ctx += f"Driver wears: {overalls_description}. "
+        team_colour_ctx += (
+            f"All colours in this scene must match {team_name} branding. "
+        )
+
+    if st in ("TALKING_HEAD", "TWO_SHOT", "OVER_THE_SHOULDER", "REACTION"):
+        parts.append(
+            f"FORMULA 1 PIT GARAGE SETTING. {team_colour_ctx}"
+            "Modern Formula 1 team garage with carbon-fibre walls, "
+            "LED screens, and team branding."
+        )
+    elif st == "PODIUM":
+        parts.append(
+            f"FORMULA 1 PODIUM. {team_colour_ctx}"
+            "Official F1 podium with sponsor boards, "
+            "champagne, and grandstands visible."
+        )
+    elif st == "ACTION_REPLAY":
+        car_ctx = f"Cars on track include: {car_description}. " if car_description else ""
+        parts.append(
+            f"FORMULA 1 RACING. {car_ctx}"
+            "Open-cockpit Formula 1 single-seater cars with exposed wheels, "
+            "rear wings, front wings, and halo device. "
+            "All cars drive in the same direction."
+        )
+    elif st in ("ESTABLISHING", "TITLE_CARD"):
+        parts.append(
+            "FORMULA 1 CIRCUIT. "
+            "Official F1 track with grandstands and sponsor hoardings."
+        )
+    else:
+        parts.append(f"FORMULA 1 ENVIRONMENT. {team_colour_ctx}")
+
+    parts.append(video_prompt)
+
+    parts.append(
+        "CRITICAL: Maintain the exact clothing, setting, and vehicles "
+        "from the source image throughout the entire video. "
+        "Only Formula 1 open-cockpit cars visible. "
+        "NO road cars, NO GT cars, NO closed-cockpit vehicles. "
+        "Do not introduce new vehicles or buildings not in the source image."
+    )
+
+    if dialogue and face_visible:
+        parts.append(
+            "Character mouth is clearly opening and closing, "
+            "lips visibly forming each word as they speak."
+        )
+
+    return " ".join(parts)
+
+
 class FalVideoGenerator:
     """Generate video clips via fal.ai hosted API.
 
@@ -205,6 +287,7 @@ class FalVideoGenerator:
         seed: Optional[int] = None,
         duration: Optional[int] = None,
         end_image_url: Optional[str] = None,
+        face_visible: bool = True,
     ) -> FalVideoClip:
         """Generate a video clip from image + prompt via fal.ai.
 
@@ -227,9 +310,10 @@ class FalVideoGenerator:
                 dialogue, base_duration=5, backend=self.backend.value
             )
         if duration > 5:
+            _dlg_preview = (dialogue or "")[:50]
             logger.info(
                 f"Scene {scene_number}: Extended duration to {duration}s "
-                f"for dialogue: {dialogue[:50]}..."
+                f"for dialogue: {_dlg_preview}..."
             )
 
         arguments = self._build_arguments(
@@ -240,6 +324,7 @@ class FalVideoGenerator:
             seed=seed,
             duration=duration,
             end_image_url=end_image_url,
+            face_visible=face_visible,
         )
 
         logger.info(
@@ -360,6 +445,7 @@ class FalVideoGenerator:
         seed: Optional[int],
         duration: int = 5,
         end_image_url: Optional[str] = None,
+        face_visible: bool = True,
     ) -> dict:
         """Build fal.ai API arguments for the selected backend."""
         if self.backend == FalBackend.OVI:
@@ -369,7 +455,7 @@ class FalVideoGenerator:
         elif self.backend == FalBackend.LTX:
             return self._args_ltx(
                 image_url, prompt, dialogue, audio_description, seed, duration,
-                end_image_url=end_image_url,
+                end_image_url=end_image_url, face_visible=face_visible,
             )
         elif self.backend == FalBackend.KLING_O1_FLF:
             return self._args_kling_o1_flf(
@@ -399,11 +485,17 @@ class FalVideoGenerator:
             args["seed"] = seed
         return args
 
-    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None):
+    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None, face_visible=True):
         """Build LTX 2.3 arguments with native audio generation."""
-        if dialogue:
-            # Dialogue LEADS the prompt so LTX animates speaking, not just reacting
-            full_prompt = f'Character speaks directly to camera: "{dialogue}" {prompt}'
+        if dialogue and face_visible:
+            # Character scene — lip movement instruction
+            full_prompt = (
+                f'Character speaks directly to camera with mouth clearly moving, '
+                f'lips visibly forming each word: "{dialogue}" {prompt}'
+            )
+        elif dialogue and not face_visible:
+            # Action/landscape scene — dialogue is voiceover narration, not on-screen speech
+            full_prompt = f'Voiceover narration: "{dialogue}" {prompt}'
         else:
             full_prompt = prompt
 

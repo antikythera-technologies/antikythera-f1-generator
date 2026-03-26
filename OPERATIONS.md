@@ -124,7 +124,7 @@ PHASE 5 — CLEANUP (old assets beyond retention policy)
 - **instant-character over flux-general**: flux-general's IP-Adapter bleeds face into background. instant-character preserves identity at scale=0.3.
 - **flux-lora for action shots**: No face needed, cheaper, faster. Racing direction rules keep cars pointing correctly.
 - **1280x1280 → 720 crop**: Square gen gives headroom, crop to 16:9 preserves head/hair.
-- **Close-up rewriting**: instant-character zooms into face. MEDIUM SHOT + "3m away" prevents extreme close-ups.
+- **Close-up rewriting**: instant-character zooms into face. WIDE MEDIUM SHOT + "5m away" + CRITICAL FRAMING prevents extreme close-ups.
 - **LTX 2.3 blocked**: ComfyUI integration failed after 20h (2026-03-12). Ovi is active engine.
 - **YouTube auto-upload disabled**: Manual review until pipeline quality validated.
 - **Team livery descriptions in DB**: Injected into image prompts for correct car colours.
