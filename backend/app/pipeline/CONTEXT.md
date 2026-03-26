@@ -84,6 +84,17 @@ f1-video-clips/race_{id:03d}/episode_{id}/scene_{num:02d}.mp4
 f1-final-videos/race_{id:03d}/episode_{id}/final.mp4
 ```
 
+## Video Prompt F1 Context (CRITICAL)
+
+Every video prompt is wrapped via `build_f1_video_prompt()` in `fal_video_generator.py`. This injects:
+- Scene-type-specific F1 environment (pit garage, podium, racing circuit)
+- Team colours from DB (car_description, overalls_description)
+- Anti-drift footer: "Maintain exact clothing/setting, only F1 open-cockpit cars"
+- Lip movement instruction (only when face_visible=True)
+- Voiceover narration prefix (when face_visible=False + dialogue exists — prevents hallucinated faces in cockpit/action scenes)
+
+**RULE: Video prompt wrapping MUST have feature parity between `video_pipeline.py::_generate_video_clips_fal` and `jobs.py::_async_scene_video`.**
+
 ## Current Development State
 
-Pipeline image routing fixed (2026-03-23): instant-character for character scenes, flux-lora for action/landscape. Previously all scenes used flux-lora, requiring manual regeneration. Stitching works. YouTube upload disabled for now (manual review before publishing). Scene validation exists as separate job but not yet wired into pipeline flow.
+Pipeline video prompts fixed (2026-03-26): All video prompts now include F1 context, team colours from DB, and correct dialogue handling (face_visible controls lip movement vs voiceover narration). Image routing fixed (2026-03-23): instant-character for character scenes, flux-lora for action/landscape. Stitching works. YouTube upload disabled for now (manual review before publishing).
