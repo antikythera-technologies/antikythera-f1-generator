@@ -735,8 +735,8 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
 
             physical = character_traits.get("physical_features", "")
             prompt_parts = ["WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
-            # If no episode_appearance, try team overalls as fallback
-            if not episode_appearance and scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
+            # Team overalls from DB are ground truth — always prefer over LLM-generated appearance
+            if scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
                 from app.models.team import Team
                 team_obj = await db.get(Team, scene.character.team_id)
                 if team_obj and team_obj.overalls_description:

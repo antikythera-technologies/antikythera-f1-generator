@@ -225,7 +225,11 @@ def build_f1_video_prompt(
         "from the source image throughout the entire video. "
         "Only Formula 1 open-cockpit cars visible. "
         "NO road cars, NO GT cars, NO closed-cockpit vehicles. "
-        "Do not introduce new vehicles or buildings not in the source image."
+        "Do not introduce new vehicles or buildings not in the source image. "
+        "IMPORTANT: This is an ANIMATED VIDEO, not a still image. "
+        "There MUST be visible motion throughout — characters gesturing and moving, "
+        "cars racing with speed, camera panning or tracking. "
+        "Nothing should be static or frozen."
     )
 
     if dialogue and face_visible:

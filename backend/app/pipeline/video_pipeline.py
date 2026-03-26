@@ -1790,8 +1790,8 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
 
             physical = character_traits.get("physical_features", "")
             prompt_parts = ["WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
-            # If no episode_appearance, try team overalls as fallback
-            if not episode_appearance and character and hasattr(character, 'team_id') and character.team_id:
+            # Team overalls from DB are ground truth — always prefer over LLM-generated appearance
+            if character and hasattr(character, 'team_id') and character.team_id:
                 from app.models.team import Team as _Team
                 _team_obj = await db.get(_Team, character.team_id)
                 if _team_obj and _team_obj.overalls_description:
