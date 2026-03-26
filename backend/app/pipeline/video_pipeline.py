@@ -1364,7 +1364,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     "fal-wan-flf": 0.50,
                 }
                 cost = fal_cost_map.get(backend, 0.20)
-                scene.video_cost_usd = (scene.video_cost_usd or _VDec(0)) + _VDec(str(cost))
+                scene.video_cost_usd = _VDec(str(cost))  # Latest generation cost only
                 provider_map = {
                     "fal-ovi": APIProvider.FAL_OVI,
                     "fal-ltx": APIProvider.FAL_LTX,

@@ -307,6 +307,8 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
         try:
             scene.status = SceneStatus.GENERATING
             scene.generation_started_at = datetime.utcnow()
+            # Reset costs for this regeneration — old costs are sunk
+            scene.video_cost_usd = Decimal(0)
             await db.flush()
 
             if backend.startswith("fal-"):
@@ -760,6 +762,8 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             started_at = datetime.utcnow()
             scene.status = SceneStatus.GENERATING
             scene.generation_started_at = started_at
+            # Reset costs for this regeneration — old costs are sunk
+            scene.image_cost_usd = Decimal(0)
             await db.flush()
 
             # Upload face reference to fal CDN — only for character scenes
