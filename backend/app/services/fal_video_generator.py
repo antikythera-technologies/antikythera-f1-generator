@@ -211,7 +211,9 @@ def build_f1_video_prompt(
     elif st in ("ESTABLISHING", "TITLE_CARD"):
         parts.append(
             "FORMULA 1 CIRCUIT. "
-            "Official F1 track with grandstands and sponsor hoardings."
+            "Official F1 track with grandstands and sponsor hoardings. "
+            "WIDE LANDSCAPE SHOT ONLY. No close-up faces. No people in foreground. "
+            "All people are distant background figures only."
         )
     else:
         parts.append(f"FORMULA 1 ENVIRONMENT. {team_colour_ctx}")
@@ -501,7 +503,12 @@ class FalVideoGenerator:
         elif dialogue and not face_visible:
             # Action/landscape scene — voiceover narration with accent direction
             voice_clause = f' in {voice_description}' if voice_description else ''
-            full_prompt = f'Voiceover narration{voice_clause}: "{dialogue}" {prompt}'
+            full_prompt = (
+                f'Voiceover narration{voice_clause}: "{dialogue}" {prompt} '
+                f'The narration is OFF-SCREEN audio only. '
+                f'Do NOT show any person speaking. No close-up faces. '
+                f'Keep the camera on the landscape/environment.'
+            )
         else:
             full_prompt = prompt
 
