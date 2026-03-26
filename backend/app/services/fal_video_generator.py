@@ -510,7 +510,7 @@ class FalVideoGenerator:
             "image_url": image_url,
             "num_inference_steps": 30,
             "generate_audio": True,
-            "duration": max(6, duration if duration % 2 == 0 else duration + 1),  # LTX: min 6, must be even
+            "duration": min(10, max(6, duration if duration % 2 == 0 else duration + 1)),  # LTX: 6, 8, or 10 only
         }
         if end_image_url is not None:
             args["end_image_url"] = end_image_url
