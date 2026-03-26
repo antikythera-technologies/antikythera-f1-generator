@@ -688,6 +688,24 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                         "Maximum 22 cars on track (11 teams x 2 drivers). "
                         "F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar above the driver, NOT a canopy or roof. "
                     )
+            # For ALL non-face scenes: enforce F1 car count
+            # ESTABLISHING shots: focus on environment, minimal cars
+            scene_type_upper = (getattr(scene, 'scene_type', '') or '').upper()
+            if scene_type_upper in ('ESTABLISHING', 'TITLE_CARD'):
+                racing_direction_rule += (
+                    "IMPORTANT: This is an atmospheric/establishing shot. "
+                    "Focus on the ENVIRONMENT — circuit, skyline, sunset, paddock. "
+                    "Show at most 3-5 cars in the background, NOT a full grid. "
+                    "Cars are secondary to the setting. "
+                    "F1 has only 22 cars total (11 teams x 2). NEVER show more than 22 cars. "
+                )
+            elif not racing_direction_rule:
+                # Non-racing, non-establishing: still cap car count
+                racing_direction_rule = (
+                    "F1 has exactly 22 cars (11 teams x 2 drivers). "
+                    "NEVER show more than 22 cars in any scene. "
+                )
+
             # Enrich with team livery for racing scenes
             team_livery_text = ""
             if scene.character_id and scene.character:
