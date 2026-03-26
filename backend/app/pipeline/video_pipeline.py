@@ -201,23 +201,44 @@ class VideoPipeline:
             for c in characters
         ]
 
-        # Look up next race for outro teaser
+        # Look up next session for outro teaser — calendar-aware
+        self._next_race_info = None
         if self.race:
-            next_race_stmt = (
-                select(Race)
-                .where(Race.round_number == self.race.round_number + 1)
-                .where(Race.season == self.race.season)
-            )
-            next_race_result = await db.execute(next_race_stmt)
-            next_race = next_race_result.scalar_one_or_none()
-            if next_race:
-                sprint_tag = " (Sprint Weekend)" if next_race.is_sprint_weekend else ""
-                self._next_race_info = f"{next_race.race_name} in {next_race.country}{sprint_tag}"
-                self.logger.info(f"Next race: {self._next_race_info}")
+            ep_type = self.episode.episode_type if self.episode else ""
+            if ep_type in ("post-sprint",):
+                # Sprint race done → next is qualifying/main race at SAME circuit
+                self._next_race_info = (
+                    f"{self.race.race_name} Qualifying and Main Race "
+                    f"at {self.race.circuit_name or self.race.country}"
+                )
+            elif ep_type in ("post-fp2", "post-fp1"):
+                # Practice done → next is qualifying at same circuit
+                self._next_race_info = (
+                    f"{self.race.race_name} Qualifying "
+                    f"at {self.race.circuit_name or self.race.country}"
+                )
+            elif ep_type in ("post-qualifying",):
+                # Qualifying done → next is race at same circuit
+                self._next_race_info = (
+                    f"{self.race.race_name} Race "
+                    f"at {self.race.circuit_name or self.race.country}"
+                )
             else:
-                self._next_race_info = None
-        else:
-            self._next_race_info = None
+                # Post-race or unknown → next is the next round on the calendar
+                next_race_stmt = (
+                    select(Race)
+                    .where(Race.round_number == self.race.round_number + 1)
+                    .where(Race.season == self.race.season)
+                )
+                next_race_result = await db.execute(next_race_stmt)
+                next_race = next_race_result.scalar_one_or_none()
+                if next_race:
+                    sprint_tag = " (Sprint Weekend)" if next_race.is_sprint_weekend else ""
+                    self._next_race_info = (
+                        f"{next_race.race_name} in {next_race.country}{sprint_tag}"
+                    )
+            if self._next_race_info:
+                self.logger.info(f"Next session: {self._next_race_info}")
 
         # Build race context + load actual results from DB
         race_context = self._build_race_context()
@@ -1730,10 +1751,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     )
                 else:
                     racing_direction_rule = (
-                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
-                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
-                        "NO car faces towards the camera. NO car faces the opposite direction. "
-                        "Cars ahead of the subject must show their REAR to the subject car. "
+                        "ALL cars MUST face the SAME direction, racing TOWARDS the camera. "
+                        "Show the FRONT of every car — front wings, nose cones, halo devices, front tyres. "
+                        "ALL cars point the same way. NO car faces the opposite direction to the others. "
                         "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
                         "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
                         "Maximum 22 cars on track (11 teams x 2 drivers). "

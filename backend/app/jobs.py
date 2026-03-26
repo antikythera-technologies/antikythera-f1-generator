@@ -680,10 +680,9 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                     )
                 else:
                     racing_direction_rule = (
-                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
-                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
-                        "NO car faces towards the camera. NO car faces the opposite direction. "
-                        "Cars ahead of the subject must show their REAR to the subject car. "
+                        "ALL cars MUST face the SAME direction, racing TOWARDS the camera. "
+                        "Show the FRONT of every car — front wings, nose cones, halo devices, front tyres. "
+                        "ALL cars point the same way. NO car faces the opposite direction to the others. "
                         "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
                         "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
                         "Maximum 22 cars on track (11 teams x 2 drivers). "
