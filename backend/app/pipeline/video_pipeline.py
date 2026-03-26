@@ -1251,10 +1251,23 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
 
                 # Generate video
                 start_time = datetime.utcnow()
-                # Build rich audio prompt with character voice description
+                # Extract voice/accent from character personality for speech synthesis
                 voice_desc = None
-                if scene.character_id:
-                    _, char_traits, _ = await self._load_character_context(db, scene)
+                _voice_char_id = scene.character_id or scene.voiceover_character_id
+                if _voice_char_id:
+                    if scene.character_id:
+                        _, char_traits, _ = await self._load_character_context(db, scene)
+                    else:
+                        # Voiceover narrator (e.g. Croft on ACTION_REPLAY)
+                        from app.models.character import Character as _CharModel
+                        _vo_char = await db.get(_CharModel, _voice_char_id)
+                        char_traits = {}
+                        if _vo_char and _vo_char.personality:
+                            try:
+                                from app.services.personality import load_personality_traits_from_db
+                                char_traits = load_personality_traits_from_db(_vo_char.personality)
+                            except Exception as e:
+                                self.logger.warning(f"Scene {scene.scene_number}: Could not parse voiceover personality: {e}")
                     accent = char_traits.get("speaking_style", {}).get("accent_hints") if isinstance(char_traits.get("speaking_style"), dict) else None
                     tone = char_traits.get("speaking_style", {}).get("tone") if isinstance(char_traits.get("speaking_style"), dict) else None
                     nationality = char_traits.get("nationality")
@@ -1267,8 +1280,8 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                         voice_parts.append(tone)
                     voice_desc = ", ".join(voice_parts) if voice_parts else None
 
-                from app.services.fal_video_generator import FalVideoGenerator as FVG
-                rich_audio = FVG.build_audio_prompt(scene.audio_description, voice_desc)
+                # Audio prompt: ambient sounds only (voice goes into video prompt)
+                rich_audio = scene.audio_description
 
                 # Upload end frame if FLF available for this scene
                 end_image_url = None
@@ -1296,6 +1309,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     audio_description=rich_audio,
                     face_visible=bool(scene.face_visible),
                     end_image_url=end_image_url,
+                    voice_description=voice_desc,
                 )
                 generation_time_ms = int(
                     (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -1738,7 +1752,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             frame_prompt = re.sub(r'(?i)\bCLOSE[- ]?UP\b', 'MEDIUM SHOT', frame_prompt)
 
             physical = character_traits.get("physical_features", "")
-            prompt_parts = ["ANTKF1STYLE", "WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
+            prompt_parts = ["WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
             # If no episode_appearance, try team overalls as fallback
             if not episode_appearance and character and hasattr(character, 'team_id') and character.team_id:
                 from app.models.team import Team as _Team

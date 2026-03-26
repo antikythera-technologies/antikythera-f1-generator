@@ -288,6 +288,7 @@ class FalVideoGenerator:
         duration: Optional[int] = None,
         end_image_url: Optional[str] = None,
         face_visible: bool = True,
+        voice_description: Optional[str] = None,
     ) -> FalVideoClip:
         """Generate a video clip from image + prompt via fal.ai.
 
@@ -325,6 +326,7 @@ class FalVideoGenerator:
             duration=duration,
             end_image_url=end_image_url,
             face_visible=face_visible,
+            voice_description=voice_description,
         )
 
         logger.info(
@@ -446,6 +448,7 @@ class FalVideoGenerator:
         duration: int = 5,
         end_image_url: Optional[str] = None,
         face_visible: bool = True,
+        voice_description: Optional[str] = None,
     ) -> dict:
         """Build fal.ai API arguments for the selected backend."""
         if self.backend == FalBackend.OVI:
@@ -456,6 +459,7 @@ class FalVideoGenerator:
             return self._args_ltx(
                 image_url, prompt, dialogue, audio_description, seed, duration,
                 end_image_url=end_image_url, face_visible=face_visible,
+                voice_description=voice_description,
             )
         elif self.backend == FalBackend.KLING_O1_FLF:
             return self._args_kling_o1_flf(
@@ -485,17 +489,19 @@ class FalVideoGenerator:
             args["seed"] = seed
         return args
 
-    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None, face_visible=True):
+    def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None, face_visible=True, voice_description=None):
         """Build LTX 2.3 arguments with native audio generation."""
         if dialogue and face_visible:
-            # Character scene — lip movement instruction
+            # Character scene — lip movement + voice/accent direction
+            voice_clause = f' with {voice_description}' if voice_description else ''
             full_prompt = (
-                f'Character speaks directly to camera with mouth clearly moving, '
+                f'Character speaks{voice_clause} directly to camera with mouth clearly moving, '
                 f'lips visibly forming each word: "{dialogue}" {prompt}'
             )
         elif dialogue and not face_visible:
-            # Action/landscape scene — dialogue is voiceover narration, not on-screen speech
-            full_prompt = f'Voiceover narration: "{dialogue}" {prompt}'
+            # Action/landscape scene — voiceover narration with accent direction
+            voice_clause = f' in {voice_description}' if voice_description else ''
+            full_prompt = f'Voiceover narration{voice_clause}: "{dialogue}" {prompt}'
         else:
             full_prompt = prompt
 

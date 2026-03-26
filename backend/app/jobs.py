@@ -283,7 +283,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
         # Load scene with character
         stmt = (
             select(Scene)
-            .options(selectinload(Scene.character))
+            .options(selectinload(Scene.character), selectinload(Scene.voiceover_character))
             .where(Scene.episode_id == episode_id, Scene.scene_number == scene_number)
         )
         result = await db.execute(stmt)
@@ -324,12 +324,15 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                 # Upload to fal CDN
                 image_url = await fal_gen.upload_image(local_image)
 
-                # Build rich audio prompt with character voice description
+                # Extract voice/accent for speech synthesis (goes into video prompt)
+                # Audio prompt is ambient sounds only
                 rich_audio = scene.audio_description
-                if scene.character and scene.character.personality:
+                _voice_desc = None
+                _voice_char = scene.character or getattr(scene, 'voiceover_character', None)
+                if _voice_char and _voice_char.personality:
                     try:
                         import json as _json
-                        _p = _json.loads(scene.character.personality) if isinstance(scene.character.personality, str) else scene.character.personality
+                        _p = _json.loads(_voice_char.personality) if isinstance(_voice_char.personality, str) else _voice_char.personality
                         _ss = _p.get("speaking_style", {})
                         _nationality = _p.get("nationality", "")
                         _accent = _ss.get("accent_hints", "") if isinstance(_ss, dict) else ""
@@ -340,9 +343,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                             _tone,
                         ] if p]
                         _voice_desc = ", ".join(_voice_parts) if _voice_parts else None
-                        from app.services.fal_video_generator import FalVideoGenerator as _FVG
-                        rich_audio = _FVG.build_audio_prompt(scene.audio_description, _voice_desc)
-                        logger.debug(f"Scene {scene_number}: Audio prompt: {rich_audio[:100]}...")
+                        logger.debug(f"Scene {scene_number}: Voice desc: {_voice_desc}")
                     except Exception as e:
                         logger.warning(f"Scene {scene_number}: Could not build voice prompt: {e}")
 
@@ -383,6 +384,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                     audio_description=rich_audio,
                     face_visible=bool(scene.face_visible),
                     end_image_url=end_image_url,
+                    voice_description=_voice_desc,
                 )
                 video_local = clip.video_path
 
@@ -713,7 +715,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
             frame_prompt = _re.sub(r'(?i)CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
 
             physical = character_traits.get("physical_features", "")
-            prompt_parts = ["ANTKF1STYLE", "WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
+            prompt_parts = ["WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
             # If no episode_appearance, try team overalls as fallback
             if not episode_appearance and scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
                 from app.models.team import Team

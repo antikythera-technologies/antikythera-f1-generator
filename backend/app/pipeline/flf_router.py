@@ -7,13 +7,13 @@ for first-last-frame video generation. Zero external dependencies.
 # Scene types eligible for FLF (character-focused, benefit from smooth transitions)
 FLF_ELIGIBLE = {
     "REACTION",
+    "ACTION_REPLAY",
 }
 
 # Scene types that should NEVER get FLF (non-character, establishing shots)
 FLF_INELIGIBLE = {
     "TITLE_CARD",
     "ESTABLISHING",
-    "ACTION_REPLAY",
 }
 
 
