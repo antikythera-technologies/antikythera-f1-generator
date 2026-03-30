@@ -298,7 +298,7 @@ class VideoPipeline:
                     {
                         "title": a.title,
                         "summary": a.summary or "",
-                        "source": a.source_name or "",
+                        "source": str(a.source_id or ""),
                         "published_at": a.published_at.isoformat() if a.published_at else "",
                     }
                     for a in articles
@@ -313,8 +313,10 @@ class VideoPipeline:
         storylines_context = None
         try:
             from app.models.storyline import Storyline
+            from sqlalchemy.orm import selectinload
             storylines_stmt = (
                 select(Storyline)
+                .options(selectinload(Storyline.characters))
                 .where(Storyline.is_active == True, Storyline.status == "active")
                 .order_by(Storyline.priority.desc())
             )
