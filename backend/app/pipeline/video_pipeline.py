@@ -1154,6 +1154,11 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         fal_gen = FalVideoGenerator(backend=backend)
 
         # ----- Phase 2a: Generate all scene images via fal.ai -----
+        # CRITICAL: Commit scenes from Phase 1 so _async_scene_image (which
+        # opens its own DB session) can find them. Without this commit,
+        # scenes are only flushed (visible in THIS session) but not committed
+        # (visible to OTHER sessions), causing "Scene X not found" errors.
+        await db.commit()
         self.logger.info("PHASE 2a: Image Generation (fal.ai)")
 
         from app.jobs import _async_scene_image
