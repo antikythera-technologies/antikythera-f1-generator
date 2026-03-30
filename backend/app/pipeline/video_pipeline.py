@@ -330,7 +330,7 @@ class VideoPipeline:
                         "comedy_notes": s.comedy_notes or "",
                         "current_beat": s.current_beat,
                         "plot_points": s.plot_points or [],
-                        "character_slugs": s.character_slugs or [],
+                        "character_slugs": [c.name for c in s.characters] if s.characters else [],
                     }
                     for s in active_storylines
                 ]

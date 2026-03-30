@@ -409,7 +409,7 @@ class NewsScraperService:
             context = ArticleContext.RACE_WEEKEND
             time_range = timedelta(hours=48)
         
-        since = datetime.now(SAST) - time_range
+        since = datetime.utcnow() - time_range  # scraped_at is naive UTC
         
         query = (
             select(NewsArticle)
