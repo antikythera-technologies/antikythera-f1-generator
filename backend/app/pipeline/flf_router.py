@@ -4,9 +4,11 @@ Pure function that decides which scenes should have end frames generated
 for first-last-frame video generation. Zero external dependencies.
 """
 
-# Scene types eligible for FLF (character-focused, benefit from smooth transitions)
+# Scene types eligible for FLF — currently only ACTION_REPLAY.
+# Character scenes (REACTION, TALKING_HEAD etc.) don't work well with FLF
+# because start/end frame characters often look different.
+# ACTION_REPLAY works because it's cars on track — consistent subject matter.
 FLF_ELIGIBLE = {
-    "REACTION",
     "ACTION_REPLAY",
 }
 

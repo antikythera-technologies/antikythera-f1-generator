@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -45,6 +46,229 @@ class EpisodeScript:
     character_appearances: dict = field(default_factory=dict)
 
 
+def sanitize_scene_prompts(scene: SceneScript) -> SceneScript:
+    """Sanitize LLM-generated prompts to enforce racing direction and car count rules.
+
+    The LLM sometimes generates prompts that violate F1 visual rules (cars facing
+    camera, too many cars on track). This fixes violations at source so the
+    image/video pipelines receive clean, non-contradictory prompts.
+    """
+    import re as _re
+
+    # Direction violations: cars must drive AWAY from camera, show REAR wings.
+    # Image models interpret ANY "approaching/toward" language as cars coming
+    # AT the camera, even "approaching the finish line". Must catch all variants.
+    direction_patterns = [
+        (r'(?i)\bapproaching\s+(?:the\s+)?camera\b', 'driving away from camera showing rear wings and rear diffusers'),
+        (r'(?i)\bfacing\s+(?:the\s+)?camera\b', 'driving away from camera showing rear wings and rear diffusers'),
+        (r'(?i)\btowards\s+(?:the\s+)?camera\b', 'away from camera showing rear wings'),
+        (r'(?i)\bracing\s+towards\b', 'racing away from camera'),
+        (r'(?i)\bdriving\s+towards\b', 'driving away from camera'),
+        (r'(?i)\bcoming\s+towards\b', 'driving away from camera'),
+        (r'(?i)\bhead[\s-]on\b', 'from behind showing rear wings'),
+        (r'(?i)\bfacing\s+(?:the\s+)?viewer\b', 'driving away from the viewer showing rear wings'),
+        (r'(?i)\bshowing\s+front\s+wing\b', 'showing rear wing and rear diffuser'),
+        # Broader "approaching/toward" — image models read these as cars facing camera
+        (r'(?i)\bapproaching\s+(?:the\s+)?finish\b', 'crossing the finish line driving away from camera'),
+        (r'(?i)\bapproaching\s+(?:the\s+)?line\b', 'crossing the line driving away from camera'),
+        (r'(?i)\baccelerating\s+toward\b', 'accelerating away from camera'),
+        (r'(?i)\bracing\s+toward\b', 'racing away from camera'),
+        (r'(?i)\bdriving\s+toward\b', 'driving away from camera'),
+        (r'(?i)\bcar\s+approaching\b', 'car driving away from camera'),
+        (r'(?i)\bcars?\s+racing\s+at\b', 'cars racing away from'),
+        (r'(?i)\bfront\s+wings?\s+visible\b', 'rear wings visible'),
+        (r'(?i)\bfront\s+of\s+(?:the\s+)?cars?\b', 'rear of the car'),
+    ]
+
+    # Car count violations: max 22 cars on the F1 grid
+    car_count_patterns = [
+        (r'(?i)\bdozens\s+of\s+(?:F1\s+)?cars\b', 'a pack of F1 cars (max 22 on the grid)'),
+        (r'(?i)\bhundreds\s+of\s+(?:F1\s+)?cars\b', 'a pack of F1 cars (max 22 on the grid)'),
+        (r'(?i)\bcountless\s+(?:F1\s+)?cars\b', 'a pack of F1 cars (max 22 on the grid)'),
+        (r'(?i)\bmany\s+(?:F1\s+)?cars\b', 'a pack of F1 cars (max 22 on the grid)'),
+        (r'(?i)\b(?:3[0-9]|[4-9][0-9])\s+(?:F1\s+)?cars\b', '22 F1 cars'),
+    ]
+
+    all_patterns = direction_patterns + car_count_patterns
+
+    # Sanitize video_prompt for escalation language (prevents screaming audio)
+    vp = getattr(scene, 'video_prompt', None)
+    if vp:
+        scene.video_prompt = sanitize_video_prompt(vp)
+
+    for field_name in ('start_frame_prompt', 'end_frame_prompt', 'video_prompt'):
+        value = getattr(scene, field_name, None)
+        if not value:
+            continue
+        for pattern, replacement in all_patterns:
+            value = _re.sub(pattern, replacement, value)
+        setattr(scene, field_name, value)
+
+    return scene
+
+
+def sanitize_prompt_text(text: str) -> str:
+    """Sanitize a raw prompt string for direction and escalation violations.
+
+    Use this when regenerating scenes from stored prompts that may predate
+    the sanitization rules. Works on plain strings unlike sanitize_scene_prompts
+    which requires a SceneScript object.
+    """
+    import re as _re
+
+    direction_patterns = [
+        (r'(?i)\bapproaching\s+(?:the\s+)?camera\b', 'driving away from camera showing rear wings'),
+        (r'(?i)\bfacing\s+(?:the\s+)?camera\b', 'driving away from camera showing rear wings'),
+        (r'(?i)\btowards\s+(?:the\s+)?camera\b', 'away from camera showing rear wings'),
+        (r'(?i)\bracing\s+towards\b', 'racing away from camera'),
+        (r'(?i)\bdriving\s+towards\b', 'driving away from camera'),
+        (r'(?i)\bcoming\s+towards\b', 'driving away from camera'),
+        (r'(?i)\bhead[\s-]on\b', 'from behind showing rear wings'),
+        (r'(?i)\bfacing\s+(?:the\s+)?viewer\b', 'driving away from the viewer showing rear wings'),
+        (r'(?i)\bshowing\s+front\s+wing\b', 'showing rear wing and rear diffuser'),
+        (r'(?i)\bapproaching\s+(?:the\s+)?finish\b', 'crossing the finish line driving away from camera'),
+        (r'(?i)\bapproaching\s+(?:the\s+)?line\b', 'crossing the line driving away from camera'),
+        (r'(?i)\baccelerating\s+toward\b', 'accelerating away from camera'),
+        (r'(?i)\bracing\s+toward\b', 'racing away from camera'),
+        (r'(?i)\bdriving\s+toward\b', 'driving away from camera'),
+        (r'(?i)\bcar\s+approaching\b', 'car driving away from camera'),
+        (r'(?i)\bcars?\s+racing\s+at\b', 'cars racing away from'),
+        (r'(?i)\bfront\s+wings?\s+visible\b', 'rear wings visible'),
+        (r'(?i)\bfront\s+of\s+(?:the\s+)?cars?\b', 'rear of the car'),
+    ]
+
+    for pattern, replacement in direction_patterns:
+        text = _re.sub(pattern, replacement, text)
+
+    text = sanitize_video_prompt(text)
+    return text
+
+
+# F1 acronyms to preserve in uppercase
+_F1_ACRONYMS = {
+    "f1", "drs", "fia", "gp", "dnf", "dns", "dsq", "vsc", "sc", "ers",
+    "kers", "mguh", "mguk", "tps", "rss", "tv", "bbc", "sky", "gpda",
+}
+
+# Proper nouns that must keep their capitalisation after lowercase conversion.
+# TTS handles capitalised proper nouns fine — it's ALL-CAPS words that scream.
+_F1_PROPER_NOUNS = [
+    # Drivers
+    "Hamilton", "Verstappen", "Leclerc", "Norris", "Sainz", "Piastri",
+    "Russell", "Antonelli", "Alonso", "Stroll", "Gasly", "Ocon",
+    "Tsunoda", "Lawson", "Albon", "Colapinto", "Bearman", "Hulkenberg",
+    "Magnussen", "Bottas", "Zhou", "Perez", "Ricciardo", "Sargeant",
+    "Doohan", "Bortoleto", "Hadjar",
+    # Teams
+    "Ferrari", "Mercedes", "McLaren", "Red Bull", "Aston Martin",
+    "Alpine", "Williams", "Haas", "Sauber", "Kick Sauber",
+    "Petronas", "Oracle", "Cognizant",
+    # People
+    "Toto", "Wolff", "Horner", "Binotto", "Vasseur", "Brawn",
+    "Button", "Croft", "Brundle",
+    # Circuits / Cities
+    "Shanghai", "Silverstone", "Monza", "Monaco", "Suzuka", "Spa",
+    "Jeddah", "Bahrain", "Melbourne", "Barcelona", "Budapest",
+    "Zandvoort", "Singapore", "Austin", "Interlagos", "Imola",
+    "Baku", "Lusail", "Las Vegas", "Miami", "Montreal", "Spielberg",
+    # Brands
+    "Pirelli", "Honda", "Toyota",
+    # Countries
+    "Italy", "China", "Japan", "Britain", "Germany", "Australia",
+    "Spain", "France", "Netherlands", "Brazil", "Mexico", "Canada",
+]
+# Position labels: p1-p20
+_POSITION_PATTERN = re.compile(r"\bp(\d{1,2})\b", re.IGNORECASE)
+
+
+def sanitize_dialogue(text: str) -> str:
+    """Convert dialogue to sentence case. ANY capitals make TTS scream.
+
+    Rules:
+    - Convert everything to lowercase first
+    - Capitalise only the first letter of each sentence
+    - Preserve F1 acronyms (F1, DRS, FIA, GP, DNF, etc.)
+    - Preserve position labels (P1, P2, ... P20)
+    - Collapse 3+ repeated letters (aaaargh -> aargh)
+    - Reduce excessive punctuation (!!! -> !, ??? -> ?)
+    - Strip standalone screaming sounds (ahhh, nooo, etc.)
+    """
+    if not text:
+        return text
+
+    # 1. Collapse 3+ repeated letters
+    text = re.sub(r"(.)\1{2,}", r"\1\1", text)
+
+    # 2. Strip standalone screaming sounds (words that are just repeated vowels/consonants)
+    text = re.sub(r"\b[aAeEoOuU]{3,}[hHrRgG]*\b", "", text)  # ahhh, ooooh, argh
+    text = re.sub(r"\b[nN][oO]{2,}\b", "no", text)  # nooo -> no
+
+    # 3. Reduce excessive punctuation
+    text = re.sub(r"!{2,}", "!", text)
+    text = re.sub(r"\?{2,}", "?", text)
+    text = re.sub(r"\.{4,}", "...", text)
+
+    # 4. Convert to lowercase
+    text = text.lower()
+
+    # 5. Capitalise first letter of each sentence
+    def cap_first(match):
+        return match.group(0).upper()
+    text = re.sub(r"(?:^|(?<=[.!?]\s))([a-z])", cap_first, text)
+    # Ensure very first character is capitalised
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+
+    # 6. Restore F1 acronyms
+    for acr in _F1_ACRONYMS:
+        text = re.sub(r"\b" + acr + r"\b", acr.upper(), text, flags=re.IGNORECASE)
+
+    # 6b. Restore proper nouns (driver names, teams, cities, etc.)
+    for noun in _F1_PROPER_NOUNS:
+        text = re.sub(r"\b" + re.escape(noun.lower()) + r"\b", noun, text)
+
+    # 7. Restore position labels (p1 -> P1, p20 -> P20)
+    text = _POSITION_PATTERN.sub(lambda m: f"P{m.group(1)}", text)
+
+    # 8. Clean up whitespace
+    text = re.sub(r"\s{2,}", " ", text).strip()
+
+    return text
+
+
+# Escalation words that make video models generate screaming audio
+_ESCALATION_PATTERNS = [
+    (r'\bbuilding to crescendo\b', 'speaking with measured enthusiasm'),
+    (r'\bincreasing intensity\b', 'steady measured delivery'),
+    (r'\bwild hand gestures\b', 'subtle hand gestures'),
+    (r'\bwild gestures\b', 'subtle gestures'),
+    (r'\bdramatically\b', 'expressively'),
+    (r'\bfrantic(ally)?\b', 'animated'),
+    (r'\bexplosive\b', 'energetic'),
+    (r'\bscreaming\b', 'speaking emphatically'),
+    (r'\bshouting\b', 'speaking firmly'),
+    (r'\byelling\b', 'speaking firmly'),
+    (r'\bincreasing intensity of expression\b', 'measured expressive delivery'),
+    (r'\bbuilding to\b', 'delivering with'),
+    (r'\bcrescendo\b', 'emphasis'),
+    (r'\bwild\b', 'animated'),
+]
+
+
+def sanitize_video_prompt(text: str) -> str:
+    """Remove escalation language from video prompts.
+
+    Video models generate audio from these prompts. Words like "crescendo",
+    "wild", "dramatically" make the generated audio sound like screaming.
+    Replace with calm professional alternatives.
+    """
+    if not text:
+        return text
+    for pattern, replacement in _ESCALATION_PATTERNS:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
+
 SCRIPT_SYSTEM_PROMPT = """You are the head writer and showrunner of a hilarious animated F1 satirical show — think South Park meets Drive to Survive. Your show is the funniest thing on YouTube.
 
 COMEDY IS YOUR #1 PRIORITY. Every scene must land a joke, a visual gag, or a comedic moment. If a scene isn't funny, rewrite it until it is.
@@ -74,6 +298,69 @@ JOKE DENSITY TARGET:
 - MINIMUM 2 jokes per scene. One in dialogue, one in the visual/action description.
 - Puns, wordplay, double entendres, callbacks, deadpan delivery, absurd escalation
 - If a scene has zero laughs, it FAILS. Rewrite it.
+
+COMEDY TECHNIQUES (use ALL of these across the episode):
+1. CALLBACK JOKES: Set up something in scenes 2-5, pay it off in scenes 16-21.
+   The audience feels smart for remembering.
+2. RULE OF THREE: Two normal examples, third one absurd.
+   "Ferrari strategy: Plan A failed, Plan B failed, Plan C was just Plan A written in Italian."
+3. DEADPAN + ABSURD: State something insane as if it is perfectly normal.
+   "Max won by 30 seconds. He was reportedly disappointed it was not 40."
+4. DRIVER-VS-DRIVER JABS: Characters MUST insult each other TO THEIR FACE or behind
+   their back. Not gentle ribbing — sharp, witty burns that hit real weak spots.
+   "Lewis showed up to the paddock dressed as a lampshade. Charles said he finally
+   matched his qualifying pace — decorative but dim."
+5. COMMENTATOR REACTIONS: Croft losing his mind while Brundle stays deadpan is
+   comedy gold. Brundle's calm "Right..." after Croft screams is a guaranteed laugh.
+6. SELF-DEPRECATION: Characters accidentally roasting themselves without realizing.
+   Lance Stroll: "My dad did not buy me this seat... he bought the whole team.
+   The seat was free."
+7. RUNNING GAG ESCALATION: Each callback should ESCALATE the gag, not just repeat it.
+   If a gag started as a quip, by scene 20 it should be an absurd callback.
+8. BREAKING NEWS FORMAT: Mock-serious delivery of absurd "breaking news" adds variety.
+   "Breaking: FIA confirms the white line IS in fact part of the track. More at 11."
+9. UNCOMFORTABLE TRUTHS: Characters saying what everyone is thinking but nobody says.
+   This is where the best satire lives — saying the quiet part out loud.
+10. TEAM RADIO PARODIES: Exaggerate real team radio messages to absurd levels.
+    Engineer: "We are checking." Driver: "You have been checking since lap 1."
+    Engineer: "We are checking the checking."
+
+DIALOGUE TONE RULES (CRITICAL — characters must NOT all sound the same):
+- Characters should NOT scream or shout constantly. Reserve CAPS and exclamation marks for genuinely dramatic moments only.
+- David Croft builds to crescendos — he starts measured and EXPLODES at the key moment, not 100% volume throughout.
+- Max Verstappen is deadpan. NEVER give him exclamation marks. His comedy is in understatement.
+- Most characters speak conversationally. The comedy comes from WHAT they say, not volume.
+- Dry, deadpan delivery is often funnier than shouting. Let the absurdity speak for itself.
+- Maximum 3 scenes per episode may have exclamation-heavy dialogue. The rest MUST be conversational.
+
+COMMENTATOR PAIRING (Sky F1 style — USE BOTH in every episode):
+- David Croft is the excitable play-by-play voice — he calls the action with energy
+- Martin Brundle is the dry, analytical expert — he provides calm color commentary
+- USE BOTH as main characters in every episode. They are the show's anchors.
+- Croft gets the high-energy ACTION_REPLAY voiceovers and big-moment calls
+- Brundle gets TALKING_HEAD analysis scenes and provides dry, witty counterpoints
+- Brundle's comedy style: dry British understatement, backhanded compliments,
+  grid walk celebrity interruptions, "Anyway..." transitions, telling drivers
+  uncomfortable truths to their face with a polite smile
+- If the episode has 3+ ACTION_REPLAY scenes, at least 1 MUST use martin_brundle
+  as voiceover_character — his calm, wry commentary contrasts beautifully with Croft
+- Classic Brundle lines to channel: "That's a brave strategy", "He's not going to
+  be happy about that", "I've seen this before and it doesn't end well"
+
+VIDEO PROMPT TONE RULES (CRITICAL — video models generate audio from these prompts):
+- video_prompt describes PHYSICAL MOTION only — camera moves, body positions, subtle gestures
+- NEVER use escalation words: "crescendo", "dramatically", "wild", "intensity", "explosive", "frantic", "screaming"
+- NEVER use "building to" or "increasing" — these make the video model escalate volume
+- For animated commentators: "speaking with measured enthusiasm, subtle hand gestures, professional delivery"
+- For excited celebrations: "smiling broadly, fist pump, controlled enthusiasm" — NOT "screaming with joy"
+- The video model generates audio from these prompts. Escalation language = screaming audio. Keep it calm.
+- Even David Croft should be "animated and engaged" not "building to crescendo with wild gestures"
+- Check each character's humor_style from their personality data:
+  "deadpan_blunt" = no exclamation marks, dry wit
+  "enthusiastic_hyperbole" = some exclamations allowed, but still builds to them
+  "sardonic" = eyeroll humor, backhanded compliments
+  "earnest_naive" = genuine confusion that's accidentally funny
+- If you cannot tell WHO is speaking from the dialogue alone (without seeing the character name), rewrite it.
 - The best jokes reference REAL F1 incidents, memes, and controversies
 - Don't be afraid to be mean — this is satire, not a PR press release
 - Reference r/formuladank memes: "s🅱️inalla", "Bwoah", "For What?!", "Slow Button On", "El Plan", "Master Plan"
@@ -88,8 +375,13 @@ You MUST use a mix of these scene types throughout the episode. NOT just talking
 2. TALKING_HEAD: Single character speaking to camera or in interview style. Use for commentary, hot takes, reactions.
 
 3. TWO_SHOT: Two characters in the same frame — arguing, reacting, interviewing. Great for pundit-to-pundit or pundit-interviewing-driver scenes.
+   CRITICAL COMPOSITION: The SPEAKING character must be DOMINANT in the foreground (larger, facing camera). The LISTENING character must be smaller in the background, slightly out of focus. NEVER have both characters at equal size side-by-side — this causes frozen animation. One character is always the focus.
+   start_frame_prompt MUST describe: "[Speaker name] prominent in the foreground, [other character] visible in the background".
+   video_prompt MUST describe PHYSICAL ACTIONS: "leans forward, gestures with hand, turns head" — NOT abstract moods like "mischievous energy" or "natural conversation flow".
 
-4. OVER_THE_SHOULDER: Shot/reverse shot conversation. Character A speaks looking LEFT in one scene, Character B responds looking RIGHT in the next. Creates conversational flow. Use this for back-and-forth exchanges.
+4. OVER_THE_SHOULDER: Shot from behind one character's shoulder, showing the other character facing camera. Creates conversational flow.
+   CRITICAL COMPOSITION: The foreground character's SHOULDER and BACK OF HEAD must be visible and blurred. The background character FACES the camera and is the focus. start_frame_prompt MUST describe: "Shot from behind [Character A]'s shoulder, [Character A]'s back/shoulder visible in foreground out of focus, [Character B] facing camera in the background".
+   video_prompt MUST describe PHYSICAL ACTIONS: "speaks while gesturing, head tilts, eyebrow raises" — NOT abstract moods.
 
 5. ACTION_REPLAY: On-board cockpit view, crash replay, overtake sequence, pit stop drama. NO character face needed — the car livery and helmet identify the driver (Red Bull = Verstappen, Ferrari = Leclerc, etc.). The DIALOGUE is commentary voiceover describing the action. These are the most visually exciting scenes!
 
@@ -133,13 +425,18 @@ VISIBLE CHARACTER vs VOICEOVER CHARACTER:
 - Example: TWO_SHOT of Croft and Button in studio → character: "david_croft", voiceover_character: null, face_visible: true (TWO_SHOT implies both faces visible, pick the primary one)
 
 
-CHARACTER RULES:
-- Use EXACTLY 3-4 characters per episode
-- At least 1 must be a DRIVER or TEAM PRINCIPAL (they ARE the story)
-- 1-2 pundits as hosts/anchors (they frame and react to the story)
-- Each character appears in 5-8 scenes, giving them a proper arc
-- Characters REACT to each other — show consequences, not just monologues
-- For ACTION_REPLAY scenes, use one of the pundits as the "character" (they provide voiceover commentary)
+CHARACTER CAST STRUCTURE (main cast + cameos):
+- 3-4 MAIN CHARACTERS: Appear in 5-8 scenes each, have full arcs
+  - At least 1 commentator/pundit as host/anchor (they frame and react to the story)
+  - At least 2 DRIVERS or TEAM PRINCIPALS (they ARE the story)
+  - Characters REACT to each other — show consequences, not just monologues
+- 2-3 CAMEO CHARACTERS: Appear in 1-2 scenes only for a quick jab, reaction, or burn
+  - Perfect for: podium scenes, reaction shots, one-liner insults, team radio parodies
+  - Cameos are comedy grenades — they show up, drop a bomb, and leave
+  - A cameo driver roasting a main character in a REACTION scene is chef's kiss
+  - Cameos still need character_appearances entries!
+- Total: 6-7 characters per episode (main + cameos combined)
+- For ACTION_REPLAY scenes, use one of the pundits as voiceover_character
 
 VOICE & NATIONALITY (CRITICAL — characters must NOT all sound the same):
 - Each character's dialogue MUST reflect their REAL nationality, accent, and speech patterns
@@ -157,6 +454,16 @@ STORY STRUCTURE (26 scenes):
 - Scenes 16-21: Comedy peak — callbacks land, visual gags, REACTION shots
 - Scenes 22-25: Resolution — hot takes, predictions, character moments
 - Scene 26: Outro — sign-off with show branding or "next time on..." teaser
+
+POST-QUALIFYING EPISODE STRUCTURE (when episode_type is "post-qualifying"):
+- Focus on qualifying drama: surprise pole positions, Q1 knockouts, red flags
+- Emphasize the GAPS — who was surprisingly fast/slow and why
+- Predictions for the race based on grid positions (comedic, exaggerated)
+- Mock "grid penalty" drama and FIA steward decisions
+- Team radio gold from qualifying: "We need to go again" "Box box box"
+- The title card should reference qualifying specifically
+- Main drama: who got pole, who got knocked out in Q1/Q2, any crashes
+- Outro should tease the RACE (same circuit, next day) with predictions
 
 RUNNING GAGS ARE MANDATORY:
 - If running gags are provided, you MUST use at least 3 of them
@@ -241,8 +548,10 @@ FINAL RULES:
 - Scene 1 MUST be TITLE_CARD, Scene 26 MUST be an outro
 - At least 3 ACTION_REPLAY scenes required
 - At least 2 TWO_SHOT or OVER_THE_SHOULDER scenes required
-- character_appearances MUST have an entry for EVERY character
+- character_appearances MUST have an entry for EVERY character (main + cameos)
 - EVERY character scene's prompts must use their exact outfit from character_appearances
+- 6-7 total characters (3-4 main + 2-3 cameos). Cameos appear in only 1-2 scenes.
+- martin_brundle AND david_croft must BOTH appear in every episode
 """
 
 
@@ -350,8 +659,16 @@ class ScriptGenerator:
                 for s in script_data["scenes"]
             ]
 
-            if len(scenes) != 24:
+            # Sanitize prompts to enforce direction and car count rules
+            scenes = [sanitize_scene_prompts(s) for s in scenes]
+
+            if len(scenes) != 26:
                 logger.warning(f"Expected 26 scenes, got {len(scenes)}")
+                if len(scenes) < 20 or len(scenes) > 30:
+                    raise ScriptGenerationError(
+                        f"Script has {len(scenes)} scenes (expected 26). "
+                        "LLM output is too far from target."
+                    )
 
             # Extract gag references from response
             gags_referenced = script_data.get("gags_used", [])
@@ -417,32 +734,82 @@ class ScriptGenerator:
             core_traits = p.get("core_traits", [])
             comedy_weaknesses = p.get("comedy_weaknesses", [])
             physical = p.get("physical_features", "")
-            
+
+            # Rich character data for better comedy writing
+            satirical_angle = p.get("satirical_angle", "")
+            comedy_archetype = p.get("comedy_archetype", "")
+            humor_style = p.get("humor_style", "")
+            blind_spots = p.get("blind_spots", [])
+            meme_status = p.get("meme_status", "")
+            personality_dims = p.get("personality_dimensions", {})
+            example_dialogue = p.get("example_dialogue", {})
+            signature_reactions = p.get("signature_reactions", {})
+            relationships = p.get("relationships_summary", {})
+            storyline_hooks = p.get("storyline_hooks", [])
+
             line = f"- {name} ({nationality}, {team})"
             if role:
                 line += f" [{role}]"
+            if satirical_angle:
+                line += f"\n  SATIRICAL ANGLE: {satirical_angle}"
+            if comedy_archetype:
+                line += f"\n  COMEDY ARCHETYPE: {comedy_archetype}"
             if core_traits:
                 line += f"\n  Traits: {', '.join(core_traits[:5])}"
             if comedy_weaknesses:
-                line += f"\n  Comedy weaknesses: {', '.join(comedy_weaknesses[:3])}"
+                line += f"\n  Comedy weaknesses: {', '.join(comedy_weaknesses[:5])}"
             if accent_hints:
                 line += f"\n  Accent/speech: {accent_hints}"
             if tone:
                 line += f"\n  Tone: {tone}"
+            if humor_style:
+                line += f"\n  Humor style: {humor_style}"
             if catchphrases:
                 line += f"\n  Catchphrases: {', '.join(repr(cp) for cp in catchphrases[:5])}"
+            if personality_dims:
+                dims = [f"{k}={v}" for k, v in personality_dims.items()]
+                line += f"\n  Personality scores: {', '.join(dims)}"
+            if blind_spots:
+                line += f"\n  Blind spots: {', '.join(blind_spots[:3])}"
+            if meme_status:
+                line += f"\n  Fan meme culture: {meme_status[:150]}"
+            if example_dialogue:
+                dial_examples = []
+                for situation, text in list(example_dialogue.items())[:3]:
+                    dial_examples.append(f"{situation}: \"{text[:100]}\"")
+                line += f"\n  EXAMPLE DIALOGUE (use as tone reference):\n    " + "\n    ".join(dial_examples)
+            if signature_reactions:
+                react_examples = []
+                for situation, reaction in list(signature_reactions.items())[:3]:
+                    react_examples.append(f"{situation}: {reaction[:100]}")
+                line += f"\n  SIGNATURE REACTIONS:\n    " + "\n    ".join(react_examples)
+            if relationships:
+                rivals = relationships.get("rivals", [])
+                friendly = relationships.get("friendly_with", [])
+                if rivals:
+                    line += f"\n  Rivals: {', '.join(rivals[:3])}"
+                if friendly:
+                    line += f"\n  Friendly with: {', '.join(friendly[:3])}"
             if physical:
                 line += f"\n  Physical: {physical}"
+            if storyline_hooks:
+                line += f"\n  Story hooks: {'; '.join(storyline_hooks[:2])}"
             
             char_lines.append(line)
         
         character_info = "\n".join(char_lines)
 
-        type_context = (
-            "Preview and predictions for the upcoming race"
-            if episode_type == "pre-race"
-            else "Post-race analysis and commentary"
-        )
+        if episode_type == "pre-race":
+            type_context = "Preview and predictions for the upcoming race"
+        elif episode_type == "post-qualifying":
+            type_context = (
+                "Post-qualifying analysis: grid positions, surprise performances, "
+                "Q1/Q2 knockouts, pole position drama, and race predictions"
+            )
+        elif episode_type == "post-sprint":
+            type_context = "Post-sprint race analysis: sprint results, mini-race drama, and main race predictions"
+        else:
+            type_context = "Post-race analysis and commentary"
 
         prompt_parts = [
             f"Generate a {episode_type} episode script.",
@@ -489,6 +856,12 @@ class ScriptGenerator:
             for t in teams:
                 if t.get("car_description"):
                     team_lines.append(f"- {t['short_name']}: {t['car_description']}")
+            # Build overalls reference for character appearance consistency
+            overalls_lines = []
+            for t in teams:
+                if t.get("overalls_description"):
+                    overalls_lines.append(f"- {t['short_name']} drivers: {t['overalls_description']}")
+
             if team_lines:
                 team_livery_block = f"""\n
 TEAM LIVERY REFERENCE (use these EXACT descriptions when showing cars on track):
@@ -507,7 +880,13 @@ ACTION_REPLAY RULES:
   Cars race side by side on the same piece of tarmac, not in separate lanes.
 - GRID SIZE: There are exactly 22 cars on the F1 grid (11 teams, 2 drivers each). Never describe more than 22 cars on track.
 - CAR DESIGN: F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar, NOT a canopy.
-
+"""
+                if overalls_lines:
+                    team_livery_block += f"""
+DRIVER OUTFIT REFERENCE (use VERBATIM in character_appearances for drivers):
+{chr(10).join(overalls_lines)}
+"""
+                team_livery_block += """
 ACTION SCENE MOTION TEMPLATES (use these for video_prompt in ACTION_REPLAY scenes):
 - OVERTAKE: "Car A dives down the inside of Car B into the corner, aggressive late braking, both cars wheel-to-wheel through the apex, Car A pulls ahead on exit"
 - FINISH LINE: "Car crosses the finish line at speed, checkered flag waving, sparks flying from the floor, victory weaving on the straight"

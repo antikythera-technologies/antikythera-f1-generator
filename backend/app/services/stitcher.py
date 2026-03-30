@@ -336,16 +336,40 @@ class VideoStitcher:
         has_bg = await self._generate_card_image(prompt, bg_image_path)
 
         esc_heading = self._escape_drawtext(heading)
-        esc_sub = self._escape_drawtext(sub)
 
-        drawtext_filter = (
+        drawtext_parts = [
             f"drawtext=text=\'{esc_heading}\':fontsize={TITLE_FONT_SIZE}:fontcolor=white"
             f":borderw=3:bordercolor=black"
-            f":x=(w-text_w)/2:y=(h-text_h)/2-40,"
-            f"drawtext=text=\'{esc_sub}\':fontsize={SUBTITLE_FONT_SIZE}"
-            f":fontcolor=white@0.8:borderw=2:bordercolor=black@0.5"
-            f":x=(w-text_w)/2:y=(h-text_h)/2+30"
-        )
+            f":x=(w-text_w)/2:y=(h/2)-40",
+        ]
+
+        # Wrap long subtitle across multiple lines
+        if len(sub) > 35:
+            mid = len(sub) // 2
+            best = mid
+            for i in range(mid - 10, mid + 10):
+                if 0 <= i < len(sub) and sub[i] in " :-":
+                    best = i
+                    break
+            line1 = self._escape_drawtext(sub[:best].strip())
+            line2 = self._escape_drawtext(sub[best:].strip().lstrip(":-").strip())
+            drawtext_parts.extend([
+                f"drawtext=text=\'{line1}\':fontsize={SUBTITLE_FONT_SIZE}"
+                f":fontcolor=white@0.8:borderw=2:bordercolor=black@0.5"
+                f":x=(w-text_w)/2:y=(h/2)+20",
+                f"drawtext=text=\'{line2}\':fontsize={SUBTITLE_FONT_SIZE}"
+                f":fontcolor=white@0.8:borderw=2:bordercolor=black@0.5"
+                f":x=(w-text_w)/2:y=(h/2)+55",
+            ])
+        else:
+            esc_sub = self._escape_drawtext(sub)
+            drawtext_parts.append(
+                f"drawtext=text=\'{esc_sub}\':fontsize={SUBTITLE_FONT_SIZE}"
+                f":fontcolor=white@0.8:borderw=2:bordercolor=black@0.5"
+                f":x=(w-text_w)/2:y=(h/2)+30"
+            )
+
+        drawtext_filter = ",".join(drawtext_parts)
 
         if has_bg:
             vf = f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},format=yuv420p,{drawtext_filter}"

@@ -1,6 +1,7 @@
 """Main video generation pipeline."""
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime
@@ -22,7 +23,7 @@ from app.models.race import Race
 from app.models.scene import Scene, SceneStatus
 from app.models.team import Team
 # Personality traits loaded from DB via load_personality_traits_from_db()
-from app.services.script_generator import ScriptGenerator
+from app.services.script_generator import ScriptGenerator, sanitize_dialogue
 from app.services.image_generator import ImageGenerator
 from app.services.ovi_video_generator import OviVideoGenerator
 from app.services.ovi_space_manager import OviSpaceManager
@@ -280,6 +281,7 @@ class VideoPipeline:
             trigger_map = {
                 "post-race": JobTriggerType.POST_RACE,
                 "post-sprint": JobTriggerType.POST_SPRINT,
+                "post-qualifying": JobTriggerType.POST_QUALIFYING,
                 "post-fp2": JobTriggerType.POST_FP2,
                 "weekly-recap": JobTriggerType.WEEKLY_RECAP,
             }
@@ -321,12 +323,14 @@ class VideoPipeline:
             if active_storylines:
                 storylines_context = [
                     {
+                        "id": s.id,
                         "title": s.title,
                         "description": s.description,
                         "type": s.storyline_type.value if s.storyline_type else "general",
                         "comedy_notes": s.comedy_notes or "",
                         "current_beat": s.current_beat,
                         "plot_points": s.plot_points or [],
+                        "character_slugs": s.character_slugs or [],
                     }
                     for s in active_storylines
                 ]
@@ -391,7 +395,7 @@ class VideoPipeline:
                 scene_number=scene_script.scene_number,
                 # character_id = who is VISIBLE (face on screen)
                 character_id=character.id if character and face_visible else None,
-                dialogue=scene_script.dialogue,
+                dialogue=sanitize_dialogue(scene_script.dialogue) if scene_script.dialogue else None,
                 action_description=scene_script.action,
                 audio_description=scene_script.audio_description,
                 # New dual-frame prompts
@@ -413,6 +417,25 @@ class VideoPipeline:
         # Track running gag usage from the generated script
         if script.gags_referenced:
             await self._record_gag_usage(db, script.gags_referenced)
+
+        # Advance storyline beats for storylines referenced in this episode
+        if storylines_context:
+            try:
+                for sl in storylines_context:
+                    sl_id = sl.get("id")
+                    if sl_id:
+                        from app.models.storyline import Storyline
+                        from sqlalchemy import update as sql_update
+                        await db.execute(
+                            sql_update(Storyline)
+                            .where(Storyline.id == sl_id)
+                            .values(current_beat=Storyline.current_beat + 1)
+                        )
+                        self.logger.info(
+                            f"Advanced storyline \'{sl.get('title')}\' to next beat"
+                        )
+            except Exception as e:
+                self.logger.warning(f"Failed to advance storyline beats: {e}")
 
         return scenes
 
@@ -438,6 +461,12 @@ class VideoPipeline:
             quali_session = SessionType.SPRINT_QUALIFYING
             session_label = "SPRINT RACE"
             quali_label = "SPRINT QUALIFYING"
+        elif episode_type == "post-qualifying":
+            # Qualifying episode: qualifying is the PRIMARY result, no race results yet
+            primary_session = SessionType.QUALIFYING
+            quali_session = None  # No secondary session
+            session_label = "QUALIFYING"
+            quali_label = None
         else:
             primary_session = SessionType.RACE
             quali_session = SessionType.QUALIFYING
@@ -477,22 +506,23 @@ class VideoPipeline:
                 f"No {session_label} results found for race {self.race.id}"
             )
 
-        # Get qualifying results
-        stmt = (
-            _sel(RaceResult)
-            .where(RaceResult.race_id == self.race.id)
-            .where(RaceResult.session_type == quali_session)
-            .order_by(RaceResult.position)
-        )
-        result = await db.execute(stmt)
-        quali_results = result.scalars().all()
+        # Get qualifying results (skip if no secondary session, e.g. post-qualifying)
+        if quali_session is not None:
+            stmt = (
+                _sel(RaceResult)
+                .where(RaceResult.race_id == self.race.id)
+                .where(RaceResult.session_type == quali_session)
+                .order_by(RaceResult.position)
+            )
+            result = await db.execute(stmt)
+            quali_results = result.scalars().all()
 
-        if quali_results:
-            lines.append(f"\n{quali_label} GRID:")
-            for r in quali_results[:10]:
-                lines.append(
-                    f"  P{r.position}: {r.driver_display_name or r.driver_name}"
-                )
+            if quali_results:
+                lines.append(f"\n{quali_label} GRID:")
+                for r in quali_results[:10]:
+                    lines.append(
+                        f"  P{r.position}: {r.driver_display_name or r.driver_name}"
+                    )
 
         # Get session summary
         stmt = (
@@ -592,12 +622,22 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
         try:
             char_ids = [c.id for c in characters if hasattr(c, "id")]
 
+            # Filter gags to those relevant to this episode's characters
+            from sqlalchemy import or_
             stmt = (
                 select(RunningGag)
                 .where(RunningGag.is_active == True)
                 .where(RunningGag.status.in_([GagStatus.ACTIVE, GagStatus.COOLING_DOWN]))
-                .order_by(RunningGag.humor_rating.desc())
             )
+            if char_ids:
+                stmt = stmt.where(
+                    or_(
+                        RunningGag.primary_character_id.in_(char_ids),
+                        RunningGag.secondary_character_id.in_(char_ids),
+                        RunningGag.primary_character_id.is_(None),  # Generic gags
+                    )
+                )
+            stmt = stmt.order_by(RunningGag.humor_rating.desc())
             result = await db.execute(stmt)
             all_gags = result.scalars().all()
 
@@ -1029,9 +1069,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     continue
 
                 if scene.scene_number not in image_paths:
-                    self.logger.warning(
-                        f"Scene {scene.scene_number} has no image — skipping video"
+                    self.logger.error(
+                        f"Scene {scene.scene_number} has no image — marking FAILED "
+                        f"(status={scene.status}, last_error={scene.last_error})"
                     )
+                    if scene.status != SceneStatus.FAILED:
+                        scene.status = SceneStatus.FAILED
+                        scene.last_error = "No start frame image available for video generation"
+                        await db.flush()
                     continue
 
                 self.logger.info(f"Generating video for scene {scene.scene_number}/{len(scenes)}")
@@ -1158,8 +1203,15 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     bucket, obj = scene.start_frame_path.split("/", 1)
                     await self.storage.download_file(bucket, obj, local_path)
                     image_paths[scene.scene_number] = local_path
-
-                self.logger.info(f"Scene {scene.scene_number}: Image ready")
+                    self.logger.info(f"Scene {scene.scene_number}: Image ready")
+                else:
+                    self.logger.error(
+                        f"Scene {scene.scene_number}: _async_scene_image returned "
+                        "but start_frame_path is still NULL — marking FAILED"
+                    )
+                    scene.status = SceneStatus.FAILED
+                    scene.last_error = "Image generation completed but no image path was saved"
+                    await db.flush()
 
             except Exception as e:
                 self.logger.error(f"Scene {scene.scene_number} image failed: {e}")
@@ -1171,6 +1223,131 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
 
         await db.commit()
         self.logger.info(f"Phase 2a complete: {len(image_paths)} images")
+
+        # ----- Phase 2a-val: Image Validation (before expensive video gen) -----
+        self.logger.info("PHASE 2a-val: Start Frame Validation")
+        from app.services.scene_validator import SceneValidator, adapt_prompt_for_validation_failure
+
+        validator = SceneValidator()
+        MAX_IMAGE_RETRIES = 2
+
+        for scene in scenes:
+            if scene.scene_number not in image_paths:
+                continue
+            if scene.status == SceneStatus.COMPLETED and scene.video_clip_path:
+                continue
+
+            local_image = image_paths[scene.scene_number]
+
+            # Download face reference for comparison (if character scene)
+            ref_path = None
+            if scene.face_visible and scene.character_id:
+                try:
+                    char, _, _ = await self._load_character_context(db, scene)
+                    if char:
+                        ref_path = await self.storage.download_face_reference(char.name)
+                except Exception:
+                    pass
+
+            # Load team context for validation
+            _val_team_context = None
+            if scene.character_id:
+                from app.models.team import Team as _ValTeam
+                from app.models.character import Character as _ValChar
+                _val_char = await db.get(_ValChar, scene.character_id)
+                if _val_char and hasattr(_val_char, 'team_id') and _val_char.team_id:
+                    _val_team_obj = await db.get(_ValTeam, _val_char.team_id)
+                    if _val_team_obj:
+                        _val_team_context = {
+                            "team_name": _val_team_obj.name,
+                            "car_description": _val_team_obj.car_description,
+                            "primary_colour": _val_team_obj.primary_colour,
+                            "secondary_colour": _val_team_obj.secondary_colour,
+                        }
+
+            for img_attempt in range(1 + MAX_IMAGE_RETRIES):
+                img_result = await validator.validate_image(
+                    local_image, scene.scene_number,
+                    scene_type=scene.scene_type,
+                    face_visible=bool(scene.face_visible),
+                    reference_image_path=ref_path,
+                    prompt_text=scene.start_frame_prompt,
+                    team_context=_val_team_context,
+                )
+
+                # Log validation cost (~$0.003 per call)
+                await self._log_api_usage(
+                    db, APIProvider.ANTHROPIC,
+                    endpoint="claude-vision/image-validation",
+                    cost_usd=0.003,
+                )
+
+                if img_result.passed:
+                    self.logger.info(
+                        f"Scene {scene.scene_number}: Image validation PASSED "
+                        f"(attempt {img_attempt + 1})"
+                    )
+                    break
+                else:
+                    issues = ", ".join(img_result.issues)
+                    self.logger.warning(
+                        f"Scene {scene.scene_number}: Image validation FAILED "
+                        f"(attempt {img_attempt + 1}): {issues}"
+                    )
+
+                    if img_attempt < MAX_IMAGE_RETRIES:
+                        # Adapt prompt and regenerate image
+                        adapted = adapt_prompt_for_validation_failure(
+                            scene, img_result
+                        )
+                        if adapted:
+                            scene.start_frame_path = None
+                            await db.flush()
+                            await db.commit()
+
+                            try:
+                                await _async_scene_image(
+                                    self.episode_id, scene.scene_number,
+                                    frame_type="start", set_completed=False,
+                                )
+                                await db.refresh(scene)
+
+                                if scene.start_frame_path:
+                                    bucket, obj = scene.start_frame_path.split("/", 1)
+                                    new_local = (
+                                        f"/tmp/f1-images/episode_{self.episode_id}"
+                                        f"_scene_{scene.scene_number:02d}_retry.png"
+                                    )
+                                    os.makedirs(os.path.dirname(new_local), exist_ok=True)
+                                    await self.storage.download_file(bucket, obj, new_local)
+                                    image_paths[scene.scene_number] = new_local
+                                    local_image = new_local
+                                else:
+                                    self.logger.error(
+                                        f"Scene {scene.scene_number}: Retry image gen "
+                                        "failed — no path saved"
+                                    )
+                                    break
+                            except Exception as e:
+                                self.logger.error(
+                                    f"Scene {scene.scene_number}: Retry image gen "
+                                    f"raised: {e}"
+                                )
+                                break
+                        else:
+                            self.logger.info(
+                                f"Scene {scene.scene_number}: No prompt adaptation "
+                                "possible, proceeding to video"
+                            )
+                            break
+                    else:
+                        self.logger.warning(
+                            f"Scene {scene.scene_number}: Max image retries reached, "
+                            "proceeding with current image"
+                        )
+
+        await db.commit()
+        self.logger.info("Phase 2a-val complete")
 
         # ----- Phase 2a-bis: End Frame Generation (FLF) -----
         from app.services.fal_video_generator import FAL_FLF_CAPABLE
@@ -1248,9 +1425,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 continue
 
             if scene.scene_number not in image_paths:
-                self.logger.warning(
-                    f"Scene {scene.scene_number} has no image — skipping video"
+                self.logger.error(
+                    f"Scene {scene.scene_number} has no image — marking FAILED "
+                    f"(status={scene.status}, last_error={scene.last_error})"
                 )
+                if scene.status != SceneStatus.FAILED:
+                    scene.status = SceneStatus.FAILED
+                    scene.last_error = "No start frame image available for video generation"
+                    await db.flush()
                 continue
 
             self.logger.info(
@@ -1262,13 +1444,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 local_image = image_paths[scene.scene_number]
                 image_url = await fal_gen.upload_image(local_image)
 
-                # Load team data for F1 colour context in video prompt
+                # Load team data for video prompt context
                 _scene_team = None
                 if scene.character_id:
-                    _char_for_team, _, _ = await self._load_character_context(db, scene)
-                    if _char_for_team and hasattr(_char_for_team, 'team_id') and _char_for_team.team_id:
+                    from app.models.character import Character as _CharModel
+                    _char_obj = await db.get(_CharModel, scene.character_id)
+                    if _char_obj and _char_obj.team_id:
                         from app.models.team import Team as _TeamModel
-                        _scene_team = await db.get(_TeamModel, _char_for_team.team_id)
+                        _scene_team = await db.get(_TeamModel, _char_obj.team_id)
 
                 # Generate video
                 start_time = datetime.utcnow()
@@ -1314,6 +1497,15 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                         f"Scene {scene.scene_number}: End frame uploaded for FLF"
                     )
 
+                # Extract character animation from personality traits
+                _char_anim = None
+                if char_traits:
+                    _char_anim = {
+                        "signature_expression": char_traits.get("signature_expression"),
+                        "signature_pose": char_traits.get("signature_pose"),
+                        "comedy_angle": char_traits.get("comedy_angle"),
+                    }
+
                 clip = await fal_gen.generate_clip(
                     scene_number=scene.scene_number,
                     image_url=image_url,
@@ -1325,6 +1517,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                         team_name=_scene_team.name if _scene_team else None,
                         car_description=_scene_team.car_description if _scene_team else None,
                         overalls_description=_scene_team.overalls_description if _scene_team else None,
+                        camera_direction=scene.camera_direction,
+                        character_animation=_char_anim,
+                        livery_description=_scene_team.livery_description if _scene_team else None,
                     ),
                     dialogue=scene.dialogue,
                     audio_description=rich_audio,
@@ -1409,6 +1604,252 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             f"Phase 2b complete — all video clips generated "
             f"({fal_gen.display_name})"
         )
+
+        # ----- Phase 2d: Video Validation + Auto-Retry -----
+        self.logger.info("PHASE 2d: Video Validation & Auto-Retry")
+
+        MAX_VIDEO_RETRIES = 1  # max 1 retry per scene (2 total attempts)
+
+        for scene in scenes:
+            if scene.status != SceneStatus.COMPLETED or not scene.video_clip_path:
+                continue
+
+            for vid_attempt in range(1 + MAX_VIDEO_RETRIES):
+                # Download video for validation
+                local_video = (
+                    f"/tmp/f1-validate/ep{self.episode_id}"
+                    f"_s{scene.scene_number:02d}.mp4"
+                )
+                os.makedirs(os.path.dirname(local_video), exist_ok=True)
+                bucket, obj = scene.video_clip_path.split("/", 1)
+                await self.storage.download_file(bucket, obj, local_video)
+
+                # Quick motion check (no API cost)
+                has_motion = await validator.check_video_motion(local_video)
+                if not has_motion:
+                    self.logger.warning(
+                        f"Scene {scene.scene_number}: Video appears STATIC/FROZEN"
+                    )
+                    # Static video = fail, regenerate
+                    if vid_attempt < MAX_VIDEO_RETRIES:
+                        scene.video_clip_path = None
+                        scene.status = SceneStatus.GENERATING
+                        scene.video_prompt = (scene.video_prompt or "") + (
+                            " CRITICAL: The subject must have visible continuous motion "
+                            "throughout the entire clip. No static or frozen frames."
+                        )
+                        await db.flush()
+                        await db.commit()
+
+                        # Re-run video only (image is fine)
+                        if scene.scene_number in image_paths:
+                            try:
+                                local_image = image_paths[scene.scene_number]
+                                image_url = await fal_gen.upload_image(local_image)
+
+                                _scene_team = None
+                                if scene.character_id:
+                                    from app.models.character import Character as _CharModel2
+                                    _char_obj2 = await db.get(_CharModel2, scene.character_id)
+                                    if _char_obj2 and _char_obj2.team_id:
+                                        from app.models.team import Team as _TeamModel
+                                        _scene_team = await db.get(_TeamModel, _char_obj2.team_id)
+
+                                clip = await fal_gen.generate_clip(
+                                    scene_number=scene.scene_number,
+                                    image_url=image_url,
+                                    prompt=_build_f1_prompt(
+                                        (scene.video_prompt or "").replace("ANTKF1STYLE", "").strip(),
+                                        scene_type=str(scene.scene_type) if scene.scene_type else None,
+                                        face_visible=bool(scene.face_visible),
+                                        dialogue=scene.dialogue,
+                                        team_name=_scene_team.name if _scene_team else None,
+                                        car_description=_scene_team.car_description if _scene_team else None,
+                                        overalls_description=_scene_team.overalls_description if _scene_team else None,
+                                        camera_direction=scene.camera_direction,
+                                        livery_description=_scene_team.livery_description if _scene_team else None,
+                                    ),
+                                    dialogue=scene.dialogue,
+                                    audio_description=scene.audio_description,
+                                    face_visible=bool(scene.face_visible),
+                                )
+
+                                clip_path = await self.storage.upload_video_clip(
+                                    race_id=self.race.id if self.race else 0,
+                                    episode_id=self.episode_id,
+                                    scene_number=scene.scene_number,
+                                    file_path=clip.video_path,
+                                )
+                                scene.video_clip_path = clip_path
+                                scene.status = SceneStatus.COMPLETED
+
+                                from decimal import Decimal as _VRetryDec
+                                fal_cost_map_retry = {
+                                    "fal-ovi": 0.20, "fal-ltx": 0.30,
+                                    "fal-kling-std": 0.42, "fal-kling-pro": 0.42,
+                                }
+                                retry_cost = fal_cost_map_retry.get(backend, 0.20)
+                                scene.video_cost_usd = (
+                                    (scene.video_cost_usd or _VRetryDec(0))
+                                    + _VRetryDec(str(retry_cost))
+                                )
+                                await db.flush()
+                                self.logger.info(
+                                    f"Scene {scene.scene_number}: Video retry "
+                                    f"complete (${retry_cost})"
+                                )
+                            except Exception as e:
+                                self.logger.error(
+                                    f"Scene {scene.scene_number}: Video retry "
+                                    f"failed: {e}"
+                                )
+                                scene.status = SceneStatus.COMPLETED  # keep old
+                                break
+                    continue
+
+                # Full Claude Vision validation
+                vid_result = await validator.validate_scene(scene)
+
+                await self._log_api_usage(
+                    db, APIProvider.ANTHROPIC,
+                    endpoint="claude-vision/video-validation",
+                    cost_usd=0.015,  # ~$0.003 per check x5 frames
+                )
+
+                if vid_result.passed:
+                    scene.validation_status = "passed"
+                    scene.validation_issues = None
+                    self.logger.info(
+                        f"Scene {scene.scene_number}: Video validation PASSED"
+                    )
+                    await db.flush()
+                    break
+                else:
+                    issues = ", ".join(vid_result.issues)
+                    scene.validation_status = "failed"
+                    scene.validation_issues = json.dumps(vid_result.issues)
+                    self.logger.warning(
+                        f"Scene {scene.scene_number}: Video validation FAILED: "
+                        f"{issues}"
+                    )
+
+                    if vid_attempt < MAX_VIDEO_RETRIES:
+                        adapted = adapt_prompt_for_validation_failure(scene, vid_result)
+                        if adapted:
+                            scene.start_frame_path = None
+                            scene.video_clip_path = None
+                            scene.status = SceneStatus.GENERATING
+                            await db.flush()
+                            await db.commit()
+
+                            try:
+                                await _async_scene_image(
+                                    self.episode_id, scene.scene_number,
+                                    frame_type="start", set_completed=False,
+                                )
+                                await db.refresh(scene)
+                                if scene.start_frame_path:
+                                    bucket2, obj2 = scene.start_frame_path.split("/", 1)
+                                    new_path = (
+                                        f"/tmp/f1-images/episode_{self.episode_id}"
+                                        f"_scene_{scene.scene_number:02d}_vretry.png"
+                                    )
+                                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                                    await self.storage.download_file(bucket2, obj2, new_path)
+                                    image_paths[scene.scene_number] = new_path
+
+                                    image_url2 = await fal_gen.upload_image(new_path)
+                                    _scene_team2 = None
+                                    if scene.character_id:
+                                        from app.models.character import Character as _CM3
+                                        _co3 = await db.get(_CM3, scene.character_id)
+                                        if _co3 and _co3.team_id:
+                                            from app.models.team import Team as _TM2
+                                            _scene_team2 = await db.get(_TM2, _co3.team_id)
+
+                                    clip2 = await fal_gen.generate_clip(
+                                        scene_number=scene.scene_number,
+                                        image_url=image_url2,
+                                        prompt=_build_f1_prompt(
+                                            (scene.video_prompt or "").replace("ANTKF1STYLE", "").strip(),
+                                            scene_type=str(scene.scene_type) if scene.scene_type else None,
+                                            face_visible=bool(scene.face_visible),
+                                            dialogue=scene.dialogue,
+                                            team_name=_scene_team2.name if _scene_team2 else None,
+                                            car_description=_scene_team2.car_description if _scene_team2 else None,
+                                            overalls_description=_scene_team2.overalls_description if _scene_team2 else None,
+                                            camera_direction=scene.camera_direction,
+                                            livery_description=_scene_team2.livery_description if _scene_team2 else None,
+                                        ),
+                                        dialogue=scene.dialogue,
+                                        audio_description=scene.audio_description,
+                                        face_visible=bool(scene.face_visible),
+                                    )
+
+                                    clip_path2 = await self.storage.upload_video_clip(
+                                        race_id=self.race.id if self.race else 0,
+                                        episode_id=self.episode_id,
+                                        scene_number=scene.scene_number,
+                                        file_path=clip2.video_path,
+                                    )
+                                    scene.video_clip_path = clip_path2
+                                    scene.status = SceneStatus.COMPLETED
+                                    await db.flush()
+                                    self.logger.info(
+                                        f"Scene {scene.scene_number}: Full retry complete"
+                                    )
+                            except Exception as e:
+                                self.logger.error(
+                                    f"Scene {scene.scene_number}: Full retry failed: {e}"
+                                )
+                                scene.status = SceneStatus.COMPLETED
+                                break
+                    else:
+                        self.logger.warning(
+                            f"Scene {scene.scene_number}: Max video retries "
+                            "reached, accepting with issues"
+                        )
+                        await db.flush()
+
+            await db.commit()
+
+        # ----- Phase 2d-audio: Audio Validation -----
+        if self._use_ltx():  # LTX generates native audio
+            self.logger.info("Phase 2d-audio: Running audio validation on all clips")
+            for scene in scenes:
+                if scene.status == SceneStatus.FAILED or not scene.video_clip_path:
+                    continue
+                try:
+                    local_video = await self.storage.download_temp(scene.video_clip_path)
+                    has_dialogue = bool(scene.dialogue and scene.dialogue.strip())
+                    audio_result = await validator.validate_audio(
+                        local_video,
+                        has_dialogue=has_dialogue,
+                        audio_description=scene.audio_description,
+                    )
+                    if not audio_result.passed:
+                        self.logger.warning(
+                            f"Scene {scene.scene_number}: Audio validation FAILED: "
+                            f"{audio_result.issues}"
+                        )
+                        # Log issues but don't fail the scene — audio issues are
+                        # less critical than missing video. Flag for manual review.
+                        if scene.validation_issues is None:
+                            scene.validation_issues = {}
+                        scene.validation_issues["audio"] = audio_result.issues
+                        await db.flush()
+                    else:
+                        self.logger.info(
+                            f"Scene {scene.scene_number}: Audio validation PASSED"
+                        )
+                except Exception as e:
+                    self.logger.warning(
+                        f"Scene {scene.scene_number}: Audio validation error: {e}"
+                    )
+
+            await db.commit()
+
+        self.logger.info("Phase 2d complete — validation finished")
 
     def _build_ovi_prompt(self, scene: Scene) -> str:
         """Build Ovi prompt with special tokens."""
@@ -1751,9 +2192,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     )
                 else:
                     racing_direction_rule = (
-                        "ALL cars MUST face the SAME direction, racing TOWARDS the camera. "
-                        "Show the FRONT of every car — front wings, nose cones, halo devices, front tyres. "
-                        "ALL cars point the same way. NO car faces the opposite direction to the others. "
+                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
+                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
+                        "NO car faces towards the camera. NO car faces the opposite direction. "
                         "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
                         "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
                         "Maximum 22 cars on track (11 teams x 2 drivers). "
@@ -2009,6 +2450,11 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
     # ------------------------------------------------------------------
     # Phases 3-5 (unchanged)
     # ------------------------------------------------------------------
+
+    def _adapt_prompt_for_failure(self, scene, validation_result) -> bool:
+        """Delegate to shared function in scene_validator."""
+        from app.services.scene_validator import adapt_prompt_for_validation_failure
+        return adapt_prompt_for_validation_failure(scene, validation_result)
 
     async def _update_total_costs(self, db: AsyncSession) -> None:
         """Sum all scene image + video costs and update episode total."""

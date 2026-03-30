@@ -7,9 +7,11 @@ Determines what content to generate based on:
 - Manual triggers
 
 Content Schedule:
-- Standard Race Weekend: 2 videos (post-FP2 Friday, post-Race Sunday)
-- Sprint Race Weekend: 3 videos (post-FP2 Friday, post-Sprint Saturday, post-Race Sunday)
+- Standard Race Weekend: 1 video (post-Race Sunday)
+- Sprint Race Weekend: 2 videos (post-Sprint Saturday, post-Race Sunday)
 - Off-Week: 1 video (weekly recap on Friday 07:00 SAST)
+
+NOTE: Practice sessions (FP1/FP2/FP3) NEVER trigger episode generation.
 """
 
 import logging
@@ -24,11 +26,12 @@ from app.models import Race, ScheduledJob, JobStatus, JobTriggerType, EpisodeTyp
 logger = logging.getLogger(__name__)
 
 # Default trigger delays after session end
+# POST_FP2 removed — practice sessions must NEVER generate episodes.
 TRIGGER_DELAYS = {
-    JobTriggerType.POST_FP2: timedelta(hours=1),      # 1 hour after FP2
-    JobTriggerType.POST_SPRINT: timedelta(hours=1),   # 1 hour after sprint
-    JobTriggerType.POST_RACE: timedelta(hours=2),     # 2 hours after race
-    JobTriggerType.WEEKLY_RECAP: timedelta(hours=0),  # Fixed time (07:00 Friday)
+    JobTriggerType.POST_SPRINT: timedelta(hours=1),       # 1 hour after sprint
+    JobTriggerType.POST_QUALIFYING: timedelta(hours=1),   # 1 hour after qualifying
+    JobTriggerType.POST_RACE: timedelta(hours=2),         # 2 hours after race
+    JobTriggerType.WEEKLY_RECAP: timedelta(hours=0),      # Fixed time (07:00 Friday)
 }
 
 # Off-week video release time
@@ -83,17 +86,6 @@ class SchedulerService:
         """Schedule video generation jobs for a race weekend."""
         jobs_created = 0
 
-        # Always schedule post-FP2 if FP2 time is set
-        if race.fp2_datetime:
-            trigger_time = race.fp2_datetime + TRIGGER_DELAYS[JobTriggerType.POST_FP2]
-            if await self._create_job_if_not_exists(
-                race_id=race.id,
-                trigger_type=JobTriggerType.POST_FP2,
-                scheduled_for=trigger_time,
-                description=f"Post-FP2 recap for {race.race_name}"
-            ):
-                jobs_created += 1
-
         # Schedule post-sprint if it's a sprint weekend
         if race.is_sprint_weekend and race.sprint_race_datetime:
             trigger_time = race.sprint_race_datetime + TRIGGER_DELAYS[JobTriggerType.POST_SPRINT]
@@ -102,6 +94,17 @@ class SchedulerService:
                 trigger_type=JobTriggerType.POST_SPRINT,
                 scheduled_for=trigger_time,
                 description=f"Post-Sprint recap for {race.race_name}"
+            ):
+                jobs_created += 1
+
+        # Schedule post-qualifying for non-sprint weekends
+        if not race.is_sprint_weekend and race.qualifying_datetime:
+            trigger_time = race.qualifying_datetime + TRIGGER_DELAYS[JobTriggerType.POST_QUALIFYING]
+            if await self._create_job_if_not_exists(
+                race_id=race.id,
+                trigger_type=JobTriggerType.POST_QUALIFYING,
+                scheduled_for=trigger_time,
+                description=f"Post-Qualifying recap for {race.race_name}"
             ):
                 jobs_created += 1
 
@@ -212,15 +215,15 @@ class SchedulerService:
     def _default_scrape_context(self, trigger_type: JobTriggerType) -> dict:
         """Get default scraping context for a trigger type."""
         contexts = {
-            JobTriggerType.POST_FP2: {
-                "type": "race-weekend",
-                "focus": ["fp1_results", "fp2_results", "driver_quotes", "track_conditions"],
-                "date_range_hours": 24,
-            },
             JobTriggerType.POST_SPRINT: {
                 "type": "race-weekend",
                 "focus": ["sprint_results", "driver_battles", "team_drama", "championship_implications"],
                 "date_range_hours": 12,
+            },
+            JobTriggerType.POST_QUALIFYING: {
+                "type": "race-weekend",
+                "focus": ["qualifying_results", "pole_position", "q1_knockouts", "grid_penalties", "crash_incidents"],
+                "date_range_hours": 6,
             },
             JobTriggerType.POST_RACE: {
                 "type": "race-weekend",
@@ -314,8 +317,8 @@ class SchedulerService:
     def map_trigger_to_episode_type(self, trigger_type: JobTriggerType) -> EpisodeType:
         """Map a job trigger type to an episode type."""
         mapping = {
-            JobTriggerType.POST_FP2: EpisodeType.POST_FP2,
             JobTriggerType.POST_SPRINT: EpisodeType.POST_SPRINT,
+            JobTriggerType.POST_QUALIFYING: EpisodeType.POST_QUALIFYING,
             JobTriggerType.POST_RACE: EpisodeType.POST_RACE,
             JobTriggerType.WEEKLY_RECAP: EpisodeType.WEEKLY_RECAP,
             JobTriggerType.MANUAL: EpisodeType.POST_RACE,  # Default for manual

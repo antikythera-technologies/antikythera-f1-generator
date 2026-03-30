@@ -17,6 +17,7 @@ class EpisodeType(str, enum.Enum):
     POST_RACE = "post-race"    # Main race recap (Sunday)
     POST_FP2 = "post-fp2"      # Friday practice recap
     POST_SPRINT = "post-sprint"  # Sprint race recap (Saturday)
+    POST_QUALIFYING = "post-qualifying"  # Qualifying recap (non-sprint weekends)
     WEEKLY_RECAP = "weekly-recap"  # Off-week news compilation
 
 

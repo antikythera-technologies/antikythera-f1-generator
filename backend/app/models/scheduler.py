@@ -25,6 +25,7 @@ class JobTriggerType(str, enum.Enum):
     POST_FP2 = "post-fp2"
     POST_SPRINT = "post-sprint"
     POST_RACE = "post-race"
+    POST_QUALIFYING = "post-qualifying"
     WEEKLY_RECAP = "weekly-recap"
     MANUAL = "manual"
 

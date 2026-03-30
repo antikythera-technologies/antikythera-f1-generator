@@ -61,11 +61,11 @@ FAL_AUDIO_BACKENDS: set[FalBackend] = {
 }
 
 # FLF (First-Last Frame) capability sets
+# FLF re-enabled for LTX — but only ACTION_REPLAY scenes pass the FLF router.
+# Character scenes are excluded (start/end frame characters look too different).
+# Direction validation checks both frames before video generation.
 FAL_FLF_CAPABLE: set[FalBackend] = {
     FalBackend.LTX,
-    FalBackend.KLING_O1_FLF,
-    FalBackend.VIDU_Q1_FLF,
-    FalBackend.WAN_FLF,
 }
 FAL_FLF_REQUIRED: set[FalBackend] = {
     FalBackend.KLING_O1_FLF,
@@ -154,6 +154,169 @@ class FalVideoClip:
 
 
 
+# ---------------------------------------------------------------------------
+# LTX 2.3 image-to-video prompt builder
+# ---------------------------------------------------------------------------
+# Key principles (from official LTX 2.3 prompting guide):
+# 1. Do NOT redescribe static elements visible in the source image
+# 2. Focus on TEMPORAL EVOLUTION — what changes, moves, or happens
+# 3. Use explicit camera verbs with measurements (dolly, pan, tilt, crane)
+# 4. One clean camera move per scene — don't combine multiple fast moves
+# 5. 4-8 flowing sentences in present tense, ~80 words total
+# 6. Negative guidance ("no face warping, no flickering") reduces artifacts
+# ---------------------------------------------------------------------------
+
+SCENE_TYPE_CAMERA_DEFAULTS: dict[str, str] = {
+    "TALKING_HEAD": (
+        "Static lock-off shot, 50mm lens, shallow depth of field."
+    ),
+    "TWO_SHOT": (
+        "Gentle pan right 0.5 meters over 6 seconds, 35mm lens."
+    ),
+    "OVER_THE_SHOULDER": (
+        "Slow dolly-in 0.3 meters over 6 seconds, 85mm lens, shallow depth of field."
+    ),
+    "REACTION": (
+        "Hold static 2 seconds then slow dolly-in 0.5 meters over 4 seconds on the expression."
+    ),
+    "PODIUM": (
+        "Slow crane up 1 meter over 6 seconds, 35mm wide lens."
+    ),
+    "ACTION_REPLAY": (
+        "Tracking shot following car movement at speed, 200mm telephoto lens, motion blur on background."
+    ),
+    "ESTABLISHING": (
+        "Slow pan right 2 meters over 8 seconds, 24mm wide lens, deep depth of field."
+    ),
+    "TITLE_CARD": (
+        "Slow dolly-out 1 meter over 6 seconds, 35mm lens."
+    ),
+}
+
+# Maps LLM-generated camera_direction keywords to LTX-optimized language.
+# The LLM generates directions like "DOLLY PUSH-IN", "PAN LEFT", "TRACKING", etc.
+_CAMERA_DIRECTION_MAP: dict[str, str] = {
+    "STATIC": "Static lock-off shot, {lens} lens.",
+    "DOLLY PUSH-IN": "Dolly-in {dist} over {dur} seconds, {lens} lens, shallow depth of field.",
+    "DOLLY PULL-OUT": "Dolly-out {dist} over {dur} seconds, {lens} lens.",
+    "DOLLY IN": "Dolly-in {dist} over {dur} seconds, {lens} lens, shallow depth of field.",
+    "DOLLY OUT": "Dolly-out {dist} over {dur} seconds, {lens} lens.",
+    "PAN LEFT": "Pan left {dist} over {dur} seconds, {lens} lens.",
+    "PAN RIGHT": "Pan right {dist} over {dur} seconds, {lens} lens.",
+    "PAN": "Pan right {dist} over {dur} seconds, {lens} lens.",
+    "TILT UP": "Tilt up 0.5 meters over {dur} seconds, {lens} lens.",
+    "TILT DOWN": "Tilt down 0.5 meters over {dur} seconds, {lens} lens.",
+    "TILT": "Tilt up 0.5 meters over {dur} seconds, {lens} lens.",
+    "CRANE": "Crane up 1.5 meters over {dur} seconds, {lens} wide lens.",
+    "CRANE UP": "Crane up 1.5 meters over {dur} seconds, {lens} wide lens.",
+    "CRANE DOWN": "Crane down 1 meter over {dur} seconds, {lens} lens.",
+    "TRACKING": "Tracking shot following subject movement, {lens} lens, motion blur on background.",
+    "STEADICAM": "Steadicam follow with gentle floating movement, {lens} lens.",
+    "HANDHELD": "Subtle handheld movement with natural micro-shake, {lens} lens.",
+    "WHIP PAN": "Quick whip pan over 1 second then settle to static, {lens} lens.",
+    "SLOW ZOOM": "Gradual zoom-in from 35mm to 50mm over {dur} seconds.",
+    "ORBIT": "Slow clockwise orbit around subject over {dur} seconds, {lens} lens.",
+    "360": "Slow 360-degree clockwise orbit over {dur} seconds, {lens} lens.",
+}
+
+# Motion intensity defaults per scene type
+_SCENE_MOTION_PARAMS: dict[str, dict] = {
+    # Restrained
+    "TALKING_HEAD": {"dist": "0.3 meters", "dur": "6", "lens": "50mm"},
+    "REACTION": {"dist": "0.5 meters", "dur": "6", "lens": "50mm"},
+    # Moderate
+    "TWO_SHOT": {"dist": "0.5 meters", "dur": "6", "lens": "35mm"},
+    "OVER_THE_SHOULDER": {"dist": "0.3 meters", "dur": "6", "lens": "85mm"},
+    "ESTABLISHING": {"dist": "2 meters", "dur": "8", "lens": "24mm"},
+    "TITLE_CARD": {"dist": "1 meter", "dur": "6", "lens": "35mm"},
+    "PODIUM": {"dist": "1 meter", "dur": "6", "lens": "35mm"},
+    # Dynamic
+    "ACTION_REPLAY": {"dist": "3 meters", "dur": "6", "lens": "200mm"},
+}
+
+# One background ambient motion element per scene type
+_SCENE_AMBIENT_MOTION: dict[str, str] = {
+    "TALKING_HEAD": "LED screens cycle telemetry data in the background.",
+    "TWO_SHOT": "Crew members shift positions in the soft-focus background.",
+    "OVER_THE_SHOULDER": "Monitor screens flicker with live timing data behind the speakers.",
+    "REACTION": "Team personnel react in the blurred background.",
+    "PODIUM": "Confetti drifts down and champagne spray catches the light.",
+    "ACTION_REPLAY": "Trackside barriers and sponsor boards streak past with speed.",
+    "ESTABLISHING": "Flags flutter in the breeze above the grandstands.",
+    "TITLE_CARD": "Heat haze rises from the track surface in the distance.",
+}
+
+
+def _resolve_camera_movement(camera_direction: str | None, scene_type: str) -> str:
+    """Convert LLM camera_direction into LTX-optimized camera language.
+
+    Falls back to SCENE_TYPE_CAMERA_DEFAULTS if no direction or no match.
+    STATIC is overridden to subtle dolly for face-visible scene types
+    because LTX produces frozen characters with zero camera movement.
+    """
+    params = _SCENE_MOTION_PARAMS.get(scene_type, {"dist": "0.5 meters", "dur": "6", "lens": "35mm"})
+
+    # Override STATIC for talking/character scenes — LTX needs camera
+    # movement to drive character animation. A locked-off camera produces
+    # frozen characters even when dialogue is present.
+    _TALKING_TYPES = {"TALKING_HEAD", "TWO_SHOT", "OVER_THE_SHOULDER", "REACTION"}
+    if camera_direction and camera_direction.strip().upper() == "STATIC" and scene_type in _TALKING_TYPES:
+        return SCENE_TYPE_CAMERA_DEFAULTS.get(scene_type, f"Slow dolly-in {params['dist']} over {params['dur']} seconds, {params['lens']} lens.")
+
+    if camera_direction:
+        # Normalise: uppercase, strip whitespace
+        cd = camera_direction.strip().upper()
+        # Try exact match first, then prefix match
+        template = _CAMERA_DIRECTION_MAP.get(cd)
+        if not template:
+            # Try matching the first keyword (e.g. "DOLLY PUSH-IN with slow reveal" -> "DOLLY PUSH-IN")
+            for key in sorted(_CAMERA_DIRECTION_MAP.keys(), key=len, reverse=True):
+                if cd.startswith(key):
+                    template = _CAMERA_DIRECTION_MAP[key]
+                    break
+        if template:
+            return template.format(**params)
+
+    # Fall back to scene-type default
+    return SCENE_TYPE_CAMERA_DEFAULTS.get(scene_type, "Steady camera with subtle movement, 35mm lens.")
+
+
+import re as re  # needed by _sanitize_voice_description
+
+
+def _sanitize_voice_description(voice_desc: str | None) -> str | None:
+    """Strip screaming/escalation language from voice descriptions.
+
+    LTX generates audio from prompt text. Personality traits like
+    "throat-shredding SCREAMING" or "perpetual crescendo" cause
+    literal screaming in generated audio. Only keep accent/nationality.
+    """
+    if not voice_desc:
+        return None
+    # Strip everything after common escalation markers
+    for marker in [
+        "starts measured", "rapidly escalates", "escalates to",
+        "perpetual crescendo", "peaks at", "no access to",
+        "whispers are louder", "throat-shredding", "full throat",
+    ]:
+        idx = voice_desc.lower().find(marker)
+        if idx > 0:
+            voice_desc = voice_desc[:idx].rstrip(", ")
+    # Remove individual screaming words
+    screaming_words = [
+        r"\bscreaming\b", r"\bSCREAMING\b", r"\bcrescendo\b",
+        r"\bvolcanic\b", r"\bexplosive\b", r"\bthroat-shredding\b",
+        r"\bshredding\b", r"\bwild\b", r"\bfrantic\b",
+        r"\bhysterical\b", r"\bmanic\b", r"\bshouts?\b",
+        r"\byelling\b", r"\bellowing\b", r"\broaring\b",
+    ]
+    for pattern in screaming_words:
+        voice_desc = re.sub(pattern, "", voice_desc, flags=re.IGNORECASE)
+    # Clean up whitespace and trailing punctuation
+    voice_desc = re.sub(r"\s{2,}", " ", voice_desc).strip().rstrip(",. —-")
+    return voice_desc if voice_desc else None
+
+
 def build_f1_video_prompt(
     video_prompt: str,
     scene_type: str | None = None,
@@ -162,83 +325,90 @@ def build_f1_video_prompt(
     team_name: str | None = None,
     car_description: str | None = None,
     overalls_description: str | None = None,
+    camera_direction: str | None = None,
+    character_animation: dict | None = None,
+    livery_description: str | None = None,
 ) -> str:
-    """Wrap a video prompt with Formula 1 context and team colours.
+    """Build an LTX 2.3-optimized image-to-video prompt.
 
-    This is an F1 series. Every video prompt MUST reinforce the F1 environment
-    and use the correct team colours from the database.
+    Follows official LTX prompting guidelines:
+    - Do NOT redescribe the static image (LTX sees it)
+    - Focus on temporal evolution (motion, action, changes)
+    - Explicit camera verbs with measurements
+    - 4-8 sentences, ~80 words, present tense
     """
-    parts = []
-
     st = (scene_type or "").upper()
-    # Strip enum prefixes like "SceneType."
     if "." in st:
         st = st.split(".")[-1]
 
-    # Team colour context — injected from DB
-    team_colour_ctx = ""
-    if team_name and car_description:
-        team_colour_ctx = (
-            f"This is the {team_name} garage. "
-            f"Team car: {car_description}. "
-        )
-        if overalls_description:
-            team_colour_ctx += f"Driver wears: {overalls_description}. "
-        team_colour_ctx += (
-            f"All colours in this scene must match {team_name} branding. "
-        )
+    sentences = []
 
-    if st in ("TALKING_HEAD", "TWO_SHOT", "OVER_THE_SHOULDER", "REACTION"):
-        parts.append(
-            f"FORMULA 1 PIT GARAGE SETTING. {team_colour_ctx}"
-            "Modern Formula 1 team garage with carbon-fibre walls, "
-            "LED screens, and team branding."
-        )
-    elif st == "PODIUM":
-        parts.append(
-            f"FORMULA 1 PODIUM. {team_colour_ctx}"
-            "Official F1 podium with sponsor boards, "
-            "champagne, and grandstands visible."
-        )
-    elif st == "ACTION_REPLAY":
-        car_ctx = f"Cars on track include: {car_description}. " if car_description else ""
-        parts.append(
-            f"FORMULA 1 RACING. {car_ctx}"
-            "Open-cockpit Formula 1 single-seater cars with exposed wheels, "
-            "rear wings, front wings, and halo device. "
-            "All cars drive in the same direction."
+    # --- Sentence 1: Camera movement (strongest LTX signal) ---
+    sentences.append(_resolve_camera_movement(camera_direction, st))
+
+    # --- Sentences 2-3: Temporal evolution / action ---
+    # The base video_prompt from the LLM describes what happens in the scene.
+    # For image-to-video, this should describe CHANGES, not static elements.
+    action = video_prompt.strip()
+
+    # Weave in character acting guidance from personality data
+    if character_animation and face_visible:
+        expr = character_animation.get("signature_expression")
+        pose = character_animation.get("signature_pose")
+        if expr and pose:
+            action += f" Character performs with {expr}, {pose}."
+        elif expr:
+            action += f" Character's expression shows {expr}."
+        elif pose:
+            action += f" Character gestures with {pose}."
+
+    sentences.append(action)
+
+    # --- Sentence 4: One ambient background motion element ---
+    ambient = _SCENE_AMBIENT_MOTION.get(st)
+    if ambient:
+        sentences.append(ambient)
+
+    # --- Sentence 5 (conditional): Lip sync and character animation ---
+    if dialogue and face_visible:
+        if st in ("TWO_SHOT", "OVER_THE_SHOULDER"):
+            sentences.append(
+                "Both characters are animated and alive throughout. "
+                "The speaking character's mouth opens and closes with each word, "
+                "jaw moving naturally, head nodding. The listening character reacts "
+                "with head turns, eyebrow raises, and subtle expression changes. "
+                "Neither character is frozen or static at any point."
+            )
+        else:
+            sentences.append(
+                "Character's mouth opens and closes with each word, "
+                "jaw moving naturally, head tilting between phrases, "
+                "hands gesturing expressively. Never frozen or static."
+            )
+
+    # --- Sentence 6 (conditional): F1 car safety for racing scenes ---
+    if st == "ACTION_REPLAY":
+        car_note = ""
+        if car_description:
+            car_note = f"Lead car matches {car_description}. "
+        sentences.append(
+            f"{car_note}All cars are open-cockpit F1 single-seaters, "
+            "all driving in the same direction away from camera."
         )
     elif st in ("ESTABLISHING", "TITLE_CARD"):
-        parts.append(
-            "FORMULA 1 CIRCUIT. "
-            "Official F1 track with grandstands and sponsor hoardings. "
-            "WIDE LANDSCAPE SHOT ONLY. No close-up faces. No people in foreground. "
-            "All people are distant background figures only."
-        )
-    else:
-        parts.append(f"FORMULA 1 ENVIRONMENT. {team_colour_ctx}")
-
-    parts.append(video_prompt)
-
-    parts.append(
-        "CRITICAL: Maintain the exact clothing, setting, and vehicles "
-        "from the source image throughout the entire video. "
-        "Only Formula 1 open-cockpit cars visible. "
-        "NO road cars, NO GT cars, NO closed-cockpit vehicles. "
-        "Do not introduce new vehicles or buildings not in the source image. "
-        "IMPORTANT: This is an ANIMATED VIDEO, not a still image. "
-        "There MUST be visible motion throughout — characters gesturing and moving, "
-        "cars racing with speed, camera panning or tracking. "
-        "Nothing should be static or frozen."
-    )
-
-    if dialogue and face_visible:
-        parts.append(
-            "Character mouth is clearly opening and closing, "
-            "lips visibly forming each word as they speak."
+        sentences.append(
+            "No close-up faces. All people are distant background figures only."
         )
 
-    return " ".join(parts)
+    # --- Final sentence: Negative guidance (reduces artifacts ~50%) ---
+    neg_parts = ["No face warping, no object duplication, no flickering, no morphing of clothing or setting."]
+    if face_visible:
+        neg_parts.append("Maintain consistent facial features throughout.")
+    if st == "ACTION_REPLAY":
+        neg_parts.append("No cars facing toward camera.")
+    sentences.append(" ".join(neg_parts))
+
+    return " ".join(sentences)
 
 
 class FalVideoGenerator:
@@ -497,21 +667,38 @@ class FalVideoGenerator:
 
     def _args_ltx(self, image_url, prompt, dialogue, audio_description, seed, duration=6, end_image_url=None, face_visible=True, voice_description=None):
         """Build LTX 2.3 arguments with native audio generation."""
+        # Sanitize voice — strip screaming/escalation, keep only accent
+        safe_voice = _sanitize_voice_description(voice_description)
+
         if dialogue and face_visible:
-            # Character scene — lip movement + voice/accent direction
-            voice_clause = f' with {voice_description}' if voice_description else ''
+            # Character scene: dialogue + camera + lip sync + artifact prevention.
+            # EXCLUDE the video_prompt action text (sentences 2-3 of build_f1_video_prompt)
+            # because LTX vocalizes it as extra narration. But KEEP the lip sync
+            # and negative guidance which are needed for mouth animation.
+            voice_clause = f' with {safe_voice}' if safe_voice else ''
+            # Parse prompt: sentence 1 = camera, last 1-2 = negative guidance
+            sentences = [s.strip() for s in prompt.split('. ') if s.strip()]
+            camera_line = sentences[0] + '.' if sentences else ''
+            # Negative guidance is always the last sentence(s)
+            neg_lines = [s for s in sentences if s.startswith('No face warping') or s.startswith('Maintain consistent') or s.startswith('No cars facing')]
+            neg_text = '. '.join(neg_lines) + '.' if neg_lines else ''
             full_prompt = (
-                f'Character speaks{voice_clause} directly to camera with mouth clearly moving, '
-                f'lips visibly forming each word: "{dialogue}" {prompt}'
+                f'Character speaks calmly and clearly{voice_clause}: '
+                f'"{dialogue}" '
+                f'{camera_line} '
+                f"Character's mouth opens and closes with each word, jaw moving naturally, "
+                f"head tilting subtly between phrases, hands gesturing expressively. "
+                f'{neg_text}'
             )
         elif dialogue and not face_visible:
-            # Action/landscape scene — voiceover narration with accent direction
-            voice_clause = f' in {voice_description}' if voice_description else ''
+            # Action/landscape scene — voiceover. Same rule: keep it short.
+            voice_clause = f' in {safe_voice}' if safe_voice else ''
+            camera_line = prompt.split('. ')[0].strip() + '.' if '. ' in prompt else prompt.split('.')[0].strip() + '.'
             full_prompt = (
-                f'Voiceover narration{voice_clause}: "{dialogue}" {prompt} '
-                f'The narration is OFF-SCREEN audio only. '
-                f'Do NOT show any person speaking. No close-up faces. '
-                f'Keep the camera on the landscape/environment.'
+                f'Calm professional voiceover narration{voice_clause}: '
+                f'"{dialogue}" '
+                f'{camera_line} '
+                f'The voice is off-screen narration only. No person speaking on screen.'
             )
         else:
             full_prompt = prompt

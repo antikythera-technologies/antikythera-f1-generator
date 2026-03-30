@@ -8,93 +8,54 @@ The video generation pipeline -- 5 sequential phases that turn a race event into
 
 ## Pipeline Phases
 
-1. **Script Generation** -- Anthropic Haiku generates scene scripts (dialogue, action, audio descriptions, face_visible flags) given race context and character personalities.
-2. **Video Clip Generation** -- Three sub-phases:
-   - Phase 2a: Generate scene images via fal.ai (flux-lora OR instant-character based on scene type).
-   - Phase 2a-bis: Generate end frames for FLF-capable video backends.
-   - Phase 2b: Generate videos from images via configured fal.ai video backend.
-   - Phase 2c: Generate TTS audio (Edge TTS) and mux -- only for non-AV backends. Skipped when video backend produces native audio.
-3. **Stitching** -- ffmpeg concatenates all clips into final video (libx264, CRF 23, aac audio).
-4. **YouTube Upload** -- OAuth2 resumable upload with metadata (title, description, tags). Currently DISABLED (auto-upload off).
-5. **Cleanup** -- Delete MinIO assets older than retention policy.
+1. **Script Generation** -- Anthropic Haiku generates scene scripts (dialogue, action, audio descriptions, face_visible flags, camera_direction) given race context and character personalities. Sanitises dialogue to sentence case (capitals = TTS screaming) and strips video prompt escalation language.
+2. **Image Generation** (fal.ai) -- Routes by face_visible: flux-lora for landscape/action, instant-character for character faces.
+3. **Image Validation** (Claude Vision, inline) -- 8 checks before expensive video gen: text, style, composition, direction, physical_accuracy, team_colours, f1_accuracy, character_match. Receives prompt_text + team_context. Up to 2 retries with shared `adapt_prompt_for_validation_failure()`. Failed images → scene FAILED, no video generated.
+4. **End Frames** (FLF) -- ACTION_REPLAY scenes only on FLF-capable backends.
+5. **Video Generation** (fal.ai) -- LTX 2.3 optimized prompts via `build_f1_video_prompt()`.
+6. **Video Validation** -- Motion check (free) + audio validation (5 ffmpeg checks, free) + Claude Vision. 1 retry.
+7. **TTS Audio** -- Edge TTS + mux, only if video backend has no native audio.
+8. **Stitching** -- ffmpeg concatenation.
+9. **YouTube Upload** -- Currently DISABLED.
 
 ## Image Generation Routing (CRITICAL)
 
-The pipeline routes scene images to different fal.ai backends based on `face_visible` field:
-
 | Scene Property | Image Backend | What Happens |
 |---|---|---|
-| `face_visible=False` (ACTION_REPLAY, ESTABLISHING) | **flux-lora** | LoRA style only, racing direction rules, no character face |
-| `face_visible=True` + face ref exists | **instant-character** | Face ref + LoRA, identity preservation, scale=0.3, 1280x1280->720 crop |
-| `face_visible=True` + no face ref file | **flux-lora fallback** | LoRA + detailed prompt description |
+| `face_visible=False` | **flux-lora** | LoRA style only, racing direction rules, no character face |
+| `face_visible=True` + face ref | **instant-character** | Face ref + LoRA, scale=0.3, 1280x1280→720 crop |
+| `face_visible=True` + no face ref | **flux-lora fallback** | LoRA + detailed prompt description |
 
-Additional image prompt features:
-- Close-up -> MEDIUM SHOT rewriting (prevents head cropping)
-- "WIDE MEDIUM SHOT, camera 5 meters away" framing guard for character scenes
-- Team overalls fallback when no episode appearance set
-- Racing direction rules (all cars same direction, show rear wings)
-- POV/cockpit detection for in-car shots
-- Episode appearance/clothing consistency from episode-level metadata
-- Negative prompts for head cropping prevention (instant-character)
+**RULE: Image routing MUST have feature parity between `video_pipeline.py` and `jobs.py::_async_scene_image`.**
 
-**RULE: Image generation routing MUST have feature parity between `video_pipeline.py::_get_scene_image_fal` and `jobs.py::_async_scene_image`. If one has a feature, the other must too.**
+## Video Prompt Builder (CRITICAL — LTX 2.3 Optimized)
 
-## Video Backends
+`build_f1_video_prompt()` in `fal_video_generator.py` follows LTX 2.3 image-to-video best practices:
+- **Does NOT redescribe the static image** — LTX already sees it
+- **Explicit camera verbs with measurements** — "Dolly-in 0.3 meters over 6 seconds, 50mm lens"
+- **Uses `camera_direction`** from Scene DB — mapped via `_CAMERA_DIRECTION_MAP` to LTX-optimized language
+- **Scene-type camera defaults** — 8 types with appropriate lens, distance, duration
+- **Character animation** from personality traits (signature_expression, signature_pose)
+- **One ambient motion element** per scene type (LED screens, crowd, confetti, etc.)
+- **Negative guidance** — "No face warping, no object duplication, no flickering"
+- **~70 words** per prompt (was ~180)
 
-Selected by `VIDEO_GENERATOR_DEFAULT` in `config.py`. 8 options:
+New params: `camera_direction`, `character_animation`, `livery_description` — all optional.
 
-| Backend | Model | Cost/clip | Status |
-|---------|-------|-----------|--------|
-| `fal-ovi` | fal.ai Ovi | $0.20 | Active |
-| `fal-ltx` | fal.ai LTX 2.3 | $0.30 | Available |
-| `fal-kling-std` | fal.ai Kling 3.0 Std | $0.42 | Available |
-| `fal-kling-pro` | fal.ai Kling 3.0 Pro | $0.42 | Available |
-| `fal-kling-o1-flf` | fal.ai Kling O1 (FLF) | $0.56 | Available |
-| `fal-vidu-q1-flf` | fal.ai Vidu Q1 (FLF) | $0.50 | Available |
-| `fal-wan-flf` | fal.ai Wan (FLF) | $0.50 | Available |
-| `ovi` | Self-hosted RunPod Ovi | ~free | Legacy (RunPod pod needed) |
+**RULE: Video prompt construction MUST have feature parity between `video_pipeline.py` and `jobs.py::_async_scene_video`.**
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `video_pipeline.py` | Orchestrator -- runs all 5 phases, routes image backends |
-| `flf_router.py` | Determines which scenes get end frames (FLF-capable backends) |
-| `../services/fal_video_generator.py` | fal.ai video gen (all fal-* backends) |
-| `../services/image_generator.py` | ComfyUI image gen (legacy, used for character caricatures) |
-| `../services/script_generator.py` | Anthropic Haiku script generation |
-| `../services/tts_generator.py` | Edge TTS speech generation + 42 character voice mappings |
-| `../services/audio_mixer.py` | Mux TTS audio onto video clips via ffmpeg |
-| `../services/stitcher.py` | ffmpeg concatenation |
-| `../services/storage.py` | MinIO object storage |
-| `../services/scene_validator.py` | Post-gen validation (ffmpeg screenshots + Claude Vision) |
-| `../jobs.py` | RQ job wrappers for scene regen, stitch, validate, YouTube upload |
-| `../worker.py` | RQ worker + scheduler poll (with duplicate episode prevention) |
-| `../config.py` | All settings |
-
-## Duplicate Episode Prevention
-
-`worker.py::_process_pending_jobs` checks `Episode.race_id + episode_type` before creating. If an episode already exists, the scheduled job is marked COMPLETED and skipped. The API endpoint `episodes.py::generate_episode` also has this guard (409 conflict unless `force=true`).
-
-## MinIO Storage Paths
-
-```
-f1-scene-images/race_{id:03d}/episode_{id}/scene_{num:02d}_{suffix}.png
-f1-video-clips/race_{id:03d}/episode_{id}/scene_{num:02d}.mp4
-f1-final-videos/race_{id:03d}/episode_{id}/final.mp4
-```
-
-## Video Prompt F1 Context (CRITICAL)
-
-Every video prompt is wrapped via `build_f1_video_prompt()` in `fal_video_generator.py`. This injects:
-- Scene-type-specific F1 environment (pit garage, podium, racing circuit)
-- Team colours from DB (car_description, overalls_description)
-- Anti-drift footer: "Maintain exact clothing/setting, only F1 open-cockpit cars"
-- Lip movement instruction (only when face_visible=True)
-- Voiceover narration prefix (when face_visible=False + dialogue exists — prevents hallucinated faces in cockpit/action scenes)
-
-**RULE: Video prompt wrapping MUST have feature parity between `video_pipeline.py::_generate_video_clips_fal` and `jobs.py::_async_scene_video`.**
+| `video_pipeline.py` | Orchestrator -- all phases, image routing, validation |
+| `flf_router.py` | Determines which scenes get end frames (ACTION_REPLAY only) |
+| `../services/fal_video_generator.py` | `build_f1_video_prompt()` + fal.ai video gen (8 backends) |
+| `../services/scene_validator.py` | Image validation (8 checks) + video validation + shared `adapt_prompt_for_validation_failure()` |
+| `../services/script_generator.py` | Anthropic Haiku script gen + dialogue/prompt sanitisation |
+| `../services/tts_generator.py` | Edge TTS + 42 character voice mappings |
+| `../jobs.py` | RQ job wrappers — single scene regen, stitch, validate |
 
 ## Current Development State
 
-Pipeline video prompts fixed (2026-03-26): All video prompts now include F1 context, team colours from DB, and correct dialogue handling (face_visible controls lip movement vs voiceover narration). Image routing fixed (2026-03-23): instant-character for character scenes, flux-lora for action/landscape. Stitching works. YouTube upload disabled for now (manual review before publishing).
+Pipeline LTX 2.3 prompt enhancement deployed (2026-03-27). Comedy overhaul (2026-03-30): 6-7 characters per episode (main cast + cameos), Croft + Brundle mandatory in every episode, 10 comedy techniques enforced, post-qualifying episode type added. Audio validation (5 ffmpeg checks) integrated in Phase 2d. Every race weekend now produces 2 videos (qualifying/sprint + race).

@@ -60,10 +60,10 @@ RQ worker + scheduler poll loop (configurable interval). Polls for ScheduledJob 
 
 ## Services Layer (app/services/)
 
-- `script_generator.py` -- Anthropic Haiku for scene scripts (incl. face_visible per scene)
-- `fal_video_generator.py` -- fal.ai video gen (8 backends: ovi, ltx, kling, vidu, wan)
+- `script_generator.py` -- Anthropic Haiku for scene scripts + dialogue sanitisation (sentence case) + video prompt sanitisation (strip escalation)
+- `fal_video_generator.py` -- fal.ai video gen (8 backends) + `build_f1_video_prompt()` (LTX 2.3 optimized with camera directions)
 - `image_generator.py` -- ComfyUI image gen (legacy, for character caricatures)
-- `scene_validator.py` -- Post-gen scene validation (ffmpeg screenshots + Claude Vision)
+- `scene_validator.py` -- Image validation (8 checks, pre-video) + video validation (6 checks, post-video) + shared `adapt_prompt_for_validation_failure()`
 - `runtime_settings.py` -- Runtime pipeline settings (image_generator, video_generator)
 - `tts_generator.py` -- Edge TTS speech generation + 42 character voice mappings
 - `audio_mixer.py` -- Mux TTS audio onto video clips via ffmpeg
@@ -94,4 +94,4 @@ uv run black app/ tests/                       # Format
 
 ## Current Development State
 
-Pipeline image routing fixed (2026-03-23). Stitching works. YouTube upload code exists but auto-upload disabled. Scene validation exists as separate job. Scheduler has duplicate episode prevention.
+Pipeline image routing fixed (2026-03-23). LTX 2.3 video prompt enhancement deployed (2026-03-27) — camera_direction used, character animation from personality, ~70 word prompts. Image validation inline in pipeline with 8 checks (team_colours, f1_accuracy added). Dialogue sanitisation prevents TTS screaming. Stitching works. YouTube auto-upload disabled. Scheduler fires post-sprint + post-race only (FP2 removed).

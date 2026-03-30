@@ -31,6 +31,7 @@ services:
     networks:
       - f1-network
       - n8n-docker-caddy_default
+      - n8n-docker-caddy_antikythera_internal_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -101,11 +102,14 @@ services:
     networks:
       - f1-network
       - n8n-docker-caddy_default
+      - n8n-docker-caddy_antikythera_internal_network
 
 networks:
   f1-network:
     driver: bridge
   n8n-docker-caddy_default:
+    external: true
+  n8n-docker-caddy_antikythera_internal_network:
     external: true
 
 volumes:

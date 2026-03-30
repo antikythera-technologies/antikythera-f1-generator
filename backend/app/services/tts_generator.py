@@ -162,6 +162,22 @@ class TTSGenerator:
         spells them letter-by-letter. Convert to sentence case while
         preserving real acronyms (F1, DRS, FIA, etc.).
         """
+
+        import re as _re
+        # Defense-in-depth: collapse capitals and screaming before TTS
+        # ANY capitals make Edge TTS scream
+        text = _re.sub(r"(.)\1{2,}", r"\1\1", text)  # collapse repeated letters
+        text = _re.sub(r"!{2,}", "!", text)  # reduce punctuation
+        text = _re.sub(r"\?{2,}", "?", text)
+        text = text.lower()
+        # Restore sentence starts
+        text = _re.sub(r"(?:^|(?<=[.!?]\s))([a-z])", lambda m: m.group(0).upper(), text)
+        if text and text[0].islower():
+            text = text[0].upper() + text[1:]
+        # Restore F1 acronyms
+        for _acr in ("F1", "DRS", "FIA", "GP", "DNF", "DNS", "DSQ", "VSC", "SC", "ERS"):
+            text = _re.sub(r"\b" + _acr.lower() + r"\b", _acr, text, flags=_re.IGNORECASE)
+
         # Known F1 acronyms that should stay uppercase
         acronyms = {
             "F1", "DRS", "FIA", "FP1", "FP2", "FP3", "Q1", "Q2", "Q3",
