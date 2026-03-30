@@ -89,7 +89,19 @@ def sanitize_scene_prompts(scene: SceneScript) -> SceneScript:
         (r'(?i)\b(?:3[0-9]|[4-9][0-9])\s+(?:F1\s+)?cars\b', '22 F1 cars'),
     ]
 
-    all_patterns = direction_patterns + car_count_patterns
+    # Clothing sanitization: "suit" alone could trigger business suit images
+    clothing_patterns = [
+        (r'(?i)\bwearing\s+a\s+suit\b', 'wearing team-coloured racing overalls'),
+        (r'(?i)\bin\s+a\s+suit\b', 'in team-coloured racing overalls'),
+        (r'(?i)\bbusiness\s+suit\b', 'team-coloured racing overalls'),
+        (r'(?i)\bformal\s+suit\b', 'team-coloured racing overalls'),
+        (r'(?i)\bdress\s+suit\b', 'team-coloured racing overalls'),
+        (r'(?i)\bclosed[- ]cockpit\b', 'open-cockpit'),
+        (r'(?i)\bwith\s+(?:a\s+)?roof\b', 'open-cockpit with halo device'),
+        (r'(?i)\bcanopy\s+(?:over|on|covering)\b', 'halo device above'),
+    ]
+
+    all_patterns = direction_patterns + car_count_patterns + clothing_patterns
 
     # Sanitize video_prompt for escalation language (prevents screaming audio)
     vp = getattr(scene, 'video_prompt', None)
@@ -366,6 +378,18 @@ VIDEO PROMPT TONE RULES (CRITICAL — video models generate audio from these pro
 - Reference r/formuladank memes: "s🅱️inalla", "Bwoah", "For What?!", "Slow Button On", "El Plan", "Master Plan"
 - Break the fourth wall occasionally — characters can reference being in a show
 - Team radio parodies are GOLD — exaggerate real radio messages to absurd levels
+
+F1 CAR AND DRIVER APPEARANCE RULES (CRITICAL):
+- F1 cars are OPEN-COCKPIT single-seaters with NO ROOF, NO CANOPY, NO WINDSHIELD.
+  The halo is a thin curved bar above the cockpit, NOT a canopy or roof.
+- Maximum 22 cars on the F1 grid (11 teams, 2 cars each). NEVER describe more.
+- Establishing shots with cars: show 3-5 cars maximum, not "dozens" or "hundreds".
+- DRIVERS ALWAYS wear RACING OVERALLS (one-piece fireproof race suit with team colours
+  and sponsor logos). NEVER a business suit, blazer, jacket, formal wear, or casual
+  clothes. "Race suit" = RACING OVERALLS, not a business suit. Be explicit: write
+  "team-coloured racing overalls" or "fireproof racing suit with [team] logos".
+- TEAM PRINCIPALS wear team-branded polo shirts or smart casual. Never racing overalls.
+- PUNDITS/COMMENTATORS wear broadcaster uniforms (Sky Sports polo, headset).
 
 SCENE TYPES — USE A MIX (this is critical for visual variety):
 You MUST use a mix of these scene types throughout the episode. NOT just talking heads!
