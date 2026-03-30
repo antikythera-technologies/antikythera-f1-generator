@@ -760,8 +760,15 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                         f"Injected episode appearance for {character.name}"
                     )
 
-                # Ensure face reference is in ComfyUI
-                face_image = await self.image_generator.ensure_face_reference(character.name)
+                # Load face reference — only via ComfyUI for self-hosted backends
+                # For fal.ai backends, face refs are uploaded directly to fal CDN
+                # in _get_scene_image_fal and _async_scene_image
+                backend = settings.VIDEO_GENERATOR_DEFAULT
+                if backend.startswith("fal-"):
+                    # fal.ai path: just get the local filename if it exists
+                    face_image = await self.storage.download_face_reference(character.name)
+                else:
+                    face_image = await self.image_generator.ensure_face_reference(character.name)
 
         return character_name, character_traits, face_image
 
@@ -1464,6 +1471,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 start_time = datetime.utcnow()
                 # Extract voice/accent from character personality for speech synthesis
                 voice_desc = None
+                char_traits = {}
                 _voice_char_id = scene.character_id or scene.voiceover_character_id
                 if _voice_char_id:
                     if scene.character_id:
