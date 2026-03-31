@@ -1212,24 +1212,40 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
                                 await db.commit()
                                 logger.info(f"Scene {scene_number}: Retrying image with adapted prompt")
                                 continue
-                        logger.error(f"Scene {scene_number}: Image validation FAILED after {MAX_IMAGE_RETRIES + 1} attempts — NOT generating video")
-                        # Mark scene as failed — do not waste money on video for a bad image
-                        async with async_session_maker() as db_fail:
-                            s_fail = (await db_fail.execute(
-                                select(SceneModel).where(
-                                    SceneModel.episode_id == episode_id,
-                                    SceneModel.scene_number == scene_number,
-                                )
-                            )).scalar_one_or_none()
-                            if s_fail:
-                                s_fail.status = "failed"
-                                s_fail.validation_status = "failed"
-                                import json as _json
-                                s_fail.validation_issues = _json.dumps(
-                                    [c.name for c in img_val.checks if not c.passed]
-                                )
-                                await db_fail.commit()
-                        return f"Scene {scene_number}: Image validation failed — video not generated"
+                        failed_names = [c.name for c in img_val.checks if not c.passed]
+                        # Only BLOCK video gen for critical failures
+                        CRITICAL_CHECKS = {"car_count", "direction", "clothing", "anatomy"}
+                        critical_fails = [n for n in failed_names if n in CRITICAL_CHECKS]
+
+                        if critical_fails:
+                            logger.error(
+                                f"Scene {scene_number}: CRITICAL image validation failures "
+                                f"{critical_fails} — BLOCKING video generation"
+                            )
+                            async with async_session_maker() as db_fail:
+                                s_fail = (await db_fail.execute(
+                                    select(SceneModel).where(
+                                        SceneModel.episode_id == episode_id,
+                                        SceneModel.scene_number == scene_number,
+                                    )
+                                )).scalar_one_or_none()
+                                if s_fail:
+                                    s_fail.status = "failed"
+                                    s_fail.validation_status = "failed_critical"
+                                    import json as _json
+                                    s_fail.validation_issues = _json.dumps(failed_names)
+                                    await db_fail.commit()
+                            return f"Scene {scene_number}: Critical validation failures {critical_fails}"
+                        else:
+                            logger.warning(
+                                f"Scene {scene_number}: Minor image issues {failed_names} "
+                                "after max retries — proceeding to video generation"
+                            )
+                            # Record the minor issues but continue
+                            scene.validation_status = "failed_minor"
+                            import json as _json_minor
+                            scene.validation_issues = _json_minor.dumps(failed_names)
+                            await db.commit()
                 else:
                     break  # No image to validate
         except Exception as ve:
