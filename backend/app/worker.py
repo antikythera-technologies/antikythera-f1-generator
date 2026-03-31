@@ -48,27 +48,42 @@ def _scheduler_poll_loop(interval_seconds: int = 60) -> None:
     """
     Background thread that checks for pending ScheduledJob records.
 
-    Every *interval_seconds* it queries the database for jobs whose
-    ``scheduled_for`` has passed and status is SCHEDULED, creates an
-    Episode record, enqueues the pipeline, and marks the job RUNNING.
+    Uses a PERSISTENT event loop to avoid connection leaks.
+    asyncio.run() creates/destroys event loops each call, which
+    orphans DB connections as "idle in transaction". A persistent
+    loop reuses the same connection pool properly.
     """
     logger.info(
         f"Scheduler poll loop started (interval={interval_seconds}s)"
     )
 
-    while not _shutdown_event.is_set():
+    # Create a persistent event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        while not _shutdown_event.is_set():
+            try:
+                loop.run_until_complete(_process_pending_jobs())
+            except Exception as exc:
+                logger.error(f"Scheduler poll error: {exc}", exc_info=True)
+
+            # Sleep in small increments so we respond to shutdown quickly
+            for _ in range(interval_seconds):
+                if _shutdown_event.is_set():
+                    break
+                time.sleep(1)
+    finally:
+        # Clean up: close the event loop and any remaining connections
         try:
-            asyncio.run(_process_pending_jobs())
-        except Exception as exc:
-            logger.error(f"Scheduler poll error: {exc}", exc_info=True)
-
-        # Sleep in small increments so we respond to shutdown quickly
-        for _ in range(interval_seconds):
-            if _shutdown_event.is_set():
-                break
-            time.sleep(1)
-
-    logger.info("Scheduler poll loop stopped")
+            # Dispose the engine to release all pooled connections
+            from app.database import engine
+            loop.run_until_complete(engine.dispose())
+            logger.info("Scheduler: DB engine disposed")
+        except Exception:
+            pass
+        loop.close()
+        logger.info("Scheduler poll loop stopped")
 
 
 async def _process_pending_jobs() -> None:

@@ -306,6 +306,39 @@ SATIRICAL COMEDY RULES (THIS IS WHAT MAKES THE SHOW):
 - Lando Norris trying too hard to be the meme lord of F1
 - George Russell being the Head Boy prefect of F1 — always politically correct, always diplomatic, always boring
 
+DRIVER PERSONALITY COMEDY (make each driver DISTINCTIVE and self-absorbed):
+- Lewis Hamilton: Self-absorbed fashion icon. Every comment circles back to himself or
+  his legacy. "This reminds me of when I won my seventh championship..." even when
+  irrelevant. References his own greatness as if stating facts. Fashion choices are so
+  extreme they become the punchline.
+- George Russell: Corporate Head Boy prefect. Speaks in press releases. Uses "we" when
+  he means "I". His earnestness is accidentally hilarious. Would chair a meeting about
+  a meeting. References data and PowerPoint presentations unironically.
+- Max Verstappen: Deadpan brutal honesty. Says what everyone is thinking with zero
+  diplomacy. Never uses exclamation marks. His comedy is pure understatement.
+  "The car is not good" while 30 seconds behind. Treats domination as routine.
+- Charles Leclerc: Dramatic Ferrari passion. Everything is either the end of the world
+  or the greatest moment of his life. No middle ground. Piano-playing romantic trapped
+  in a racing car. Monegasque melodrama.
+- Kimi Antonelli: Gen-Z teenager energy contrasted with F1 veteran surroundings.
+  Accidentally disrespectful to legends because he simply doesn't know the history.
+  "Who's Schumacher?" References TikTok and gaming naturally.
+- Oscar Piastri: Australian deadpan. Impossibly calm about everything. Makes Verstappen
+  look emotional. "Yeah. P2. Could've been P1. Anyway."
+- Fernando Alonso: Ancient warrior who refuses to accept time exists. References events
+  from 2005 as if they were yesterday. "Back in my day" energy but still racing.
+- Lance Stroll: Billionaire's kid who genuinely doesn't understand why people question
+  his talent. Oblivious to the irony of everything.
+
+CHARACTERS MUST TAKE JABS AT EACH OTHER:
+- At least 3 scenes per episode MUST have one character insulting or mocking another
+- Jabs should target REAL weaknesses (fashion, results, team drama, age, wealth)
+- Brundle is the king of backhanded compliments — "That was a brave strategy"
+- Verstappen says the quiet part out loud — "Your car is slow. Mine is also slow."
+- Hamilton deflects criticism by referencing his own achievements
+- Russell defends himself with corporate speak that makes the insult worse
+- Drivers should be petty, competitive, and hilariously self-centred
+
 JOKE DENSITY TARGET:
 - MINIMUM 2 jokes per scene. One in dialogue, one in the visual/action description.
 - Puns, wordplay, double entendres, callbacks, deadpan delivery, absurd escalation
@@ -958,10 +991,12 @@ DRIVER APPEARANCE RULES:
         return "\n".join(lines)
 
     def _format_running_gags(self, gags: List[dict]) -> str:
-        """Format running gags into prompt context."""
+        """Format running gags into prompt context with freshness indicators."""
         lines = [
-            "Running Gags (weave these in naturally where they fit — "
-            "don't force them all, pick the ones that work best):"
+            "RUNNING GAGS — Pick 3-5 that fit the episode naturally. "
+            "PRIORITIZE gags tagged [FRESH] over familiar ones. "
+            "Do NOT use every gag — less is more. "
+            "Find a NEW ANGLE for gags tagged [FAMILIAR] or [OVERUSED]:"
         ]
 
         for gag in gags:
@@ -973,8 +1008,18 @@ DRIVER APPEARANCE RULES:
             punchline = gag.get("punchline", "")
             variations = gag.get("variations", "")
             times_used = gag.get("times_used", 0)
+            freshness = gag.get("freshness", "")
 
-            entry = f"- \"{title}\""
+            # Freshness tag
+            tag = ""
+            if freshness == "FRESH":
+                tag = " [FRESH — never used, great opportunity!]"
+            elif freshness.startswith("OVERUSED"):
+                tag = f" [OVERUSED — {times_used}x, must find completely new angle or SKIP]"
+            elif freshness.startswith("FAMILIAR"):
+                tag = f" [FAMILIAR — {times_used}x, twist it or skip]"
+
+            entry = f"- \"{title}\"{tag}"
             if character:
                 entry += f" (character: {character})"
             if category:
@@ -987,8 +1032,6 @@ DRIVER APPEARANCE RULES:
                 entry += f"\n  Punchline: {punchline}"
             if variations:
                 entry += f"\n  Variations: {variations}"
-            if times_used > 0:
-                entry += f"\n  Used {times_used} times before — find a fresh angle"
 
             lines.append(entry)
 

@@ -620,11 +620,20 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
     async def _fetch_running_gags(
         self, db: AsyncSession, characters: list
     ) -> Optional[list[dict]]:
-        """Fetch active running gags relevant to this episode's characters."""
+        """Fetch active running gags with cooldown enforcement.
+
+        Gags within their cooldown period are skipped. Overused gags get
+        freshness warnings. Limited to 8 gags per episode to avoid
+        overwhelming the script with callbacks.
+        """
         try:
+            # Get current race round for cooldown calculation
+            current_round = 1
+            if self.race:
+                current_round = self.race.round_number
+
             char_ids = [c.id for c in characters if hasattr(c, "id")]
 
-            # Filter gags to those relevant to this episode's characters
             from sqlalchemy import or_
             stmt = (
                 select(RunningGag)
@@ -636,7 +645,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     or_(
                         RunningGag.primary_character_id.in_(char_ids),
                         RunningGag.secondary_character_id.in_(char_ids),
-                        RunningGag.primary_character_id.is_(None),  # Generic gags
+                        RunningGag.primary_character_id.is_(None),
                     )
                 )
             stmt = stmt.order_by(RunningGag.humor_rating.desc())
@@ -647,21 +656,63 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 self.logger.info("No active running gags found in database")
                 return None
 
-            # Convert to dicts for the script generator
+            # Enforce cooldowns and filter
             gag_dicts = []
+            skipped = []
             for gag in all_gags:
+                # Check cooldown: if gag was used recently, skip it
+                if gag.last_used_in_episode_id and gag.cooldown_races > 0:
+                    from app.models.episode import Episode as _EpGag
+                    last_ep = await db.get(_EpGag, gag.last_used_in_episode_id)
+                    if last_ep and last_ep.race_id:
+                        from app.models.race import Race as _RaceGag
+                        last_race = await db.get(_RaceGag, last_ep.race_id)
+                        if last_race:
+                            races_since = current_round - last_race.round_number
+                            if races_since < gag.cooldown_races:
+                                skipped.append(f"{gag.title} ({gag.cooldown_races - races_since}r remaining)")
+                                continue
+
+                # Check exhaustion
+                if gag.max_uses and gag.times_used >= gag.max_uses:
+                    gag.status = GagStatus.EXHAUSTED
+                    await db.flush()
+                    skipped.append(f"{gag.title} (exhausted)")
+                    continue
+
+                # Add freshness indicator
+                freshness = ""
+                if gag.times_used == 0:
+                    freshness = "FRESH"
+                elif gag.times_used >= 4:
+                    freshness = f"OVERUSED ({gag.times_used}x)"
+                elif gag.times_used >= 2:
+                    freshness = f"FAMILIAR ({gag.times_used}x)"
+
                 gag_dicts.append({
                     "title": gag.title,
                     "description": gag.description,
                     "category": gag.category.value if gag.category else "",
-                    "primary_character": "",  # Resolved below if available
+                    "primary_character": "",
                     "setup": gag.setup or "",
                     "punchline": gag.punchline or "",
                     "variations": gag.variations or "",
                     "times_used": gag.times_used,
+                    "freshness": freshness,
                 })
 
-            return gag_dicts
+            if skipped:
+                self.logger.info(f"Gags on cooldown/exhausted: {skipped}")
+
+            # Limit to 8 gags — prioritize FRESH ones, then by humor_rating
+            if len(gag_dicts) > 8:
+                fresh = [g for g in gag_dicts if g.get("freshness") == "FRESH"]
+                others = [g for g in gag_dicts if g.get("freshness") != "FRESH"]
+                gag_dicts = fresh[:4] + others[:(8 - len(fresh[:4]))]
+                self.logger.info(f"Limited gags to 8 (from {len(fresh) + len(others)} available)")
+
+            self.logger.info(f"Selected {len(gag_dicts)} gags for episode")
+            return gag_dicts if gag_dicts else None
 
         except Exception as e:
             self.logger.warning(f"Could not fetch running gags: {e}")
@@ -693,8 +744,20 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
 
                 if gag.max_uses and gag.times_used >= gag.max_uses:
                     gag.status = GagStatus.EXHAUSTED
+                else:
+                    # Set cooling down status so next episode skips this gag
+                    gag.status = GagStatus.COOLING_DOWN
 
-                self.logger.info(f"Tracked gag usage: '{title}' (used {gag.times_used}x)")
+                # Track which race this was used in
+                if self.race:
+                    gag.last_used_in_race = self.race.race_name
+
+                # Dynamically increase cooldown for overused gags
+                if gag.times_used > 4 and gag.cooldown_races < 3:
+                    gag.cooldown_races = 3
+                    self.logger.info(f"Gag '{title}' cooldown increased to 3 races (overused)")
+
+                self.logger.info(f"Tracked gag usage: '{title}' (used {gag.times_used}x, cooling down)")
             else:
                 self.logger.debug(f"Gag referenced in script but not in DB: '{title}'")
 
