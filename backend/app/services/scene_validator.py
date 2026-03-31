@@ -439,6 +439,21 @@ Evaluate this image CAREFULLY. Return ONLY valid JSON (no markdown):
     "passed": true/false,
     "confidence": 0.0-1.0,
     "issue": "description if failed, null if passed"
+  }},
+  "car_count": {{
+    "passed": true/false,
+    "confidence": 0.0-1.0,
+    "issue": "description if failed, null if passed"
+  }},
+  "clothing": {{
+    "passed": true/false,
+    "confidence": 0.0-1.0,
+    "issue": "description if failed, null if passed"
+  }},
+  "anatomy": {{
+    "passed": true/false,
+    "confidence": 0.0-1.0,
+    "issue": "description if failed, null if passed"
   }}
 }}
 
@@ -451,13 +466,16 @@ Checks:
   with space above head. Head cropped or extreme zoom = FAIL.
   For action scenes: cars should be clearly visible, properly composed.
 - DIRECTION: If racing cars or vehicles are visible, ALL cars MUST face and point in the
-  SAME direction. Any car facing the opposite way to others = FAIL. This is critical.
-  If the prompt says cockpit/onboard POV, cars ahead should face AWAY from the viewer.
+  SAME direction — AWAY from the camera. Any car facing TOWARDS the camera = FAIL.
+  Any car facing the opposite direction to other cars = FAIL. Count cars facing each
+  direction — if the split is NOT unanimous = FAIL. This is a CRITICAL check.
+  For cockpit/onboard/POV shots: you are looking FORWARD through the halo. ALL cars
+  visible ahead MUST show their REAR (rear wing, diffuser, exhaust, tail lights).
+  NO car should show its front wing or nose towards the viewer. You are CHASING them.
   If no vehicles are shown = PASS.
 - PHYSICAL_ACCURACY: F1 cars are OPEN-COCKPIT with NO ROOF. If you see a roof, canopy,
-  windshield, or enclosed cabin on an F1 car = FAIL. Also check for hallucinated faces,
-  body parts, or human features merged into car structures or backgrounds = FAIL.
-  F1 cars have exposed driver helmets, visible halo device, and open air above the driver.
+  windshield, or enclosed cabin on an F1 car = FAIL. F1 cars have exposed driver helmets,
+  visible halo device, and open air above the driver.
 - TEAM_COLOURS: If team context is provided above, check that the car livery and/or driver
   suit colours roughly match the expected team colours. A red Ferrari car that appears blue = FAIL.
   Minor shade differences are OK. If no team context provided = PASS.
@@ -466,14 +484,31 @@ Checks:
   cockpits, covered wheels, or that look like Le Mans/GT/road cars = FAIL.
   If no cars shown = PASS.
 - CHARACTER_MATCH: If a reference image is provided, does the face match?
-  Similar features = PASS. Completely different person = FAIL. No reference = PASS."""
+  Similar features = PASS. Completely different person = FAIL. No reference = PASS.
+- CAR_COUNT: F1 has exactly 22 cars (11 teams, 2 drivers each). Count distinct cars
+  visible in the image. If you see more than approximately 25 distinct cars = FAIL.
+  Establishing/wide shots should show 3-8 cars maximum, NOT dozens or hundreds.
+  If hundreds of cars or an impossibly large grid is visible = FAIL immediately.
+  If no cars visible = PASS.
+- CLOTHING: If a driver is the main visible subject (face_visible=true), they MUST wear
+  RACING OVERALLS — a one-piece fireproof suit with team branding and sponsor logos.
+  Racing overalls have visible team colours, sponsor patches, and zip up the front.
+  If the driver appears to be wearing a BUSINESS SUIT, blazer, jacket, tuxedo, formal
+  wear, or casual clothing = FAIL. Team principals in polo shirts = PASS.
+  Commentators in broadcaster uniforms = PASS. If no person is main subject = PASS.
+- ANATOMY: Check for floating or disembodied heads, duplicate faces, extra limbs,
+  body parts pasted onto backgrounds, pit girls or grid girls (not in modern F1),
+  human features that appear unnaturally placed = FAIL. Oversized/exaggerated heads
+  are EXPECTED in caricature style and should NOT be flagged. Caricature proportions
+  are intentional. Only flag truly impossible anatomy (floating heads, merged bodies,
+  phantom limbs). If no humans visible = PASS."""
 
         content_msg = image_content + [{"type": "text", "text": prompt}]
 
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=768,
+                max_tokens=1024,
                 messages=[{"role": "user", "content": content_msg}],
             )
 
@@ -490,7 +525,7 @@ Checks:
             issues = []
             all_passed = True
 
-            for check_name in ["text", "style", "composition", "direction", "physical_accuracy", "team_colours", "f1_accuracy", "character_match"]:
+            for check_name in ["text", "style", "composition", "direction", "physical_accuracy", "team_colours", "f1_accuracy", "character_match", "car_count", "clothing", "anatomy"]:
                 check_data = result.get(check_name, {})
                 passed = check_data.get("passed", True)
                 confidence = check_data.get("confidence", 0.5)
@@ -936,6 +971,31 @@ def adapt_prompt_for_validation_failure(scene, validation_result) -> bool:
             )
             adapted = True
 
+        elif check.name == "car_count":
+            prompt += (
+                " CRITICAL: Maximum 22 F1 cars visible (11 teams x 2 drivers). "
+                "Show at most 3-5 cars in establishing shots. NEVER show dozens "
+                "or hundreds of cars. The F1 grid is small and exclusive."
+            )
+            adapted = True
+
+        elif check.name == "clothing":
+            prompt += (
+                " CRITICAL: The driver MUST wear RACING OVERALLS (one-piece "
+                "fireproof race suit with team colours and sponsor logos). "
+                "NOT a business suit, blazer, jacket, or formal wear. "
+                "Racing overalls zip up the front and have team branding patches."
+            )
+            adapted = True
+
+        elif check.name == "anatomy":
+            prompt += (
+                " CRITICAL: No floating heads, disembodied limbs, duplicate "
+                "faces, pit girls, grid girls, or anatomically impossible "
+                "features. Only natural caricature proportions."
+            )
+            adapted = True
+
         elif check.name == "style" and "ANTKF1STYLE" not in prompt:
             prompt = "ANTKF1STYLE " + prompt
             prompt += (
@@ -945,9 +1005,30 @@ def adapt_prompt_for_validation_failure(scene, validation_result) -> bool:
             adapted = True
 
     if adapted:
-        scene.start_frame_prompt = prompt
+        # Re-sanitize the adapted prompt to remove any contradictions
+        # that the adaptation may have introduced
+        try:
+            from app.services.script_generator import sanitize_scene_prompts, SceneScript
+            temp = SceneScript(
+                scene_number=scene.scene_number,
+                character=None,
+                dialogue=scene.dialogue,
+                audio_description=scene.audio_description,
+                start_frame_prompt=prompt,
+                end_frame_prompt=scene.end_frame_prompt or "",
+                camera_direction=scene.camera_direction or "",
+                video_prompt=scene.video_prompt or "",
+                scene_type=scene.scene_type or "TALKING_HEAD",
+                face_visible=getattr(scene, "face_visible", True),
+            )
+            sanitized = sanitize_scene_prompts(temp)
+            scene.start_frame_prompt = sanitized.start_frame_prompt
+        except Exception as e:
+            logger.warning(f"Re-sanitization failed: {e} — using raw adapted prompt")
+            scene.start_frame_prompt = prompt
+
         logger.info(
-            f"Scene {scene.scene_number}: Prompt adapted for retry "
+            f"Scene {scene.scene_number}: Prompt adapted + re-sanitized for retry "
             f"(failures: {[c.name for c in validation_result.checks if not c.passed]})"
         )
     return adapted

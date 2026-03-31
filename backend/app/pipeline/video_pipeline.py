@@ -1297,6 +1297,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 )
 
                 if img_result.passed:
+                    scene.validation_status = "passed"
+                    scene.validation_issues = None
+                    await db.flush()
                     self.logger.info(
                         f"Scene {scene.scene_number}: Image validation PASSED "
                         f"(attempt {img_attempt + 1})"
@@ -1304,6 +1307,9 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     break
                 else:
                     issues = ", ".join(img_result.issues)
+                    scene.validation_status = "failed"
+                    scene.validation_issues = json.dumps(img_result.issues)
+                    await db.flush()
                     self.logger.warning(
                         f"Scene {scene.scene_number}: Image validation FAILED "
                         f"(attempt {img_attempt + 1}): {issues}"
@@ -1355,10 +1361,37 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                             )
                             break
                     else:
-                        self.logger.warning(
-                            f"Scene {scene.scene_number}: Max image retries reached, "
-                            "proceeding with current image"
-                        )
+                        # Check if any CRITICAL checks failed — these must block video gen
+                        critical_fails = [
+                            c for c in img_result.checks
+                            if not c.passed and c.name in (
+                                "car_count", "direction", "clothing", "anatomy"
+                            )
+                        ]
+                        if critical_fails:
+                            fail_names = [c.name for c in critical_fails]
+                            scene.status = SceneStatus.FAILED
+                            scene.validation_status = "failed_critical"
+                            scene.validation_issues = json.dumps(img_result.issues)
+                            scene.last_error = (
+                                f"Critical image validation failures: {fail_names}. "
+                                f"Blocking video generation."
+                            )
+                            await db.flush()
+                            self.logger.error(
+                                f"Scene {scene.scene_number}: CRITICAL image validation "
+                                f"failures {fail_names} — BLOCKING video generation"
+                            )
+                            # Remove from image_paths so Phase 2b skips it
+                            image_paths.pop(scene.scene_number, None)
+                        else:
+                            scene.validation_status = "failed_minor"
+                            scene.validation_issues = json.dumps(img_result.issues)
+                            await db.flush()
+                            self.logger.warning(
+                                f"Scene {scene.scene_number}: Minor image issues, "
+                                "proceeding with current image"
+                            )
 
         await db.commit()
         self.logger.info("Phase 2a-val complete")
@@ -2196,11 +2229,12 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 is_pov = any(kw in (frame_prompt or "").lower() for kw in pov_keywords)
                 if is_pov:
                     racing_direction_rule = (
-                        "CRITICAL: This is a cockpit/driver POV shot looking forward through the halo. "
-                        "Any cars visible AHEAD must be driving AWAY from the camera — "
-                        "show their REAR wings, rear diffusers, and exhaust. "
-                        "The viewer sees the BACK of the cars in front, NOT their front. "
-                        "No car should face towards the camera. "
+                        "CRITICAL COCKPIT POV: You are the driver looking FORWARD through the halo device. "
+                        "ALL cars visible ahead are DRIVING AWAY from you — you are CHASING them. "
+                        "You can ONLY see their REAR: rear wings, rear diffusers, exhaust pipes, tail lights, "
+                        "rear tyres. You CANNOT see any car's front wing, nose, or headlights. "
+                        "Every single car points in the SAME direction — AWAY from the camera. "
+                        "This is a chase scene, not a head-on collision. "
                         "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES of the track only. "
                         "There is NO kerb, barrier, or divider in the middle of the track. The track is one continuous surface. "
                         "GRID SIZE: Maximum 22 cars on track (11 teams x 2 drivers). Never show more than 22 cars. "
@@ -2263,7 +2297,10 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 "CRITICAL FRAMING: The character must be shown from the knees or waist up. "
                 "Full head, all hair, and both shoulders MUST be visible with clear space above the head. "
                 "NEVER crop the top of the head. Camera is far back, NOT close to the face. "
-                "Any vehicles visible MUST be Formula 1 open-cockpit cars in the character team livery. No road cars. "
+                "Any vehicles visible MUST be Formula 1 open-cockpit cars (NO ROOF) in the character team livery. No road cars. "
+                "Maximum 22 F1 cars visible in any scene. "
+                "The character MUST wear RACING OVERALLS (fireproof race suit with team colours and sponsor logos). "
+                "NOT a business suit, blazer, or formal wear. Racing overalls zip up the front and have sponsor patches. "
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
             full_prompt = " ".join(prompt_parts)
