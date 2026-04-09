@@ -408,6 +408,7 @@ class VideoPipeline:
                 scene_type=getattr(scene_script, "scene_type", None),
                 face_visible=face_visible,
                 voiceover_character_id=voiceover_char.id if voiceover_char else None,
+                duration_seconds=scene_script.target_duration or 5,
                 status=SceneStatus.PENDING,
             )
             db.add(scene)
@@ -1598,15 +1599,31 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 # Audio prompt: ambient sounds only (voice goes into video prompt)
                 rich_audio = scene.audio_description
 
-                # Upload end frame if FLF available for this scene
+                # Upload end frame if FLF available — with compatibility check
                 end_image_url = None
                 if scene.scene_number in end_image_paths:
-                    end_image_url = await fal_gen.upload_image(
-                        end_image_paths[scene.scene_number]
-                    )
-                    self.logger.info(
-                        f"Scene {scene.scene_number}: End frame uploaded for FLF"
-                    )
+                    start_path = image_paths.get(scene.scene_number)
+                    end_path = end_image_paths[scene.scene_number]
+                    if start_path:
+                        from app.services.scene_validator import SceneValidator
+                        _flf_val = SceneValidator()
+                        flf_ok = await _flf_val.check_flf_frame_compatibility(
+                            start_path, end_path, scene.scene_number
+                        )
+                        if flf_ok:
+                            end_image_url = await fal_gen.upload_image(end_path)
+                            self.logger.info(
+                                f"Scene {scene.scene_number}: End frame uploaded for FLF (frames compatible)"
+                            )
+                        else:
+                            self.logger.warning(
+                                f"Scene {scene.scene_number}: FLF DISABLED — frames too different"
+                            )
+                    else:
+                        end_image_url = await fal_gen.upload_image(end_path)
+                        self.logger.info(
+                            f"Scene {scene.scene_number}: End frame uploaded for FLF (no start to compare)"
+                        )
 
                 # Extract character animation from personality traits
                 _char_anim = None
@@ -1637,6 +1654,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     face_visible=bool(scene.face_visible),
                     end_image_url=end_image_url,
                     voice_description=voice_desc,
+                    duration=int(scene.duration_seconds) if scene.duration_seconds else None,
                 )
                 generation_time_ms = int(
                     (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -1670,7 +1688,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     "fal-wan-flf": 0.50,
                 }
                 cost = fal_cost_map.get(backend, 0.20)
-                scene.video_cost_usd = _VDec(str(cost))  # Latest generation cost only
+                scene.video_cost_usd = (scene.video_cost_usd or _VDec(0)) + _VDec(str(cost))
                 provider_map = {
                     "fal-ovi": APIProvider.FAL_OVI,
                     "fal-ltx": APIProvider.FAL_LTX,
@@ -1783,6 +1801,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                                     dialogue=scene.dialogue,
                                     audio_description=scene.audio_description,
                                     face_visible=bool(scene.face_visible),
+                                    duration=int(scene.duration_seconds) if scene.duration_seconds else None,
                                 )
 
                                 clip_path = await self.storage.upload_video_clip(
@@ -1895,6 +1914,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                                         dialogue=scene.dialogue,
                                         audio_description=scene.audio_description,
                                         face_visible=bool(scene.face_visible),
+                                        duration=int(scene.duration_seconds) if scene.duration_seconds else None,
                                     )
 
                                     clip_path2 = await self.storage.upload_video_clip(
@@ -1925,7 +1945,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             await db.commit()
 
         # ----- Phase 2d-audio: Audio Validation -----
-        if self._use_ltx():  # LTX generates native audio
+        if self._use_ltx:  # LTX generates native audio
             self.logger.info("Phase 2d-audio: Running audio validation on all clips")
             for scene in scenes:
                 if scene.status == SceneStatus.FAILED or not scene.video_clip_path:
@@ -2304,13 +2324,17 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     )
                 else:
                     racing_direction_rule = (
-                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
-                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
-                        "NO car faces towards the camera. NO car faces the opposite direction. "
-                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
-                        "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
-                        "Maximum 22 cars on track (11 teams x 2 drivers). "
-                        "F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar above the driver, NOT a canopy or roof. "
+                        "ABSOLUTE RULE — CAMERA IS BEHIND THE CARS: "
+                        "The camera is positioned BEHIND the cars. Every car drives AWAY from the camera. "
+                        "You can ONLY see the REAR of each car: rear wing, rear diffuser, exhaust, rear tyres, rear lights. "
+                        "You CANNOT see any front wing, nose cone, or front of any car. "
+                        "If two cars are side-by-side, both face the SAME direction — AWAY from camera. "
+                        "This is a REAR VIEW. Think of a photo taken from BEHIND a pack of cars. "
+                        "F1 cars are open-cockpit single-seaters with NO roof, NO canopy, NO windshield. "
+                        "The halo is a thin curved titanium bar, NOT a roof or enclosed cabin. "
+                        "The driver's helmet is visible from above, exposed to open air. "
+                        "TRACK LAYOUT: Tarmac surface, kerbs on edges only. No barrier in the middle. "
+                        "Maximum 22 cars (11 teams x 2 drivers). "
                     )
             # For ALL non-face scenes: enforce F1 car count
             # ESTABLISHING shots: focus on environment, minimal cars
@@ -2319,6 +2343,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 racing_direction_rule += (
                     "IMPORTANT: This is an atmospheric/establishing shot. "
                     "Focus on the ENVIRONMENT — circuit, skyline, sunset, paddock. "
+                    "If any cars are visible, they MUST be driving AWAY from camera (rear view only). "
                     "Show at most 3-5 cars in the background, NOT a full grid. "
                     "Cars are secondary to the setting. "
                     "F1 has only 22 cars total (11 teams x 2). NEVER show more than 22 cars. "
@@ -2328,6 +2353,11 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                     "F1 has exactly 22 cars (11 teams x 2 drivers). "
                     "NEVER show more than 22 cars in any scene. "
                 )
+
+            # Strip any conflicting front-view language from the LLM prompt
+            frame_prompt = re.sub(r'(?i)diving\s+down\s+inside\s+of', 'overtaking', frame_prompt)
+            frame_prompt = re.sub(r'(?i)wheel[- ]to[- ]wheel\s+from\s+(?:the\s+)?front', 'wheel-to-wheel from behind', frame_prompt)
+            frame_prompt = re.sub(r'(?i)nose\s+to\s+tail', 'rear view of cars in close formation', frame_prompt)
 
             full_prompt = (
                 f"ANTKF1STYLE {racing_direction_rule} "
@@ -2354,6 +2384,33 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 prompt_parts.append(f"Character appearance for this episode: {episode_appearance}")
             elif physical:
                 prompt_parts.append(f"Character physical traits: {physical}")
+            # Clothing instruction depends on character role:
+            # Drivers (type 1) -> racing overalls
+            # Team principals (type 2) -> team polo shirt
+            # Pundits/commentators (type 3) -> broadcaster polo shirt
+            _char_type_id = getattr(character, 'character_type_id', 1) if character else 1
+            if _char_type_id == 3:
+                # Pundit / commentator (Croft, Brundle, etc.)
+                _clothing_rule = (
+                    "The character is a TV BROADCASTER/COMMENTATOR. "
+                    "They MUST wear a POLO SHIRT with broadcaster branding (e.g. Sky Sports navy blue polo). "
+                    "They should have a headset with microphone around their neck or on their head. "
+                    "NOT a racing suit, NOT overalls. Commentators wear professional broadcast attire. "
+                )
+            elif _char_type_id == 2:
+                # Team principal
+                _clothing_rule = (
+                    "The character is a TEAM PRINCIPAL/BOSS. "
+                    "They MUST wear a TEAM POLO SHIRT or team jacket with team colours and sponsor logos. "
+                    "NOT a racing suit, NOT formal business wear. Team bosses wear branded team gear. "
+                )
+            else:
+                # Driver (default)
+                _clothing_rule = (
+                    "The character MUST wear RACING OVERALLS (fireproof race suit with team colours and sponsor logos). "
+                    "NOT a business suit, blazer, or formal wear. Racing overalls zip up the front and have sponsor patches. "
+                )
+
             prompt_parts.append(
                 "Satirical caricature style with oversized head, "
                 "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
@@ -2362,8 +2419,7 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 "NEVER crop the top of the head. Camera is far back, NOT close to the face. "
                 "Any vehicles visible MUST be Formula 1 open-cockpit cars (NO ROOF) in the character team livery. No road cars. "
                 "Maximum 22 F1 cars visible in any scene. "
-                "The character MUST wear RACING OVERALLS (fireproof race suit with team colours and sponsor logos). "
-                "NOT a business suit, blazer, or formal wear. Racing overalls zip up the front and have sponsor patches. "
+                + _clothing_rule +
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
             full_prompt = " ".join(prompt_parts)
@@ -2447,6 +2503,14 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
             endpoint_name = "fal-ai/flux-lora"
             self.logger.info(f"Scene {scene.scene_number}: Submitting to {endpoint_name}")
 
+            # Build negative prompt for car scenes to reinforce direction
+            _neg_prompt = (
+                "car facing camera, front wing visible, nose cone visible, "
+                "head-on view, cars driving toward camera, front view of car, "
+                "closed cockpit, roof, canopy, windshield, enclosed cabin, "
+                "Le Mans car, GT car, road car, covered wheels"
+            ) if racing_direction_rule else None
+
             fal_payload = {
                 "prompt": full_prompt,
                 "image_size": {"width": 1280, "height": 720},
@@ -2456,6 +2520,8 @@ CRITICAL TIMELINE CONTEXT — You are writing for the {season} F1 season:
                 "loras": [{"path": self.FAL_LORA_URL, "scale": 1.0}],
                 "output_format": "png",
             }
+            if _neg_prompt:
+                fal_payload["negative_prompt"] = _neg_prompt
 
             async with httpx.AsyncClient(timeout=300) as client:
                 submit_resp = await client.post(

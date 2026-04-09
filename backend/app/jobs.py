@@ -65,7 +65,7 @@ async def _update_episode_costs(db, episode_id: int) -> None:
     img_total, vid_total = result.one()
     episode = await db.get(Episode, episode_id)
     if episode:
-        episode.total_cost_usd = img_total + vid_total
+        episode.total_cost_usd = img_total + vid_total + (episode.anthropic_cost_usd or 0)
         await db.flush()
         logger.debug(f"Episode {episode_id}: Updated total cost to ${float(img_total + vid_total):.4f}")
 
@@ -295,7 +295,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
         # Load episode race_id for correct storage path
         from app.models.episode import Episode as _EpModelV
         _ep_v = await db.get(_EpModelV, episode_id)
-        _race_id = _ep_v.race_id if _ep_v else 0
+        _race_id = _ep_v.race_id if _ep_v and _ep_v.race_id else 0
 
         # Get the source image path
         image_path = scene.start_frame_path or scene.source_image_path
@@ -354,7 +354,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                     except Exception as e:
                         logger.warning(f"Scene {scene_number}: Could not build voice prompt: {e}")
 
-                # Upload end frame for FLF if available
+                # Upload end frame for FLF if available — with compatibility check
                 end_image_url = None
                 if scene.end_frame_path:
                     from app.services.fal_video_generator import FAL_FLF_CAPABLE
@@ -363,8 +363,22 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                         try:
                             end_bucket, end_obj = scene.end_frame_path.split("/", 1)
                             await storage.download_file(end_bucket, end_obj, end_local)
-                            end_image_url = await fal_gen.upload_image(end_local)
-                            logger.info(f"Scene {scene_number}: End frame uploaded for FLF")
+
+                            # Validate start/end frame compatibility before using FLF
+                            start_local = f"/tmp/f1-regen/ep{episode_id}_scene{scene_number:02d}.png"
+                            from app.services.scene_validator import SceneValidator
+                            _flf_validator = SceneValidator()
+                            flf_compatible = await _flf_validator.check_flf_frame_compatibility(
+                                start_local, end_local, scene_number
+                            )
+                            if flf_compatible:
+                                end_image_url = await fal_gen.upload_image(end_local)
+                                logger.info(f"Scene {scene_number}: End frame uploaded for FLF (frames compatible)")
+                            else:
+                                logger.warning(
+                                    f"Scene {scene_number}: FLF DISABLED — start/end frames too different. "
+                                    f"Using single start frame only."
+                                )
                         except Exception as e:
                             logger.warning(f"Scene {scene_number}: Could not load end frame for FLF: {e}")
 
@@ -395,7 +409,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                 # Sanitize stored video prompt for direction/escalation
                 from app.services.script_generator import sanitize_prompt_text as _sanitize_vp
                 _raw_vp = (scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip()
-                _clean_vp = _sanitize_vp(_raw_vp)
+                _clean_vp = _sanitize_vp(_raw_vp, scene_type=scene.scene_type)
                 clip = await fal_gen.generate_clip(
                     scene_number=scene_number,
                     image_url=image_url,
@@ -416,6 +430,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
                     face_visible=bool(scene.face_visible),
                     end_image_url=end_image_url,
                     voice_description=_voice_desc,
+                    duration=int(scene.duration_seconds) if scene.duration_seconds else None,
                 )
                 video_local = clip.video_path
 
@@ -641,7 +656,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
         # Load episode race_id for correct storage path
         from app.models.episode import Episode as _EpModelI
         _ep_i = await db.get(_EpModelI, episode_id)
-        _race_id = _ep_i.race_id if _ep_i else 0
+        _race_id = _ep_i.race_id if _ep_i and _ep_i.race_id else 0
 
         # Determine which prompt to use
         if frame_type == "end":
@@ -652,7 +667,7 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
 
         # Sanitize stored prompts — they may predate direction/escalation fixes
         from app.services.script_generator import sanitize_prompt_text
-        frame_prompt = sanitize_prompt_text(frame_prompt)
+        frame_prompt = sanitize_prompt_text(frame_prompt, scene_type=scene.scene_type)
         if not frame_prompt:
             scene.status = SceneStatus.FAILED
             scene.last_error = f"No {frame_type}_frame_prompt set"
@@ -780,20 +795,49 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
                 if team_obj and team_obj.overalls_description:
                     episode_appearance = team_obj.overalls_description
 
-            if episode_appearance:
-                prompt_parts.append(
-                    f"MANDATORY CLOTHING: The character MUST wear {episode_appearance}. "
-                    f"This is a Formula 1 driver — they ALWAYS wear their team race suit, "
-                    f"NEVER a business suit, casual clothes, or any other outfit."
+            # Clothing depends on character role
+            _char_type_id = getattr(scene.character, 'character_type_id', 1) if scene.character else 1
+            if _char_type_id == 3:
+                # Pundit / commentator
+                _clothing_rule = (
+                    "The character is a TV BROADCASTER/COMMENTATOR. "
+                    "They MUST wear a POLO SHIRT with broadcaster branding (e.g. Sky Sports navy blue polo). "
+                    "They should have a headset with microphone. "
+                    "NOT a racing suit, NOT overalls. "
                 )
+            elif _char_type_id == 2:
+                # Team principal
+                _clothing_rule = (
+                    "The character is a TEAM PRINCIPAL. "
+                    "They MUST wear a TEAM POLO SHIRT or team jacket with team colours. "
+                    "NOT a racing suit, NOT formal business wear. "
+                )
+            else:
+                # Driver
+                if episode_appearance:
+                    _clothing_rule = (
+                        f"MANDATORY CLOTHING: The character MUST wear {episode_appearance}. "
+                        f"This is a Formula 1 driver — they ALWAYS wear their team race suit, "
+                        f"NEVER a business suit, casual clothes, or any other outfit. "
+                    )
+                else:
+                    _clothing_rule = (
+                        "The character MUST wear RACING OVERALLS with team colours and sponsor logos. "
+                        "NOT a business suit or formal wear. "
+                    )
+
+            if episode_appearance and _char_type_id == 1:
+                pass  # Already handled above
             elif physical:
                 prompt_parts.append(f"Character physical traits: {physical}")
+
             prompt_parts.append(
                 "Satirical caricature style with oversized head, "
                 "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
                 "CRITICAL FRAMING: The character must be shown from the knees or waist up. "
                 "Full head, all hair, and both shoulders MUST be visible with clear space above the head. "
                 "NEVER crop the top of the head. Camera is far back, NOT close to the face. "
+                + _clothing_rule +
                 "No text, no words, no letters, no logos, no watermarks on clothing or background."
             )
             full_prompt = " ".join(prompt_parts)
@@ -973,6 +1017,12 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
 
                 fal_payload = {
                     "prompt": full_prompt,
+                    "negative_prompt": (
+                        "car facing camera, front wing visible, nose cone visible, "
+                        "front of car, car approaching camera, head-on view, "
+                        "closed cockpit, roof, canopy, windshield, enclosed cabin, "
+                        "Le Mans car, GT car, road car, covered wheels"
+                    ),
                     "image_size": {"width": 1280, "height": 720},
                     "num_images": 1,
                     "num_inference_steps": 28,
@@ -1348,9 +1398,32 @@ async def _async_scene_all(episode_id: int, scene_number: int) -> str:
                                     )
                                 )).scalar_one_or_none()
                                 if s:
-                                    s.video_prompt = (s.video_prompt or "") + " Strong dynamic motion throughout."
+                                    s.video_prompt = (s.video_prompt or "") + (
+                                        " CRITICAL MOTION REQUIRED: Every second must show "
+                                        "visible continuous motion. Characters move, gesture, "
+                                        "blink, react. Cars accelerate and turn. NEVER static."
+                                    )
                                     await db2.commit()
                             continue
+
+                    # Check video first frame matches start image (catches LTX ignoring input)
+                    if scene.start_frame_path:
+                        start_local = f"/tmp/val_{episode_id}_{scene_number}_start.png"
+                        if not os.path.exists(start_local):
+                            try:
+                                s_bucket, s_obj = scene.start_frame_path.split("/", 1)
+                                await storage.download_file(s_bucket, s_obj, start_local)
+                            except Exception:
+                                pass
+                        if os.path.exists(start_local):
+                            matches_start = await validator.check_video_matches_start_frame(
+                                local_vid, start_local, scene_number
+                            )
+                            if not matches_start and video_attempt < MAX_VIDEO_RETRIES:
+                                logger.warning(
+                                    f"Scene {scene_number}: Video doesn't match start frame — retrying"
+                                )
+                                continue
 
                     # Audio validation (free, ffmpeg-based)
                     has_dialogue = bool(scene.dialogue and scene.dialogue.strip())

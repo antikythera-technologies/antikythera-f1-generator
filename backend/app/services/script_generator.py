@@ -24,12 +24,13 @@ class SceneScript:
     dialogue: Optional[str]
     audio_description: Optional[str]
     start_frame_prompt: str
-    end_frame_prompt: str
-    camera_direction: str
-    video_prompt: str
+    end_frame_prompt: Optional[str] = None
+    camera_direction: str = ""
+    video_prompt: str = ""
     scene_type: str = "TALKING_HEAD"
     face_visible: bool = True
     voiceover_character: Optional[str] = None  # character slug for narrator when face not visible
+    target_duration: Optional[int] = None  # LLM-estimated duration in seconds (3-10)
     # Keep action for backward compatibility (derived from camera_direction)
     action: Optional[str] = None
 
@@ -78,6 +79,10 @@ def sanitize_scene_prompts(scene: SceneScript) -> SceneScript:
         (r'(?i)\bcars?\s+racing\s+at\b', 'cars racing away from'),
         (r'(?i)\bfront\s+wings?\s+visible\b', 'rear wings visible'),
         (r'(?i)\bfront\s+of\s+(?:the\s+)?cars?\b', 'rear of the car'),
+        # "diving/dives down the inside" / "lunging inside" — implies car approaching from front
+        (r'(?i)\bdiv(?:ing|es?)\s+(?:down\s+)?(?:the\s+)?inside\s+(?:of\s+)?', 'closing the gap behind '),
+        (r'(?i)\blunging\s+(?:down\s+)?(?:the\s+)?inside\b', 'pulling alongside from behind'),
+        (r'(?i)\bdiv(?:ing|es?)\s+(?:down\s+)?(?:into|through)\b', 'racing through'),
     ]
 
     # Car count violations: max 22 cars on the F1 grid
@@ -101,25 +106,45 @@ def sanitize_scene_prompts(scene: SceneScript) -> SceneScript:
         (r'(?i)\bcanopy\s+(?:over|on|covering)\b', 'halo device above'),
     ]
 
-    all_patterns = direction_patterns + car_count_patterns + clothing_patterns
-
     # Sanitize video_prompt for escalation language (prevents screaming audio)
     vp = getattr(scene, 'video_prompt', None)
     if vp:
         scene.video_prompt = sanitize_video_prompt(vp)
 
+    # Determine which patterns apply based on scene type.
+    # Direction patterns ONLY apply to scenes that show cars on track.
+    # For TALKING_HEAD, TWO_SHOT, OVER_THE_SHOULDER, REACTION:
+    #   "facing the camera" means the PERSON faces the camera — correct!
+    #   Replacing it with "driving away showing rear wings" is nonsensical
+    #   and produces broken prompts like "Brundle driving away from camera
+    #   showing rear wings and rear diffusers with characteristic smile".
+    _st = getattr(scene, 'scene_type', '') or ''
+    _st_upper = _st.upper().split('.')[-1] if '.' in _st else _st.upper()
+    _car_scene_types = {'ACTION_REPLAY', 'ESTABLISHING', 'TITLE_CARD'}
+    _is_car_scene = _st_upper in _car_scene_types
+
     for field_name in ('start_frame_prompt', 'end_frame_prompt', 'video_prompt'):
         value = getattr(scene, field_name, None)
         if not value:
             continue
-        for pattern, replacement in all_patterns:
+
+        # Direction + car count patterns: ONLY for scenes with cars on track
+        if _is_car_scene:
+            for pattern, replacement in direction_patterns:
+                value = _re.sub(pattern, replacement, value)
+            for pattern, replacement in car_count_patterns:
+                value = _re.sub(pattern, replacement, value)
+
+        # Clothing + cockpit patterns: always apply
+        for pattern, replacement in clothing_patterns:
             value = _re.sub(pattern, replacement, value)
+
         setattr(scene, field_name, value)
 
     return scene
 
 
-def sanitize_prompt_text(text: str) -> str:
+def sanitize_prompt_text(text: str, scene_type: str = None) -> str:
     """Sanitize a raw prompt string for direction and escalation violations.
 
     Use this when regenerating scenes from stored prompts that may predate
@@ -147,10 +172,21 @@ def sanitize_prompt_text(text: str) -> str:
         (r'(?i)\bcars?\s+racing\s+at\b', 'cars racing away from'),
         (r'(?i)\bfront\s+wings?\s+visible\b', 'rear wings visible'),
         (r'(?i)\bfront\s+of\s+(?:the\s+)?cars?\b', 'rear of the car'),
+        # "diving/dives down the inside" / "lunging inside" — implies car approaching from front
+        (r'(?i)\bdiv(?:ing|es?)\s+(?:down\s+)?(?:the\s+)?inside\s+(?:of\s+)?', 'closing the gap behind '),
+        (r'(?i)\blunging\s+(?:down\s+)?(?:the\s+)?inside\b', 'pulling alongside from behind'),
+        (r'(?i)\bdiv(?:ing|es?)\s+(?:down\s+)?(?:into|through)\b', 'racing through'),
     ]
 
-    for pattern, replacement in direction_patterns:
-        text = _re.sub(pattern, replacement, text)
+    # Only apply direction patterns to car scenes.
+    # For TALKING_HEAD, TWO_SHOT, etc., "facing the camera" is correct for people.
+    _st = (scene_type or '').upper()
+    _car_types = {'ACTION_REPLAY', 'ESTABLISHING', 'TITLE_CARD'}
+    _is_car_scene = _st in _car_types or not scene_type  # default if no type
+
+    if _is_car_scene:
+        for pattern, replacement in direction_patterns:
+            text = _re.sub(pattern, replacement, text)
 
     text = sanitize_video_prompt(text)
     return text
@@ -512,6 +548,15 @@ STORY STRUCTURE (26 scenes):
 - Scenes 22-25: Resolution — hot takes, predictions, character moments
 - Scene 26: Outro — sign-off with show branding or "next time on..." teaser
 
+SCENE DURATION TIMING:
+Every scene has a target_duration (integer seconds). Match duration to content:
+- Quick reaction, zinger, or beat: 3-4 seconds
+- Standard dialogue (1-2 sentences): 5-6 seconds
+- Complex exchange, detailed action, or multi-character scene: 7-10 seconds
+- Title card: 5 seconds
+- Outro: 6-8 seconds
+Shorter is funnier — a 3-word punchline should NOT get 5 seconds of dead air.
+
 POST-QUALIFYING EPISODE STRUCTURE (when episode_type is "post-qualifying"):
 - Focus on qualifying drama: surprise pole positions, Q1 knockouts, red flags
 - Emphasize the GAPS — who was surprisingly fast/slow and why
@@ -528,17 +573,39 @@ RUNNING GAGS ARE MANDATORY:
 - Visual gags > verbal gags
 
 ACTION_REPLAY SCENE RULES:
-- CRITICAL DIRECTION RULE: All cars on track MUST be driving AWAY from camera, showing REAR wings, diffusers, exhaust pipes, and tail lights. Include "cars ALL driving away from camera showing only their REAR wings" in EVERY racing prompt. NEVER have cars facing towards camera.
-- For on-board shots: describe the COCKPIT VIEW — steering wheel, halo device, visor reflection, car livery colors visible on nose/sidepods, cars ahead driving AWAY showing rear wings
-- For overtake scenes: describe the specific corner, the cars involved by LIVERY COLOR (not face), the racing line, all cars pointing in the SAME direction away from camera
+- ABSOLUTE DIRECTION RULE — THIS IS THE #1 RULE FOR ALL CAR SCENES:
+  The camera is positioned BEHIND the cars. You are watching them drive AWAY from you.
+  You can ONLY describe what you see from BEHIND: rear wings, rear diffusers, exhaust
+  pipes, rear tyres, rear lights, the back of the driver's helmet.
+  You CANNOT see front wings, nose cones, or the front of any car.
+  EVERY start_frame_prompt for a car scene MUST include the phrase:
+  "ALL cars driving away from camera showing REAR wings and rear diffusers"
+  NEVER use words like "diving inside", "lunging", "approaching", "heading toward" —
+  these imply the camera sees the FRONT of the car, which is WRONG.
+  Instead use: "pulling alongside from behind", "closing gap to car ahead",
+  "slipstreaming behind", "chasing down", "rear view of cars battling"
+- F1 CARS HAVE NO ROOF: Every car description MUST include "open-cockpit" and
+  "with halo device". F1 cars have NO roof, NO canopy, NO windshield. The driver's
+  helmet is exposed to open air. The halo is a thin titanium bar, not a roof.
+- For on-board/cockpit POV shots: describe looking FORWARD through the halo. Cars
+  ahead are driving AWAY — you only see their REAR wings and rear diffusers.
+- For overtake scenes: describe from BEHIND — "car pulls alongside rival, both
+  driving away from camera, rear wings side by side through the corner"
 - For crash/incident scenes: describe the impact, debris, gravel trap, safety car
 - The character field should be the COMMENTATOR who provides voiceover
-- Dialogue is the commentary: "AND VERSTAPPEN GOES AROUND THE OUTSIDE!"
+- Dialogue is the commentary: "and Verstappen goes around the outside!"
+- NEVER USE ALL CAPS in dialogue — it causes TTS screaming. Use sentence case only.
 - These scenes do NOT need character_appearances clothing — they show CARS and HELMETS
+
+ESTABLISHING / TITLE_CARD SCENE RULES:
+- If any cars are visible, they MUST be driving AWAY from camera (rear view only)
+- Focus on ENVIRONMENT — circuit, skyline, paddock, fans, cherry blossoms, sunset
+- Show at most 3-5 cars in background, NOT a full grid
+- Cars are secondary to the atmosphere and setting
 
 For each scene, provide FULL cinematographic direction:
 
-start_frame_prompt and end_frame_prompt must include:
+start_frame_prompt must include:
 - Scene type (from the list above)
 - Shot type (WIDE SHOT, MEDIUM WIDE SHOT, MEDIUM SHOT, TWO-SHOT, OVER-THE-SHOULDER, ESTABLISHING, INSERT, COCKPIT POV) — NEVER use CLOSE-UP or tighter
 - Camera angle (eye-level, low angle heroic, high angle diminishing, Dutch angle tension)
@@ -585,9 +652,10 @@ Output EXACTLY this JSON format:
       "dialogue": "Episode tagline (max 15 words)",
       "audio_description": "Epic orchestral intro, engine roar building",
       "start_frame_prompt": "Full cinematographic description",
-      "end_frame_prompt": "Full cinematographic description",
+      "end_frame_prompt": null,
       "camera_direction": "Camera movement",
-      "video_prompt": "Motion and animation instructions"
+      "video_prompt": "Motion and animation instructions",
+      "target_duration": 5
     }
   ],
   "gags_used": ["gag_title_1", "gag_title_2"]
@@ -598,6 +666,7 @@ FINAL RULES:
 - Output valid JSON ONLY — no markdown, no commentary
 - Exactly 26 scenes
 - Dialogue max 15 words per scene
+- target_duration: estimated seconds per scene (3-10). Short reactions/zingers: 3-4s. Standard dialogue: 5-6s. Complex exchanges or action scenes: 7-10s. Title card: 5s. Outro: 6-8s.
 - character field = the person whose FACE is visible (null if no face shown)
 - voiceover_character field = the person narrating when face is not shown (null if visible character is speaking)
 - face_visible field MUST be true or false for every scene
@@ -609,6 +678,20 @@ FINAL RULES:
 - EVERY character scene's prompts must use their exact outfit from character_appearances
 - 6-7 total characters (3-4 main + 2-3 cameos). Cameos appear in only 1-2 scenes.
 - martin_brundle AND david_croft must BOTH appear in every episode
+- VARIETY RULE — DO NOT use the same pundit lineup every episode:
+  Available pundits: david_croft, martin_brundle, jenson_button, ted_kravitz,
+  karun_chandhok, natalie_pinkham, nico_rosberg, simon_lazenby, stefano_domenicali.
+  Each episode MUST include at least ONE pundit who is NOT Croft or Brundle.
+  Rotate through Button, Kravitz, Chandhok, Pinkham, Rosberg, Lazenby across episodes.
+- TEAM PRINCIPALS ADD DRAMA — include at least 1 team principal per episode:
+  Available: toto_wolff, christian_horner, fred_vasseur, andrea_stella, james_vowles,
+  ayao_komatsu, oliver_oakes, graeme_lowdon, jonathan_wheatley, andy_cowell.
+  Team principals are comedy gold — they react to their drivers' performances,
+  blame strategy, smash tables (Toto), scheme (Horner), or deliver dry burns (Vasseur).
+  Use the team principal whose team is MOST relevant to the episode's story.
+- end_frame_prompt: ONLY generate for ACTION_REPLAY scenes (describes how the racing
+  action ends — final car positions, aftermath). Set to null for ALL other scene types.
+  Non-ACTION_REPLAY scenes do not use end frames.
 """
 
 
@@ -697,24 +780,27 @@ class ScriptGenerator:
             content = response.content[0].text
             script_data = self._parse_response(content)
 
-            # Build scene list
-            scenes = [
-                SceneScript(
+            # Build scene list — only ACTION_REPLAY gets end_frame_prompt
+            scenes = []
+            for s in script_data["scenes"]:
+                scene_type = s.get("scene_type", "TALKING_HEAD")
+                # Only ACTION_REPLAY uses FLF end frames — clear for all others
+                efp = s.get("end_frame_prompt") if scene_type.upper() == "ACTION_REPLAY" else None
+                scenes.append(SceneScript(
                     scene_number=s["scene_number"],
                     character=s["character"],
                     dialogue=s.get("dialogue"),
                     audio_description=s.get("audio_description"),
                     start_frame_prompt=s.get("start_frame_prompt", ""),
-                    end_frame_prompt=s.get("end_frame_prompt", ""),
+                    end_frame_prompt=efp or None,
                     camera_direction=s.get("camera_direction", ""),
                     video_prompt=s.get("video_prompt", ""),
-                    scene_type=s.get("scene_type", "TALKING_HEAD"),
+                    scene_type=scene_type,
                     face_visible=s.get("face_visible", True),
                     voiceover_character=s.get("voiceover_character"),
                     action=s.get("action"),  # backward compat
-                )
-                for s in script_data["scenes"]
-            ]
+                    target_duration=s.get("target_duration"),
+                ))
 
             # Sanitize prompts to enforce direction and car count rules
             scenes = [sanitize_scene_prompts(s) for s in scenes]
@@ -928,8 +1014,9 @@ ACTION_REPLAY RULES:
 - When describing a car on track, use the team's car_description from above VERBATIM
 - When two cars are racing, describe BOTH cars with their correct liveries
 - Cars MUST be driving AWAY from camera showing REAR wings and rear diffusers
-- Include dynamic motion: "diving down the inside", "outbraking into Turn X",
-  "slipstreaming on the main straight", "wheel-to-wheel through the corner"
+- Include dynamic motion seen from BEHIND the cars: "closing the gap to the car ahead",
+  "pulling alongside from behind showing both rear wings", "slipstreaming on the main straight",
+  "wheel-to-wheel through the corner, both cars driving away from camera"
 - The video_prompt MUST describe motion: "car accelerating", "overtaking maneuver",
   "crossing the finish line at speed", "braking hard into the corner"
 - TRACK LAYOUT: The race track has tarmac in the centre with kerbs (red-white or yellow) on BOTH EDGES only.
@@ -958,7 +1045,8 @@ DRIVER APPEARANCE RULES:
 
         prompt_parts.append(
             "\nGenerate a 26-scene satirical commentary script with full cinematographic direction. "
-            "Each scene needs start_frame_prompt, end_frame_prompt, camera_direction, and video_prompt. "
+            "Each scene needs start_frame_prompt, camera_direction, and video_prompt. "
+            "Only ACTION_REPLAY scenes need end_frame_prompt (set null for all others). "
             "Use the real news as comedy fuel — exaggerate and satirize real events. "
             "Weave in any running gags that fit naturally. "
             "Output valid JSON only."
