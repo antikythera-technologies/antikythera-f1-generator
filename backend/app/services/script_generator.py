@@ -618,12 +618,14 @@ start_frame_prompt must include:
 
 camera_direction: Professional camera movement (STATIC, DOLLY PUSH-IN, DOLLY PULL-OUT, PAN, TILT, CRANE, TRACKING, STEADICAM, HANDHELD, WHIP PAN, SLOW ZOOM)
 
-video_prompt must include:
+video_prompt must include ALL of the following (the video model needs full context, not just motion):
+- FULL scene description matching start_frame_prompt — setting, location, characters, cars, lighting, atmosphere
 - Camera movement matching camera_direction
-- Character motion OR racing action (for ACTION_REPLAY)
-- Background motion (screens updating, people moving, sparks flying, cars passing)
+- Character motion: gestures, expressions changing, body language (for character scenes)
+- Racing action: car movements, overtakes, speed, tyre smoke, sparks (for ACTION_REPLAY)
+- Background motion: screens updating, people moving, flags waving, clouds drifting, crowd reacting
 - NEVER include style keywords like "ANTKF1STYLE" — the video generator does not use LoRA
-- Keep it purely about motion and camera movement
+- The video prompt must be at LEAST as detailed as the start_frame_prompt — if the start frame describes a "black and silver Mercedes W17 with Petronas teal accents at Suzuka", the video prompt must include those same details PLUS the motion
 
 CHARACTER APPEARANCE CONSISTENCY (CRITICAL):
 - You MUST define a "character_appearances" object for each character
