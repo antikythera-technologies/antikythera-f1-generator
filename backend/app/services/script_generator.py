@@ -639,7 +639,7 @@ CHARACTER APPEARANCE CONSISTENCY (CRITICAL):
 Output EXACTLY this JSON format:
 ```json
 {
-  "title": "Episode title",
+  "title": "Suzuka Qualifying: The Teenager Strikes Again",
   "character_appearances": {
     "character_slug": "Detailed outfit and physical appearance for this episode.",
     "another_slug": "Their specific outfit and appearance."
@@ -667,6 +667,11 @@ Output EXACTLY this JSON format:
 FINAL RULES:
 - Output valid JSON ONLY — no markdown, no commentary
 - Exactly 26 scenes
+- title MUST follow this format: "{Circuit/City} {Session}: {Catchy Subtitle}"
+  - Examples: "Suzuka Qualifying: The Teenager Strikes Again", "Shanghai Sprint: Russell's Surprise", "Melbourne Race: When Mercedes Remembered How to Race"
+  - The circuit/city name MUST appear in the title
+  - The session type (Qualifying, Race, Sprint) MUST appear in the title
+  - The subtitle should reference the episode's main storyline or biggest moment
 - Dialogue max 15 words per scene
 - target_duration: estimated seconds per scene (3-10). Short reactions/zingers: 3-4s. Standard dialogue: 5-6s. Complex exchanges or action scenes: 7-10s. Title card: 5s. Outro: 6-8s.
 - character field = the person whose FACE is visible (null if no face shown)
