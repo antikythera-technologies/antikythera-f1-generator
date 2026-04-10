@@ -128,6 +128,19 @@ async def _process_pending_jobs() -> None:
                     await session.commit()
                     continue
 
+                # Guard: NEVER create an episode without a race_id
+                # Weekly recaps with no race context produce garbage scripts
+                if job.race_id is None:
+                    logger.warning(
+                        f"Scheduled job {job.id} has no race_id — skipping. "
+                        f"Episodes require a race for circuit/driver context."
+                    )
+                    job.status = JobStatus.FAILED
+                    job.error_message = "No race_id — cannot generate without race context"
+                    job.completed_at = datetime.utcnow()
+                    await session.commit()
+                    continue
+
                 # Build a title
                 title = job.description or f"Scheduled {episode_type.value} episode"
 

@@ -145,8 +145,12 @@ class SchedulerService:
                         OFF_WEEK_RELEASE_TIME,
                     )
                     
+                    # Assign the most recent past race for context
+                    # (weekly recaps still need circuit/driver context)
+                    past_race = races[i] if i < len(races) else races[-1]
+
                     if await self._create_job_if_not_exists(
-                        race_id=None,  # No race associated
+                        race_id=past_race.id,  # Use most recent race for context
                         trigger_type=JobTriggerType.WEEKLY_RECAP,
                         scheduled_for=scheduled_time,
                         description=f"Weekly F1 recap for {current_friday.strftime('%Y-%m-%d')}",
