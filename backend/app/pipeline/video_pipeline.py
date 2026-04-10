@@ -88,6 +88,14 @@ class VideoPipeline:
                 # Load episode
                 await self._load_episode(db)
 
+                # GUARD: Refuse to run without a race — scripts need circuit context
+                if not self.episode.race_id:
+                    raise RuntimeError(
+                        f"Episode {self.episode_id} has no race_id. "
+                        f"Cannot generate without race/circuit context. "
+                        f"The scheduler should never create episodes without a race."
+                    )
+
                 # Phase 1: Generate script
                 self.logger.info("PHASE 1: Script Generation")
                 await self._update_status(db, EpisodeStatus.GENERATING)
