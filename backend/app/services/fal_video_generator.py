@@ -247,6 +247,50 @@ _SCENE_AMBIENT_MOTION: dict[str, str] = {
 }
 
 
+_SCENE_CHOREOGRAPHY: dict[str, str] = {
+    "TALKING_HEAD": (
+        "0-2s: character settles into position, slight head tilt, eyes engage camera. "
+        "2-4s: gestures with one hand to emphasize point, weight shifts forward. "
+        "4-6s: leans back slightly, expression changes, nods."
+    ),
+    "TWO_SHOT": (
+        "0-2s: speaking character leans forward with hand gesture, listening character watches. "
+        "2-4s: listener reacts with head turn and eyebrow raise, speaker continues. "
+        "4-6s: both characters shift — speaker settles, listener nods in response."
+    ),
+    "OVER_THE_SHOULDER": (
+        "0-2s: background character begins speaking, foreground shoulder visible and steady. "
+        "2-4s: speaking character gestures, foreground character shifts weight slightly. "
+        "4-6s: speaker pauses with expression change, foreground reacts with subtle tilt."
+    ),
+    "REACTION": (
+        "0-1.5s: eyes widen slowly as realization dawns. "
+        "1.5-3s: head tilts, mouth opens slightly in disbelief. "
+        "3-5s: full expression lands — head shake or slow nod, eyebrows set."
+    ),
+    "PODIUM": (
+        "0-2s: trophy raised higher, grin broadens. "
+        "2-4s: champagne spray arc, head tilts back laughing. "
+        "4-6s: waves to crowd with free hand, confetti drifts past."
+    ),
+    "ACTION_REPLAY": (
+        "0-2s: cars accelerate, rear tyres spinning, exhaust heat visible. "
+        "2-4s: lead car pulls ahead, sparks fly from floor on straight. "
+        "4-6s: trailing car closes gap, both cars visible driving away."
+    ),
+    "ESTABLISHING": (
+        "0-2s: flags flutter, crowd begins to shift in seats. "
+        "2-4s: distant car passes in background with faint engine sound. "
+        "4-6s: light shifts as clouds pass, atmosphere builds."
+    ),
+    "TITLE_CARD": (
+        "0-2s: atmospheric haze drifts across circuit. "
+        "2-4s: distant heat shimmer from track surface. "
+        "4-6s: subtle light flare as sun catches circuit features."
+    ),
+}
+
+
 def _resolve_camera_movement(camera_direction: str | None, scene_type: str) -> str:
     """Convert LLM camera_direction into LTX-optimized camera language.
 
@@ -369,6 +413,11 @@ def build_f1_video_prompt(
     if ambient:
         sentences.append(ambient)
 
+    # --- Time-phased choreography for scene type ---
+    choreo = _SCENE_CHOREOGRAPHY.get(st)
+    if choreo:
+        sentences.append(choreo)
+
     # --- Sentence 5 (conditional): Lip sync and character animation ---
     if dialogue and face_visible:
         if st in ("TWO_SHOT", "OVER_THE_SHOULDER"):
@@ -399,6 +448,26 @@ def build_f1_video_prompt(
         sentences.append(
             "No close-up faces. All people are distant background figures only."
         )
+
+    # --- Sentence 7 (conditional): Motion directives for non-dialogue scenes ---
+    # Without this, action replays and reaction shots end up static
+    if not (dialogue and face_visible):
+        if st == "ACTION_REPLAY":
+            sentences.append(
+                "Cars accelerate and move continuously throughout the clip. "
+                "Wheels spinning, sparks flying, visible speed and motion from frame 1. "
+                "Never static or frozen."
+            )
+        elif st == "REACTION":
+            sentences.append(
+                "Character reacts with visible facial movement — eyebrow raise, "
+                "head turn, expression change. Never frozen or static."
+            )
+        elif st not in ("ESTABLISHING", "TITLE_CARD"):
+            sentences.append(
+                "Subject must have visible, continuous motion throughout. "
+                "No frozen or static frames at any point."
+            )
 
     # --- Final sentence: Negative guidance (reduces artifacts ~50%) ---
     neg_parts = ["No face warping, no object duplication, no flickering, no morphing of clothing or setting."]
@@ -515,14 +584,19 @@ class FalVideoGenerator:
         start_time = time.monotonic()
 
         # Retry up to 3 times — fal CDN can return transient 503s
+        # CRITICAL: 10-minute timeout per attempt — scheduler must not hang forever
+        FAL_VIDEO_TIMEOUT = 600  # 10 minutes max per video generation attempt
         last_error = None
         for attempt in range(3):
             try:
-                result = await asyncio.to_thread(
-                    fal_client.subscribe,
-                    self.model_id,
-                    arguments=arguments,
-                    with_logs=True,
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        fal_client.subscribe,
+                        self.model_id,
+                        arguments=arguments,
+                        with_logs=True,
+                    ),
+                    timeout=FAL_VIDEO_TIMEOUT,
                 )
                 break  # Success
             except Exception as e:
@@ -671,34 +745,57 @@ class FalVideoGenerator:
         safe_voice = _sanitize_voice_description(voice_description)
 
         if dialogue and face_visible:
-            # Character scene: dialogue + camera + lip sync + artifact prevention.
-            # EXCLUDE the video_prompt action text (sentences 2-3 of build_f1_video_prompt)
-            # because LTX vocalizes it as extra narration. But KEEP the lip sync
-            # and negative guidance which are needed for mouth animation.
-            voice_clause = f' with {safe_voice}' if safe_voice else ''
-            # Parse prompt: sentence 1 = camera, last 1-2 = negative guidance
+            # Character scene: dialogue + camera + action + lip sync.
+            # Keep the action text (choreography, ambient, character animation)
+            # but prefix with "Visually:" so LTX treats it as visual direction,
+            # not speech narration.
+            if safe_voice:
+                voice_clause = f' with a clear {safe_voice} accent'
+            else:
+                voice_clause = ''
+            # Parse build_f1_video_prompt output into structural parts
             sentences = [s.strip() for s in prompt.split('. ') if s.strip()]
             camera_line = sentences[0] + '.' if sentences else ''
-            # Negative guidance is always the last sentence(s)
-            neg_lines = [s for s in sentences if s.startswith('No face warping') or s.startswith('Maintain consistent') or s.startswith('No cars facing')]
+            # Negative guidance (always last sentences)
+            neg_keywords = ('No face warping', 'Maintain consistent', 'No cars facing')
+            neg_lines = [s for s in sentences if any(s.startswith(kw) for kw in neg_keywords)]
             neg_text = '. '.join(neg_lines) + '.' if neg_lines else ''
+            # Action/animation = everything EXCEPT camera (first) and negative (last)
+            action_lines = [
+                s for s in sentences[1:]
+                if not any(s.startswith(kw) for kw in neg_keywords)
+            ]
+            action_text = '. '.join(action_lines) + '.' if action_lines else ''
             full_prompt = (
                 f'Character speaks calmly and clearly{voice_clause}: '
                 f'"{dialogue}" '
                 f'{camera_line} '
-                f"Character's mouth opens and closes with each word, jaw moving naturally, "
-                f"head tilting subtly between phrases, hands gesturing expressively. "
+                f'Visually: {action_text} '
                 f'{neg_text}'
             )
         elif dialogue and not face_visible:
-            # Action/landscape scene — voiceover. Same rule: keep it short.
-            voice_clause = f' in {safe_voice}' if safe_voice else ''
-            camera_line = prompt.split('. ')[0].strip() + '.' if '. ' in prompt else prompt.split('.')[0].strip() + '.'
+            # Action/landscape scene — voiceover. Keep the visual action text.
+            if safe_voice:
+                voice_clause = f' in a clear {safe_voice} accent'
+            else:
+                voice_clause = ''
+            sentences = [s.strip() for s in prompt.split('. ') if s.strip()]
+            camera_line = sentences[0] + '.' if sentences else ''
+            neg_keywords = ('No face warping', 'Maintain consistent', 'No cars facing')
+            action_lines = [
+                s for s in sentences[1:]
+                if not any(s.startswith(kw) for kw in neg_keywords)
+            ]
+            neg_lines = [s for s in sentences if any(s.startswith(kw) for kw in neg_keywords)]
+            action_text = '. '.join(action_lines) + '.' if action_lines else ''
+            neg_text = '. '.join(neg_lines) + '.' if neg_lines else ''
             full_prompt = (
                 f'Calm professional voiceover narration{voice_clause}: '
                 f'"{dialogue}" '
                 f'{camera_line} '
-                f'The voice is off-screen narration only. No person speaking on screen.'
+                f'Visually: {action_text} '
+                f'The voice is off-screen narration only. No person speaking on screen. '
+                f'{neg_text}'
             )
         else:
             full_prompt = prompt

@@ -141,8 +141,11 @@ async def _process_pending_jobs() -> None:
                     await session.commit()
                     continue
 
-                # Build a title
-                title = job.description or f"Scheduled {episode_type.value} episode"
+                # Build title from DB facts — pipeline will append LLM subtitle
+                from app.models.race import Race
+                race = await session.get(Race, job.race_id)
+                location = (race.country or race.race_name) if race else "F1"
+                title = f"{location} {episode_type.session_label}: Generating..."
 
                 # Create an Episode record
                 episode = Episode(

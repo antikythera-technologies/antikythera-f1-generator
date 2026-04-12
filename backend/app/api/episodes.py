@@ -55,8 +55,9 @@ async def generate_episode(
             detail=f"Episode already exists: {existing.id}. Use force=true to regenerate.",
         )
 
-    # Create new episode
-    title = f"{race.race_name} - {request.episode_type.value.replace('-', ' ').title()}"
+    # Create new episode — title from DB facts, pipeline will append LLM subtitle
+    location = race.country or race.race_name
+    title = f"{location} {request.episode_type.session_label}: Generating..."
     episode = Episode(
         race_id=request.race_id,
         episode_type=request.episode_type,

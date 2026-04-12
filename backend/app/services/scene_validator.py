@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -219,7 +220,7 @@ These {len(frame_paths)} frames are sampled across a single 5-second scene (even
 
 {scene_context}
 
-Evaluate these frames on 6 criteria. Return ONLY valid JSON (no markdown):
+Evaluate these frames on 8 criteria. Return ONLY valid JSON (no markdown):
 
 {{
   "style": {{
@@ -251,6 +252,16 @@ Evaluate these frames on 6 criteria. Return ONLY valid JSON (no markdown):
     "passed": true/false,
     "confidence": 0.0-1.0,
     "issue": "description if failed, null if passed"
+  }},
+  "motion": {{
+    "passed": true/false,
+    "confidence": 0.0-1.0,
+    "issue": "description if failed, null if passed"
+  }},
+  "mouth_movement": {{
+    "passed": true/false,
+    "confidence": 0.0-1.0,
+    "issue": "description if failed, null if passed"
   }}
 }}
 
@@ -265,10 +276,23 @@ Check definitions:
   Any visible text that looks AI-generated, garbled, or out of place = FAIL.
   Legitimate in-world text (like real sponsor logos on F1 cars, if clearly rendered) = pass.
   When in doubt, fail — false positives are better than missing embedded text.
-- DIRECTION: If the scene shows racing cars or vehicles on a track, check that ALL cars face and
-  move in the SAME direction. Cars driving against the flow of the race (facing opposite to others) = FAIL.
-  If no vehicles are shown, or only one car is visible, = pass.
-  This is critical for racing scenes — backwards-facing cars break immersion completely."""
+- DIRECTION: If the scene shows racing cars or vehicles on a track:
+  Step 1: For each car, determine: can you see its FRONT (nose cone, front wing) or its REAR (rear wing, diffuser)?
+  Step 2: If you see the FRONT of ANY car facing toward the camera = IMMEDIATE FAIL.
+  Step 3: ALL cars must face the SAME direction. Cars going opposite ways = FAIL.
+  Step 4: A 3/4 front angle where nose cone is visible = STILL a direction failure.
+  If no vehicles are shown = pass.
+  ALSO check across frames: if cars are facing one direction in frame 1 but reverse in frame 3 = FAIL.
+- MOTION: Compare frame 1 to frame 3 to frame 5. Are there visible DIFFERENCES between frames?
+  Characters should move (head turns, gestures, expression changes). Cars should move on track.
+  If ALL frames look nearly identical (like the same still photo) = FAIL.
+  A slow camera zoom with a frozen subject = FAIL. The SUBJECT must move, not just the camera.
+  Only pass if there is genuine subject motion visible between the frames.
+- MOUTH_MOVEMENT: If the scene has dialogue (check the dialogue field above) AND a character's
+  face is visible, check: does the character's mouth position change between frames?
+  Frame 1 mouth closed + frame 3 mouth still closed + frame 5 mouth still closed = FAIL.
+  The mouth must visibly open and close across the frames if the character is speaking.
+  If no face is visible or no dialogue = pass."""
 
         content = image_content + [{"type": "text", "text": prompt}]
 
@@ -292,7 +316,7 @@ Check definitions:
             issues = []
             all_passed = True
 
-            for check_name in ["style", "character", "artifacts", "composition", "text", "direction"]:
+            for check_name in ["style", "character", "artifacts", "composition", "text", "direction", "motion", "mouth_movement"]:
                 check_data = result.get(check_name, {})
                 passed = check_data.get("passed", True)
                 confidence = check_data.get("confidence", 0.5)
@@ -465,14 +489,18 @@ Checks:
 - COMPOSITION: Main subject must be fully visible. Head, hair, shoulders clearly in frame
   with space above head. Head cropped or extreme zoom = FAIL.
   For action scenes: cars should be clearly visible, properly composed.
-- DIRECTION: If racing cars or vehicles are visible, ALL cars MUST face and point in the
-  SAME direction — AWAY from the camera. Any car facing TOWARDS the camera = FAIL.
-  Any car facing the opposite direction to other cars = FAIL. Count cars facing each
-  direction — if the split is NOT unanimous = FAIL. This is a CRITICAL check.
-  For cockpit/onboard/POV shots: you are looking FORWARD through the halo. ALL cars
-  visible ahead MUST show their REAR (rear wing, diffuser, exhaust, tail lights).
-  NO car should show its front wing or nose towards the viewer. You are CHASING them.
-  If no vehicles are shown = PASS.
+- DIRECTION: **THIS IS THE MOST IMPORTANT CHECK.** If ANY racing car or vehicle is visible:
+  Step 1: For each car, determine: can you see its FRONT (nose cone, front wing, front
+  suspension) or its REAR (rear wing, rear diffuser, exhaust, rear lights)?
+  Step 2: If you can see the FRONT of ANY car, meaning the car is facing TOWARD the
+  camera or toward the viewer = IMMEDIATE FAIL. The camera should be BEHIND the cars.
+  Step 3: ALL cars must show their REAR to the camera — rear wings, diffusers, exhaust.
+  The camera is always BEHIND the pack, looking at their backs as they drive away.
+  Step 4: If cars face DIFFERENT directions from each other = FAIL.
+  COMMON FAILURE MODE: Cars shown from a 3/4 front angle where you can see the nose
+  cone and front wing — this is STILL a direction failure. The camera must be BEHIND.
+  For cockpit/POV: You look forward through the halo. Cars ahead show their REAR only.
+  If no vehicles shown = PASS.
 - PHYSICAL_ACCURACY: F1 cars are OPEN-COCKPIT with NO ROOF. If you see a roof, canopy,
   windshield, or enclosed cabin on an F1 car = FAIL. F1 cars have exposed driver helmets,
   visible halo device, and open air above the driver.
@@ -603,29 +631,43 @@ Checks:
             diff_str = ", ".join(f"s{i+1}-{i+2}:{d:.1f}" for i, d in enumerate(diffs))
             logger.info(f"Motion check per-second diffs: [{diff_str}]")
 
-            # Count consecutive frozen pairs (diff < 5.0)
+            # Count consecutive frozen pairs (diff < 8.0)
+            # 8.0 = a slow camera zoom with no subject motion.
+            # Real character animation produces 15-50+ pixel diff.
             max_frozen_streak = 0
             current_streak = 0
             for d in diffs:
-                if d < 5.0:
+                if d < 8.0:
                     current_streak += 1
                     max_frozen_streak = max(max_frozen_streak, current_streak)
                 else:
                     current_streak = 0
 
-            # Overall motion check
+            # Also check first 2 seconds specifically — frozen starts are
+            # the most common failure mode (model takes time to animate)
+            first_2_frozen = all(d < 8.0 for d in diffs[:2]) if len(diffs) >= 2 else False
+
+            # Overall motion check — stricter thresholds:
+            # mean_diff > 12.0 = visible motion, not just camera movement
+            # max_frozen_streak < 2 = reject even 2 consecutive static seconds
             mean_diff = sum(diffs) / len(diffs) if diffs else 0
-            has_motion = mean_diff > 5.0 and max_frozen_streak < 3
+            has_motion = mean_diff > 12.0 and max_frozen_streak < 2 and not first_2_frozen
 
             if not has_motion:
-                if max_frozen_streak >= 3:
+                if first_2_frozen:
+                    logger.warning(
+                        f"Motion check FAILED: First 2 seconds frozen "
+                        f"(diffs: {[f'{d:.1f}' for d in diffs[:3]]})"
+                    )
+                elif max_frozen_streak >= 2:
                     logger.warning(
                         f"Motion check FAILED: {max_frozen_streak} consecutive "
                         f"frozen seconds detected (mean_diff={mean_diff:.1f})"
                     )
                 else:
                     logger.warning(
-                        f"Motion check FAILED: overall mean_diff={mean_diff:.1f}"
+                        f"Motion check FAILED: overall mean_diff={mean_diff:.1f} "
+                        f"(threshold: 12.0)"
                     )
             else:
                 logger.info(
@@ -635,6 +677,154 @@ Checks:
 
             return has_motion
 
+
+    async def check_flf_frame_compatibility(
+        self, start_path: str, end_path: str, scene_number: int
+    ) -> bool:
+        """Check that start and end frames are compatible for FLF interpolation.
+
+        For FLF video, start and end frames must be the SAME SCENE with only
+        the action progressing. Same camera angle, same lighting, same location.
+
+        Checks:
+        1. Resolution match — frames must have identical dimensions
+        2. Pixel difference — overall colour similarity (max 80)
+        3. Histogram similarity — same colour palette (min 0.4)
+        4. Structural similarity — same scene composition via NCC (min 0.3)
+        5. Edge structure — same scene layout via Sobel correlation (min 0.2)
+
+        Returns True if frames are compatible, False if too different.
+        """
+        from PIL import Image
+        import numpy as np
+
+        try:
+            start_raw = Image.open(start_path).convert("RGB")
+            end_raw = Image.open(end_path).convert("RGB")
+
+            # 1. Resolution check — must be identical dimensions
+            if start_raw.size != end_raw.size:
+                logger.warning(
+                    f"Scene {scene_number}: FLF frames have DIFFERENT resolutions — "
+                    f"start={start_raw.size}, end={end_raw.size}. Incompatible."
+                )
+                return False
+
+            # Resize for fast comparison
+            start_img = np.array(start_raw.resize((320, 180)))
+            end_img = np.array(end_raw.resize((320, 180)))
+
+            # 2. Overall pixel difference — if frames are vastly different, reject
+            pixel_diff = np.abs(start_img.astype(float) - end_img.astype(float)).mean()
+
+            # 3. Colour histogram similarity — same scene should have similar palette
+            start_hist = np.histogram(start_img, bins=32, range=(0, 256))[0].astype(float)
+            end_hist = np.histogram(end_img, bins=32, range=(0, 256))[0].astype(float)
+            start_hist /= start_hist.sum() + 1e-8
+            end_hist /= end_hist.sum() + 1e-8
+            hist_similarity = np.minimum(start_hist, end_hist).sum()
+
+            # 4. Structural similarity — grayscale cross-correlation
+            start_gray = np.mean(start_img, axis=2).astype(float)
+            end_gray = np.mean(end_img, axis=2).astype(float)
+            ncc = np.corrcoef(start_gray.flatten(), end_gray.flatten())[0, 1]
+
+            # 5. Edge structure — Sobel edge maps should correlate (same layout)
+            from scipy.ndimage import sobel
+            start_edges = sobel(start_gray)
+            end_edges = sobel(end_gray)
+            edge_corr = np.corrcoef(start_edges.flatten(), end_edges.flatten())[0, 1]
+
+            compatible = (
+                pixel_diff < 80.0
+                and hist_similarity > 0.4
+                and ncc > 0.15
+                and edge_corr > -0.1
+            )
+
+            if not compatible:
+                reasons = []
+                if pixel_diff >= 80.0:
+                    reasons.append(f"pixel_diff={pixel_diff:.1f} (max 80)")
+                if hist_similarity <= 0.4:
+                    reasons.append(f"hist_sim={hist_similarity:.2f} (min 0.4)")
+                if ncc <= 0.3:
+                    reasons.append(f"structural_sim={ncc:.2f} (min 0.3)")
+                if edge_corr <= 0.2:
+                    reasons.append(f"edge_corr={edge_corr:.2f} (min 0.2)")
+                logger.warning(
+                    f"Scene {scene_number}: FLF frames INCOMPATIBLE — "
+                    + ", ".join(reasons)
+                    + ". Start and end frames must be the SAME SCENE."
+                )
+            else:
+                logger.info(
+                    f"Scene {scene_number}: FLF frames compatible — "
+                    f"pixel_diff={pixel_diff:.1f}, hist_sim={hist_similarity:.2f}, "
+                    f"structural={ncc:.2f}, edge={edge_corr:.2f}"
+                )
+
+            return compatible
+
+        except Exception as e:
+            logger.warning(f"Scene {scene_number}: FLF compatibility check failed: {e}")
+            return False  # Fail safe — don't use FLF if we can't validate
+
+    async def check_video_matches_start_frame(
+        self, video_path: str, start_image_path: str, scene_number: int
+    ) -> bool:
+        """Check that the video's first frame matches the start image.
+
+        Catches cases where LTX ignores the start image entirely.
+        Returns True if they match, False if too different.
+        """
+        from PIL import Image
+        import numpy as np
+
+        try:
+            # Extract first frame from video
+            with tempfile.TemporaryDirectory() as tmpdir:
+                first_frame_path = os.path.join(tmpdir, "first_frame.png")
+                subprocess.run(
+                    ["ffmpeg", "-i", video_path, "-vframes", "1",
+                     first_frame_path, "-y"],
+                    capture_output=True, timeout=15,
+                )
+                if not os.path.exists(first_frame_path):
+                    logger.warning(f"Scene {scene_number}: Could not extract first frame")
+                    return True  # Don't block on extraction failure
+
+                first_frame = np.array(
+                    Image.open(first_frame_path).convert("RGB").resize((320, 180))
+                )
+                start_img = np.array(
+                    Image.open(start_image_path).convert("RGB").resize((320, 180))
+                )
+
+                pixel_diff = np.abs(
+                    first_frame.astype(float) - start_img.astype(float)
+                ).mean()
+
+                # Threshold: 60 allows for minor colour shifts from video encoding
+                # but catches completely different images
+                matches = pixel_diff < 60.0
+
+                if not matches:
+                    logger.warning(
+                        f"Scene {scene_number}: Video first frame does NOT match "
+                        f"start image (pixel_diff={pixel_diff:.1f}, threshold=60)"
+                    )
+                else:
+                    logger.info(
+                        f"Scene {scene_number}: Video matches start frame "
+                        f"(pixel_diff={pixel_diff:.1f})"
+                    )
+
+                return matches
+
+        except Exception as e:
+            logger.warning(f"Scene {scene_number}: Start frame match check failed: {e}")
+            return True  # Don't block on errors
 
     # ── Audio Validation Methods ──────────────────────────────────────
 
@@ -901,134 +1091,123 @@ Checks:
         return result
 
 
-def adapt_prompt_for_validation_failure(scene, validation_result) -> bool:
-    """Shared prompt adaptation based on validation failures.
+def _strip_old_validation_text(prompt: str) -> str:
+    """Remove stacked validation text from previous adapt_prompt calls.
 
-    Used by both jobs.py (single scene regen) and video_pipeline.py (bulk pipeline).
+    Handles both the new --FIX: suffix format and the old verbose format
+    where CRITICAL/MANDATORY/etc. sentences were appended directly.
+    """
+    # Strip new-format fix suffix
+    prompt = re.sub(r'\s*--FIX:.*$', '', prompt)
+    # Strip old-format verbose validation sentences
+    prompt = re.sub(r'\s*CRITICAL[:\s][^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*ABSOLUTE RULE[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*ALL vehicles[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*MANDATORY[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*IMPORTANT[:\s][^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*F1 cars are[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*The character must[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*Character must[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*The driver MUST[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*No floating heads[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*Full head,? all hair[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*Camera is far back\.', '', prompt)
+    prompt = re.sub(r'\s*Satirical caricature with[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*NOT photorealistic\.', '', prompt)
+    prompt = re.sub(r'\s*CRITICAL COLOUR FIX[^.]*\.', '', prompt)
+    prompt = re.sub(r'\s*CRITICAL MOTION REQUIRED[^.]*\.', '', prompt)
+    # Clean up any double spaces left behind
+    prompt = re.sub(r'\s{2,}', ' ', prompt).strip()
+    return prompt
+
+
+def adapt_prompt_for_validation_failure(scene, validation_result, frame_type="start") -> bool:
+    """Adapt prompt based on validation failures WITHOUT bloating.
+
+    CRITICAL: flux-lora's CLIP tokenizer only processes ~60-80 words.
+    This function:
+      1. Strips ALL previously-appended validation text first
+      2. Adds compact one-sentence fixes as a --FIX: suffix
+      3. Enforces a hard 75-word limit on the final prompt
+
+    Used by both jobs.py and video_pipeline.py.
+    frame_type: 'start' or 'end' -- which prompt to adapt.
     Returns True if the prompt was modified (worth retrying).
     """
     adapted = False
-    prompt = scene.start_frame_prompt or ""
+    if frame_type == "end":
+        prompt = scene.end_frame_prompt or ""
+    else:
+        prompt = scene.start_frame_prompt or ""
 
-    for check in validation_result.checks:
-        if check.passed:
-            continue
+    # Step 1: Strip ALL previous validation text (old and new formats)
+    prompt = _strip_old_validation_text(prompt)
 
-        if check.name == "text" and "CRITICAL: No text" not in prompt:
-            prompt += (
-                " CRITICAL: No text, no words, no letters, no numbers, "
-                "no watermarks, no writing anywhere in the image. "
-                "All surfaces must be clean and text-free."
-            )
-            adapted = True
+    failed_names = {c.name for c in validation_result.checks if not c.passed}
 
-        elif check.name == "direction":
-            prompt += (
-                " ALL vehicles must face the SAME direction. "
-                "No car faces the opposite way to the others."
-            )
-            adapted = True
+    # Step 2: Build compact fix suffix -- one short phrase per failure
+    fixes = []
 
-        elif check.name == "composition":
-            import re
-            prompt = re.sub(r'(?i)\bCLOSE[- ]?UP\b', 'MEDIUM SHOT', prompt)
-            prompt += (
-                " Full head, all hair, and both shoulders MUST be visible "
-                "with clear space above the head. Camera is far back."
-            )
-            adapted = True
+    if "text" in failed_names:
+        fixes.append("no text, no words, no letters, no watermarks")
 
-        elif check.name in ("character", "character_match"):
-            prompt += (
-                " Character must exactly match the reference image. "
-                "Same face, same features, same identity."
-            )
-            adapted = True
+    if "direction" in failed_names:
+        prompt = re.sub(r'(?i)facing\s+(the\s+)?camera', 'driving away from camera', prompt)
+        prompt = re.sub(r'(?i)head[- ]on', 'rear view', prompt)
+        fixes.append("all cars driving away from camera")
 
-        elif check.name == "physical_accuracy":
-            prompt += (
-                " F1 cars are OPEN-COCKPIT with NO ROOF. The driver's helmet is "
-                "exposed to open air with only a halo device above. No canopy, "
-                "no windshield, no enclosed cabin. No hallucinated faces or "
-                "body parts in car structures."
-            )
-            adapted = True
+    if "composition" in failed_names:
+        prompt = re.sub(r'(?i)\bCLOSE[- ]?UP\b', 'MEDIUM SHOT', prompt)
+        fixes.append("full head visible, medium shot, camera far back")
 
-        elif check.name == "team_colours":
-            issue_text = check.issue or ""
-            prompt += (
-                f" CRITICAL COLOUR FIX: {issue_text}. "
-                "The car and driver suit colours MUST match the team livery exactly."
-            )
-            adapted = True
+    if "character" in failed_names or "character_match" in failed_names:
+        fixes.append("character must match reference face exactly")
 
-        elif check.name == "f1_accuracy":
-            prompt += (
-                " F1 cars are OPEN-COCKPIT single-seaters with exposed wheels, "
-                "front and rear wings, a halo device, and NO ROOF. "
-                "The driver's helmet is visible from outside. "
-                "Never draw closed-cockpit, roofed, or Le Mans style cars."
-            )
-            adapted = True
+    if "physical_accuracy" in failed_names:
+        fixes.append("open-cockpit F1 cars, halo only, no roof")
 
-        elif check.name == "car_count":
-            prompt += (
-                " CRITICAL: Maximum 22 F1 cars visible (11 teams x 2 drivers). "
-                "Show at most 3-5 cars in establishing shots. NEVER show dozens "
-                "or hundreds of cars. The F1 grid is small and exclusive."
-            )
-            adapted = True
+    if "f1_accuracy" in failed_names:
+        fixes.append("open-cockpit single-seaters with exposed wheels and wings")
 
-        elif check.name == "clothing":
-            prompt += (
-                " CRITICAL: The driver MUST wear RACING OVERALLS (one-piece "
-                "fireproof race suit with team colours and sponsor logos). "
-                "NOT a business suit, blazer, jacket, or formal wear. "
-                "Racing overalls zip up the front and have team branding patches."
-            )
-            adapted = True
+    if "car_count" in failed_names:
+        fixes.append("maximum 22 F1 cars visible")
 
-        elif check.name == "anatomy":
-            prompt += (
-                " CRITICAL: No floating heads, disembodied limbs, duplicate "
-                "faces, pit girls, grid girls, or anatomically impossible "
-                "features. Only natural caricature proportions."
-            )
-            adapted = True
+    if "clothing" in failed_names:
+        fixes.append("driver wears racing overalls, not business suit")
 
-        elif check.name == "style" and "ANTKF1STYLE" not in prompt:
-            prompt = "ANTKF1STYLE " + prompt
-            prompt += (
-                " Satirical caricature with oversized head and "
-                "exaggerated features. NOT photorealistic."
-            )
-            adapted = True
+    if "anatomy" in failed_names:
+        fixes.append("no floating heads, duplicate faces, or impossible anatomy")
+
+    if "team_colours" in failed_names:
+        issue = next((c.issue for c in validation_result.checks if c.name == "team_colours" and not c.passed), "")
+        if issue:
+            fixes.append(issue[:50])
+
+    if "style" in failed_names and "ANTKF1STYLE" not in prompt:
+        prompt = "ANTKF1STYLE " + prompt
+
+    if fixes:
+        fix_text = ", ".join(fixes)
+        prompt += f" --FIX: {fix_text}."
+        adapted = True
+
+    # Step 3: Enforce hard 75-word limit
+    words = prompt.split()
+    if len(words) > 75:
+        prompt = " ".join(words[:75])
+        logger.warning(
+            f"Scene {scene.scene_number}: Prompt truncated from {len(words)} to 75 words"
+        )
 
     if adapted:
-        # Re-sanitize the adapted prompt to remove any contradictions
-        # that the adaptation may have introduced
-        try:
-            from app.services.script_generator import sanitize_scene_prompts, SceneScript
-            temp = SceneScript(
-                scene_number=scene.scene_number,
-                character=None,
-                dialogue=scene.dialogue,
-                audio_description=scene.audio_description,
-                start_frame_prompt=prompt,
-                end_frame_prompt=scene.end_frame_prompt or "",
-                camera_direction=scene.camera_direction or "",
-                video_prompt=scene.video_prompt or "",
-                scene_type=scene.scene_type or "TALKING_HEAD",
-                face_visible=getattr(scene, "face_visible", True),
-            )
-            sanitized = sanitize_scene_prompts(temp)
-            scene.start_frame_prompt = sanitized.start_frame_prompt
-        except Exception as e:
-            logger.warning(f"Re-sanitization failed: {e} — using raw adapted prompt")
+        if frame_type == "end":
+            scene.end_frame_prompt = prompt
+        else:
             scene.start_frame_prompt = prompt
 
         logger.info(
-            f"Scene {scene.scene_number}: Prompt adapted + re-sanitized for retry "
-            f"(failures: {[c.name for c in validation_result.checks if not c.passed]})"
+            f"Scene {scene.scene_number}: {frame_type} frame prompt adapted for retry "
+            f"(failures: {list(failed_names)}, words: {len(prompt.split())})"
         )
     return adapted
+

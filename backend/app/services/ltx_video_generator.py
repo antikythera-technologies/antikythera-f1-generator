@@ -579,10 +579,12 @@ class LTXVideoGenerator:
         else:
             actual_seed = seed
 
-        # Build prompt with style preservation note
+        # Build prompt with style preservation + continuous motion requirement
         full_prompt = (
             f"{video_prompt} "
-            "Maintain caricature art style throughout, subtle animation only."
+            "Maintain caricature art style throughout. "
+            "Subject must move continuously with visible motion in every frame. "
+            "No frozen or static moments. Characters gesture, blink, and react throughout."
         )
 
         start_time = time.time()

@@ -64,6 +64,7 @@ class VideoStitcher:
         subtitle: str = "",
         next_episode_text: str = "",
         circuit_name: str = "",
+        episode_storyline: str = "",
     ) -> StitchResult:
         """
         Stitch video clips into a final episode.
@@ -81,7 +82,7 @@ class VideoStitcher:
         all_clips = list(clip_paths)
         if title:
             title_card_path = str(episode_dir / "title_card.mp4")
-            await self._generate_title_card(title, subtitle, title_card_path, circuit_name=circuit_name, episode_dir=episode_dir)
+            await self._generate_title_card(title, subtitle, title_card_path, circuit_name=circuit_name, episode_dir=episode_dir, episode_storyline=episode_storyline)
             all_clips.insert(0, title_card_path)
 
             outro_path = str(episode_dir / "outro.mp4")
@@ -177,7 +178,8 @@ class VideoStitcher:
             import fal_client
 
             logger.info(f"Generating card image via fal.ai: {prompt[:80]}...")
-            result = await fal_client.run_async(
+            # 3-minute timeout for card images — they're simple, shouldn't take long
+            result = await asyncio.wait_for(fal_client.run_async(
                 "fal-ai/flux-lora",
                 arguments={
                     "prompt": prompt,
@@ -193,7 +195,7 @@ class VideoStitcher:
                         }
                     ],
                 },
-            )
+            ), timeout=180)
 
             images = result.get("images", [])
             if not images:
@@ -219,17 +221,26 @@ class VideoStitcher:
         duration: int = TITLE_CARD_DURATION,
         circuit_name: str = "",
         episode_dir: Optional[Path] = None,
+        episode_storyline: str = "",
     ) -> None:
         """Generate a title card with AI-generated background image and text overlay."""
         # Try to generate a background image
         bg_image_path = str(episode_dir / "title_bg.png") if episode_dir else "/tmp/title_bg.png"
         circuit_text = circuit_name or "F1 circuit"
-        prompt = (
-            f"ANTKF1STYLE Dramatic aerial view of {circuit_text} at golden hour, "
-            f"F1 cars racing on track driving away from camera showing rear wings, "
-            f"dramatic clouds and sunset sky, satirical caricature art style, "
-            f"vibrant colors, cinematic wide shot"
-        )
+        if episode_storyline:
+            prompt = (
+                f"ANTKF1STYLE {episode_storyline}, "
+                f"dramatic F1 moment at {circuit_text}, "
+                f"satirical caricature art style, dramatic lighting, "
+                f"vibrant colors, cinematic wide shot, golden hour atmosphere"
+            )
+        else:
+            prompt = (
+                f"ANTKF1STYLE Dramatic aerial view of {circuit_text} at golden hour, "
+                f"F1 cars racing on track driving away from camera showing rear wings, "
+                f"dramatic clouds and sunset sky, satirical caricature art style, "
+                f"vibrant colors, cinematic wide shot"
+            )
         has_bg = await self._generate_card_image(prompt, bg_image_path)
 
         # Build drawtext filter

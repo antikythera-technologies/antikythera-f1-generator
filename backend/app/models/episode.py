@@ -20,6 +20,20 @@ class EpisodeType(str, enum.Enum):
     POST_QUALIFYING = "post-qualifying"  # Qualifying recap (non-sprint weekends)
     WEEKLY_RECAP = "weekly-recap"  # Off-week news compilation
 
+    @property
+    def session_label(self) -> str:
+        """Human-readable session name for titles. Source of truth — used by
+        pipeline, worker, and API to build deterministic episode titles."""
+        _map = {
+            "pre-race": "Preview",
+            "post-race": "Race",
+            "post-fp2": "Practice",
+            "post-sprint": "Sprint",
+            "post-qualifying": "Qualifying",
+            "weekly-recap": "Weekly Recap",
+        }
+        return _map.get(self.value, "Race")
+
 
 class EpisodeStatus(str, enum.Enum):
     """Episode generation status."""

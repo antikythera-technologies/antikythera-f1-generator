@@ -38,7 +38,7 @@ class SceneScript:
 @dataclass
 class EpisodeScript:
     """Generated script for an entire episode."""
-    title: str
+    subtitle: str
     scenes: list[SceneScript]
     input_tokens: int
     output_tokens: int
@@ -614,7 +614,11 @@ start_frame_prompt must include:
 - Setting with SPECIFIC F1 details (name the circuit, corners, sponsors)
 - Background elements: AT LEAST 3 (other people, screens, equipment, weather, crowd, cars, pit crew)
 - Lighting and mood
-- CRITICAL: Start and end frames must be SIMILAR ENOUGH for smooth animation interpolation
+- CRITICAL FLF RULE: Start and end frames must be the SAME SCENE with only the ACTION progressing.
+  Same camera angle, same lighting, same circuit location, same cars, same resolution.
+  The ONLY difference is what the cars are DOING — start of the action vs end of the action.
+  Example: start = "Three F1 cars entering turn 1 at Suzuka", end = "Same three cars exiting turn 1 at Suzuka, lead car pulling ahead".
+  WRONG: start = "cars at turn 1", end = "podium celebration" — completely different scenes will be REJECTED by validation.
 
 camera_direction: Professional camera movement (STATIC, DOLLY PUSH-IN, DOLLY PULL-OUT, PAN, TILT, CRANE, TRACKING, STEADICAM, HANDHELD, WHIP PAN, SLOW ZOOM)
 
@@ -639,7 +643,7 @@ CHARACTER APPEARANCE CONSISTENCY (CRITICAL):
 Output EXACTLY this JSON format:
 ```json
 {
-  "title": "Suzuka Qualifying: The Teenager Strikes Again",
+  "subtitle": "The Teenager Strikes Again",
   "character_appearances": {
     "character_slug": "Detailed outfit and physical appearance for this episode.",
     "another_slug": "Their specific outfit and appearance."
@@ -654,7 +658,7 @@ Output EXACTLY this JSON format:
       "dialogue": "Episode tagline (max 15 words)",
       "audio_description": "Epic orchestral intro, engine roar building",
       "start_frame_prompt": "Full cinematographic description",
-      "end_frame_prompt": null,
+      "end_frame_delta": null,
       "camera_direction": "Camera movement",
       "video_prompt": "Motion and animation instructions",
       "target_duration": 5
@@ -667,11 +671,7 @@ Output EXACTLY this JSON format:
 FINAL RULES:
 - Output valid JSON ONLY — no markdown, no commentary
 - Exactly 26 scenes
-- title MUST follow this format: "{Circuit/City} {Session}: {Catchy Subtitle}"
-  - Examples: "Suzuka Qualifying: The Teenager Strikes Again", "Shanghai Sprint: Russell's Surprise", "Melbourne Race: When Mercedes Remembered How to Race"
-  - The circuit/city name MUST appear in the title
-  - The session type (Qualifying, Race, Sprint) MUST appear in the title
-  - The subtitle should reference the episode's main storyline or biggest moment
+- subtitle is a catchy phrase about the episode's biggest moment or main storyline. Do NOT include circuit name or session type — those are added automatically. Examples: "The Teenager Strikes Again", "Russell's Sprint Surprise", "When Mercedes Remembered How to Race"
 - Dialogue max 15 words per scene
 - target_duration: estimated seconds per scene (3-10). Short reactions/zingers: 3-4s. Standard dialogue: 5-6s. Complex exchanges or action scenes: 7-10s. Title card: 5s. Outro: 6-8s.
 - character field = the person whose FACE is visible (null if no face shown)
@@ -696,9 +696,13 @@ FINAL RULES:
   Team principals are comedy gold — they react to their drivers' performances,
   blame strategy, smash tables (Toto), scheme (Horner), or deliver dry burns (Vasseur).
   Use the team principal whose team is MOST relevant to the episode's story.
-- end_frame_prompt: ONLY generate for ACTION_REPLAY scenes (describes how the racing
-  action ends — final car positions, aftermath). Set to null for ALL other scene types.
-  Non-ACTION_REPLAY scenes do not use end frames.
+- end_frame_delta: ONLY for ACTION_REPLAY scenes. Describes ONLY what CHANGES between
+  start and end of the action. NOT a full scene description — the start frame setting,
+  camera angle, lighting, and cars are reused automatically. Just say what moved or changed.
+  Examples: "Lead car pulled 2 lengths ahead, sparks flying from braking zone"
+           "Cars have completed the overtake, now in reversed positions"
+           "Car has crossed finish line, checkered flag fully extended"
+  Set to null for all non-ACTION_REPLAY scenes.
 """
 
 
@@ -787,12 +791,18 @@ class ScriptGenerator:
             content = response.content[0].text
             script_data = self._parse_response(content)
 
-            # Build scene list — only ACTION_REPLAY gets end_frame_prompt
+            # Build scene list — ACTION_REPLAY gets end_frame_prompt derived from start + delta
             scenes = []
             for s in script_data["scenes"]:
                 scene_type = s.get("scene_type", "TALKING_HEAD")
-                # Only ACTION_REPLAY uses FLF end frames — clear for all others
-                efp = s.get("end_frame_prompt") if scene_type.upper() == "ACTION_REPLAY" else None
+                # Construct end_frame_prompt from start_frame_prompt + delta
+                # The LLM only provides what CHANGES — the base scene comes from start frame
+                efp = None
+                if scene_type.upper() == "ACTION_REPLAY":
+                    delta = s.get("end_frame_delta", s.get("end_frame_prompt", ""))
+                    sfp = s.get("start_frame_prompt", "")
+                    if delta and sfp:
+                        efp = f"{sfp} — ACTION PROGRESSED: {delta}"
                 scenes.append(SceneScript(
                     scene_number=s["scene_number"],
                     character=s["character"],
@@ -833,7 +843,7 @@ class ScriptGenerator:
                 )
 
             return EpisodeScript(
-                title=script_data["title"],
+                subtitle=script_data.get("subtitle", script_data.get("title", "Untitled")),
                 scenes=scenes,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

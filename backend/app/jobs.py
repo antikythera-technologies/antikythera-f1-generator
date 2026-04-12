@@ -5,7 +5,6 @@ RQ queue. The actual work is executed by the worker process defined in
 ``app.worker``.
 """
 
-from decimal import Decimal
 import logging
 from typing import Optional
 
@@ -14,9 +13,11 @@ from rq import Queue
 from rq.job import Job
 
 from app.config import settings
+from app.services.api_logger import log_api_request, log_api_response
+from app.services.cost_tracker import log_api_cost as _log_api_cost_shared
+from app.services.cost_tracker import update_episode_costs as _update_episode_costs_shared
 
 import time
-from app.services.api_logger import log_api_request, log_api_response
 
 logger = logging.getLogger(__name__)
 
@@ -30,44 +31,17 @@ async def _log_api_cost(
     cost_usd: float,
     response_time_ms: int = 0,
 ):
-    """Log an API usage record for cost tracking."""
-    from app.models.logs import APIUsage, APIProvider
-    try:
-        usage = APIUsage(
-            episode_id=episode_id,
-            scene_id=scene_id,
-            provider=APIProvider(provider),
-            endpoint=endpoint,
-            cost_usd=cost_usd,
-            response_time_ms=response_time_ms,
-        )
-        db.add(usage)
-        await db.flush()
-        logger.debug(f"Logged API cost: {provider} ${cost_usd:.4f} ({endpoint})")
-    except Exception as e:
-        logger.warning(f"Failed to log API cost: {e}")
-
-# Queue name used across the project
+    """Log an API usage record. Delegates to shared cost_tracker."""
+    await _log_api_cost_shared(
+        db, episode_id=episode_id, scene_id=scene_id,
+        provider=provider, endpoint=endpoint,
+        cost_usd=cost_usd, response_time_ms=response_time_ms,
+    )
 
 
 async def _update_episode_costs(db, episode_id: int) -> None:
-    """Sum all scene costs and update Episode.total_cost_usd."""
-    from sqlalchemy import func, select
-    from app.models.scene import Scene
-    from app.models.episode import Episode
-
-    result = await db.execute(
-        select(
-            func.coalesce(func.sum(Scene.image_cost_usd), 0),
-            func.coalesce(func.sum(Scene.video_cost_usd), 0),
-        ).where(Scene.episode_id == episode_id)
-    )
-    img_total, vid_total = result.one()
-    episode = await db.get(Episode, episode_id)
-    if episode:
-        episode.total_cost_usd = img_total + vid_total + (episode.anthropic_cost_usd or 0)
-        await db.flush()
-        logger.debug(f"Episode {episode_id}: Updated total cost to ${float(img_total + vid_total):.4f}")
+    """Sum all scene costs. Delegates to shared cost_tracker."""
+    await _update_episode_costs_shared(db, episode_id)
 
 PIPELINE_QUEUE = "f1-pipeline"
 
@@ -261,26 +235,20 @@ def _run_scene_video(episode_id: int, scene_number: int) -> str:
 
 
 async def _async_scene_video(episode_id: int, scene_number: int) -> str:
-    """Async worker: regenerate video for a single scene using configured backend."""
-    import os
+    """Async worker: regenerate video for a single scene. Delegates to shared service."""
     from datetime import datetime
-
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    from app.config import settings
     from app.database import async_session_maker
+    from app.models.episode import Episode as _Ep
     from app.models.scene import Scene, SceneStatus
+    from app.services.scene_video_service import generate_scene_video
     from app.services.storage import StorageService
-    from app.services.fal_video_generator import build_f1_video_prompt as _build_f1_prompt
 
-    logger.info(
-        f"Scene {scene_number}: Starting video regeneration "
-        f"(backend={__import__('app.services.runtime_settings', fromlist=['get_video_generator']).get_video_generator()})"
-    )
+    logger.info(f"Scene {scene_number}: Starting video regeneration (shared service)")
 
     async with async_session_maker() as db:
-        # Load scene with character
         stmt = (
             select(Scene)
             .options(selectinload(Scene.character), selectinload(Scene.voiceover_character))
@@ -292,215 +260,28 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
         if not scene:
             raise ValueError(f"Scene {scene_number} not found for episode {episode_id}")
 
-        # Load episode race_id for correct storage path
-        from app.models.episode import Episode as _EpModelV
-        _ep_v = await db.get(_EpModelV, episode_id)
-        _race_id = _ep_v.race_id if _ep_v and _ep_v.race_id else 0
-
-        # Get the source image path
-        image_path = scene.start_frame_path or scene.source_image_path
-        if not image_path:
-            scene.status = SceneStatus.FAILED
-            scene.last_error = "No start frame image — generate image first"
-            await db.commit()
-            raise ValueError("No start frame image available")
-
-        from app.services.runtime_settings import get_video_generator
-        backend = get_video_generator()
+        ep = await db.get(_Ep, episode_id)
+        race_id = ep.race_id if ep and ep.race_id else 0
         storage = StorageService()
 
         try:
             scene.status = SceneStatus.GENERATING
             scene.generation_started_at = datetime.utcnow()
-            # Reset costs for this regeneration — old costs are sunk
-            scene.video_cost_usd = Decimal(0)
+            from decimal import Decimal
+            scene.video_cost_usd = Decimal(0)  # Reset for regen
             await db.flush()
 
-            if backend.startswith("fal-"):
-                # --- fal.ai backend ---
-                from app.services.fal_video_generator import FalVideoGenerator
-
-                fal_gen = FalVideoGenerator(backend=backend)
-
-                # Download image from MinIO to local
-                local_image = f"/tmp/f1-regen/ep{episode_id}_scene{scene_number:02d}.png"
-                os.makedirs(os.path.dirname(local_image), exist_ok=True)
-                bucket, obj = image_path.split("/", 1)
-                await storage.download_file(bucket, obj, local_image)
-
-                # Upload to fal CDN
-                image_url = await fal_gen.upload_image(local_image)
-
-                # Extract voice/accent for speech synthesis (goes into video prompt)
-                # Audio prompt is ambient sounds only
-                rich_audio = scene.audio_description
-                _voice_desc = None
-                _voice_char = scene.character or getattr(scene, 'voiceover_character', None)
-                if _voice_char and _voice_char.personality:
-                    try:
-                        import json as _json
-                        _p = _json.loads(_voice_char.personality) if isinstance(_voice_char.personality, str) else _voice_char.personality
-                        _ss = _p.get("speaking_style", {})
-                        _nationality = _p.get("nationality", "")
-                        _accent = _ss.get("accent_hints", "") if isinstance(_ss, dict) else ""
-                        _tone = _ss.get("tone", "") if isinstance(_ss, dict) else ""
-                        _voice_parts = [p for p in [
-                            f"{_nationality} accent" if _nationality else "",
-                            _accent,
-                            _tone,
-                        ] if p]
-                        _voice_desc = ", ".join(_voice_parts) if _voice_parts else None
-                        logger.debug(f"Scene {scene_number}: Voice desc: {_voice_desc}")
-                    except Exception as e:
-                        logger.warning(f"Scene {scene_number}: Could not build voice prompt: {e}")
-
-                # Upload end frame for FLF if available — with compatibility check
-                end_image_url = None
-                if scene.end_frame_path:
-                    from app.services.fal_video_generator import FAL_FLF_CAPABLE
-                    if fal_gen.backend in FAL_FLF_CAPABLE:
-                        end_local = f"/tmp/f1-regen/ep{episode_id}_scene{scene_number:02d}_end.png"
-                        try:
-                            end_bucket, end_obj = scene.end_frame_path.split("/", 1)
-                            await storage.download_file(end_bucket, end_obj, end_local)
-
-                            # Validate start/end frame compatibility before using FLF
-                            start_local = f"/tmp/f1-regen/ep{episode_id}_scene{scene_number:02d}.png"
-                            from app.services.scene_validator import SceneValidator
-                            _flf_validator = SceneValidator()
-                            flf_compatible = await _flf_validator.check_flf_frame_compatibility(
-                                start_local, end_local, scene_number
-                            )
-                            if flf_compatible:
-                                end_image_url = await fal_gen.upload_image(end_local)
-                                logger.info(f"Scene {scene_number}: End frame uploaded for FLF (frames compatible)")
-                            else:
-                                logger.warning(
-                                    f"Scene {scene_number}: FLF DISABLED — start/end frames too different. "
-                                    f"Using single start frame only."
-                                )
-                        except Exception as e:
-                            logger.warning(f"Scene {scene_number}: Could not load end frame for FLF: {e}")
-
-                # Load team data for F1 colour context in video prompt
-                _scene_team = None
-                if scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
-                    from app.models.team import Team as _TeamModel
-                    _scene_team = await db.get(_TeamModel, scene.character.team_id)
-
-                # Extract character animation from personality for video prompt
-                _char_anim = None
-                _voice_char = scene.character or getattr(scene, 'voiceover_character', None)
-                if _voice_char and _voice_char.personality:
-                    try:
-                        import json as _pjson
-                        _p = _pjson.loads(_voice_char.personality) if isinstance(_voice_char.personality, str) else _voice_char.personality
-                        from app.services.personality import load_personality_traits_from_db
-                        _anim_traits = load_personality_traits_from_db(_p)
-                        _char_anim = {
-                            "signature_expression": _anim_traits.get("signature_expression"),
-                            "signature_pose": _anim_traits.get("signature_pose"),
-                            "comedy_angle": _anim_traits.get("comedy_angle"),
-                        }
-                    except Exception:
-                        pass
-
-                # Generate video
-                # Sanitize stored video prompt for direction/escalation
-                from app.services.script_generator import sanitize_prompt_text as _sanitize_vp
-                _raw_vp = (scene.video_prompt or scene.start_frame_prompt or "").replace("ANTKF1STYLE", "").strip()
-                _clean_vp = _sanitize_vp(_raw_vp, scene_type=scene.scene_type)
-                clip = await fal_gen.generate_clip(
-                    scene_number=scene_number,
-                    image_url=image_url,
-                    prompt=_build_f1_prompt(
-                        _clean_vp,
-                        scene_type=str(scene.scene_type) if scene.scene_type else None,
-                        face_visible=bool(scene.face_visible),
-                        dialogue=scene.dialogue,
-                        team_name=_scene_team.name if _scene_team else None,
-                        car_description=_scene_team.car_description if _scene_team else None,
-                        overalls_description=_scene_team.overalls_description if _scene_team else None,
-                        camera_direction=scene.camera_direction,
-                        character_animation=_char_anim,
-                        livery_description=_scene_team.livery_description if _scene_team else None,
-                    ),
-                    dialogue=scene.dialogue,
-                    audio_description=rich_audio,
-                    face_visible=bool(scene.face_visible),
-                    end_image_url=end_image_url,
-                    voice_description=_voice_desc,
-                    duration=int(scene.duration_seconds) if scene.duration_seconds else None,
-                )
-                video_local = clip.video_path
-
-            elif backend in ("ovi", "runpod-ovi"):
-                # --- RunPod Ovi backend ---
-                from app.services.ovi_space_manager import RunPodManager as OviSpaceManager
-
-                local_image = f"/tmp/f1-regen/ep{episode_id}_scene{scene_number:02d}.png"
-                os.makedirs(os.path.dirname(local_image), exist_ok=True)
-                bucket, obj = image_path.split("/", 1)
-                await storage.download_file(bucket, obj, local_image)
-
-                async with OviSpaceManager(quality=settings.OVI_QUALITY) as ovi:
-                    # Build Ovi prompt
-                    parts = [scene.video_prompt or scene.start_frame_prompt or "Character speaking"]
-                    if scene.dialogue:
-                        parts.append(f"<S>{scene.dialogue}<E>")
-                    if scene.audio_description:
-                        parts.append(f"<AUDCAP>{scene.audio_description}<ENDAUDCAP>")
-                    prompt = " ".join(parts)
-
-                    video_local = await ovi.generate_video(
-                        image_path=local_image,
-                        prompt=prompt,
-                    )
-            else:
-                raise ValueError(f"Unsupported backend for single-scene regen: {backend}")
-
-            # Upload video to MinIO
-            clip_path = await storage.upload_video_clip(
-                race_id=_race_id,
-                episode_id=episode_id,
-                scene_number=scene_number,
-                file_path=video_local,
+            await generate_scene_video(
+                db, scene, episode_id, race_id, storage,
             )
-
-            generation_time_ms = int(
-                (datetime.utcnow() - scene.generation_started_at).total_seconds() * 1000
-            )
-
-            scene.video_clip_path = clip_path
-            scene.video_generator = backend
-            scene.audio_clip_path = None  # Clear — new video has different audio
             scene.status = SceneStatus.COMPLETED
-            scene.generation_completed_at = datetime.utcnow()
-            scene.generation_time_ms = generation_time_ms
             scene.last_error = None
-
-            # Duration-based video cost (accumulates on regeneration)
-            from app.services.fal_video_generator import FAL_COST_PER_SECOND, FalBackend
-            cost_per_sec = FAL_COST_PER_SECOND.get(
-                FalBackend(backend) if backend.startswith("fal-") else None,
-                0.04,  # fallback
-            )
-            duration = float(scene.duration_seconds or 5)
-            video_cost = Decimal(str(round(duration * cost_per_sec, 6)))
-            scene.video_cost_usd = (scene.video_cost_usd or Decimal(0)) + video_cost
             scene.regeneration_count = (scene.regeneration_count or 0) + 1
-            await _log_api_cost(
-                db, episode_id, scene.id,
-                provider=backend if backend.startswith("fal-") else "ovi",
-                endpoint=f"fal.ai/{backend}",
-                cost_usd=float(video_cost),
-                response_time_ms=generation_time_ms,
-            )
-
-            await db.commit()
             await _update_episode_costs(db, episode_id)
-            logger.info(f"Scene {scene_number}: Video regenerated in {generation_time_ms}ms")
-            return f"Scene {scene_number} video regenerated ({backend})"
+            await db.commit()
+
+            logger.info(f"Scene {scene_number}: Video regenerated via shared service")
+            return f"Scene {scene_number} video regenerated"
 
         except Exception as e:
             logger.error(f"Scene {scene_number}: Video regeneration failed: {e}")
@@ -509,6 +290,7 @@ async def _async_scene_video(episode_id: int, scene_number: int) -> str:
             scene.retry_count += 1
             await db.commit()
             raise
+
 
 
 def _init_worker_db():
@@ -578,7 +360,6 @@ async def _ensure_runpod_ready(timeout: int = 300) -> None:
         raise RuntimeError("RUNPOD_API_KEY not set — cannot auto-start pod")
 
     # Start the pod via RunPod GraphQL API
-    import json
     _resume_payload = {"query": f'mutation {{ podResume(input: {{ podId: \"{pod_id}\", gpuCount: 1 }}) {{ id desiredStatus }} }}'}
     log_api_request(logger, "runpod", "graphql/podResume", _resume_payload)
     _t0_resume = time.monotonic()
@@ -618,28 +399,17 @@ async def _ensure_runpod_ready(timeout: int = 300) -> None:
 
 
 async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str = "start", set_completed: bool = True) -> str:
-    """Async worker: generate a scene image via fal.ai flux-lora."""
-    import os
-    import tempfile
-    from datetime import datetime
-
-    import httpx
+    """Async worker: generate a scene image. Delegates to shared service."""
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    from app.config import settings
     from app.database import async_session_maker
+    from app.models.episode import Episode as _Ep
     from app.models.scene import Scene, SceneStatus
-    from app.services.personality import load_personality_traits_from_db
+    from app.services.scene_image_service import generate_scene_image
     from app.services.storage import StorageService
 
-    FAL_KEY = os.environ.get("FAL_KEY", "")
-    LORA_URL = "https://v3b.fal.media/files/b/0a918355/tJadbfWJuPFPPcrwOQ_3W_pytorch_lora_weights.safetensors"
-
-    if not FAL_KEY:
-        raise RuntimeError("FAL_KEY environment variable not set")
-
-    logger.info(f"Scene {scene_number}: Starting {frame_type} frame image generation via fal.ai")
+    logger.info(f"Scene {scene_number}: Starting {frame_type} frame image generation (shared service)")
 
     async with async_session_maker() as db:
         stmt = (
@@ -653,507 +423,40 @@ async def _async_scene_image(episode_id: int, scene_number: int, frame_type: str
         if not scene:
             raise ValueError(f"Scene {scene_number} not found for episode {episode_id}")
 
-        # Load episode race_id for correct storage path
-        from app.models.episode import Episode as _EpModelI
-        _ep_i = await db.get(_EpModelI, episode_id)
-        _race_id = _ep_i.race_id if _ep_i and _ep_i.race_id else 0
+        ep = await db.get(_Ep, episode_id)
+        race_id = ep.race_id if ep and ep.race_id else 0
 
-        # Determine which prompt to use
-        if frame_type == "end":
-            frame_prompt = scene.end_frame_prompt
-        else:
-            frame_prompt = scene.start_frame_prompt
-
-
-        # Sanitize stored prompts — they may predate direction/escalation fixes
-        from app.services.script_generator import sanitize_prompt_text
-        frame_prompt = sanitize_prompt_text(frame_prompt, scene_type=scene.scene_type)
-        if not frame_prompt:
-            scene.status = SceneStatus.FAILED
-            scene.last_error = f"No {frame_type}_frame_prompt set"
-            await db.commit()
-            raise ValueError(f"No {frame_type}_frame_prompt for scene {scene_number}")
-
-        # Load character traits for prompt enrichment
-        character_traits: dict = {}
-        if scene.character:
-            character = scene.character
-            if character.personality:
-                try:
-                    character_traits = load_personality_traits_from_db(character.personality)
-                except Exception as e:
-                    logger.warning(f"Could not parse personality for {character.name}: {e}")
-                    character_traits = {
-                        "display_name": character.display_name,
-                        "team": character.team,
-                    }
-            else:
-                character_traits = {
-                    "display_name": character.display_name,
-                    "team": character.team,
-                }
-
-        # Load episode-level character appearance for clothing consistency
-        episode_appearance = ""
-        if scene.character:
-            from app.models.episode import Episode
-            ep_stmt = select(Episode).where(Episode.id == episode_id)
-            ep_result = await db.execute(ep_stmt)
-            episode = ep_result.scalar_one_or_none()
-            if episode and episode.character_appearances:
-                episode_appearance = episode.character_appearances.get(
-                    scene.character.name, ""
-                )
-                if episode_appearance:
-                    logger.info(
-                        f"Scene {scene_number}: Using episode appearance for {scene.character.name}"
-                    )
-
-        # Determine if face reference is needed for this scene
-        use_face_reference = getattr(scene, 'face_visible', True) and scene.character_id is not None
-
-        # Build prompt based on scene type
-        if not use_face_reference:
-            # Landscape prompt WITH LoRA trigger for consistent caricature style
-            racing_direction_rule = ""
-            racing_keywords = ["car", "cars", "race", "racing", "overtake", "track", "circuit",
-                               "straight", "corner", "grid", "cockpit", "onboard", "on-board"]
-            if any(kw in (frame_prompt or "").lower() for kw in racing_keywords):
-                # Detect POV/cockpit shots vs external shots
-                pov_keywords = ["cockpit pov", "onboard", "on-board", "helmet cam", "driver pov"]
-                is_pov = any(kw in (frame_prompt or "").lower() for kw in pov_keywords)
-                if is_pov:
-                    racing_direction_rule = (
-                        "CRITICAL: This is a cockpit/driver POV shot looking forward through the halo. "
-                        "Any cars visible AHEAD must be driving AWAY from the camera — "
-                        "show their REAR wings, rear diffusers, and exhaust. "
-                        "The viewer sees the BACK of the cars in front, NOT their front. "
-                        "No car should face towards the camera. "
-                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES of the track only. "
-                        "There is NO kerb, barrier, or divider in the middle of the track. The track is one continuous surface. "
-                        "GRID SIZE: Maximum 22 cars on track (11 teams x 2 drivers). Never show more than 22 cars. "
-                    )
-                else:
-                    racing_direction_rule = (
-                        "ALL cars MUST face the SAME direction, driving AWAY from the camera. "
-                        "Show only the REAR of every car — rear wings, rear diffusers, exhaust, rear tyres. "
-                        "NO car faces towards the camera. NO car faces the opposite direction. "
-                        "TRACK LAYOUT: Tarmac surface in the centre, kerbs (red-white or yellow) on BOTH EDGES only. "
-                        "NO kerb, barrier, or divider in the middle of the track. One continuous racing surface. "
-                        "Maximum 22 cars on track (11 teams x 2 drivers). "
-                        "F1 cars are open-cockpit single-seaters with NO roof. The halo is a thin curved bar above the driver, NOT a canopy or roof. "
-                    )
-            # For ALL non-face scenes: enforce F1 car count
-            # ESTABLISHING shots: focus on environment, minimal cars
-            scene_type_upper = (getattr(scene, 'scene_type', '') or '').upper()
-            if scene_type_upper in ('ESTABLISHING', 'TITLE_CARD'):
-                racing_direction_rule += (
-                    "IMPORTANT: This is an atmospheric/establishing shot. "
-                    "Focus on the ENVIRONMENT — circuit, skyline, sunset, paddock. "
-                    "Show at most 3-5 cars in the background, NOT a full grid. "
-                    "Cars are secondary to the setting. "
-                    "F1 has only 22 cars total (11 teams x 2). NEVER show more than 22 cars. "
-                )
-            elif not racing_direction_rule:
-                # Non-racing, non-establishing: still cap car count
-                racing_direction_rule = (
-                    "F1 has exactly 22 cars (11 teams x 2 drivers). "
-                    "NEVER show more than 22 cars in any scene. "
-                )
-
-            # Enrich with team livery for racing scenes
-            team_livery_text = ""
-            if scene.character_id and scene.character:
-                team_obj = None
-                if hasattr(scene.character, 'team_id') and scene.character.team_id:
-                    from app.models.team import Team
-                    team_obj = await db.get(Team, scene.character.team_id)
-                if team_obj and team_obj.car_description:
-                    team_livery_text = f"The car is a {team_obj.car_description}. "
-
-            full_prompt = (
-                f"ANTKF1STYLE {team_livery_text}{frame_prompt} "
-                f"{racing_direction_rule}"
-                "Satirical caricature art style, dramatic lighting, vibrant colors. "
-                "No text, no words, no letters, no watermarks."
-            )
-        else:
-            # Character scene: LoRA trigger + caricature style + character traits
-
-            # Safety net: rewrite tight framing keywords to prevent head/hair cropping
-            import re as _re
-            frame_prompt = _re.sub(r'(?i)MEDIUM\s+CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
-            frame_prompt = _re.sub(r'(?i)EXTREME\s+CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
-            frame_prompt = _re.sub(r'(?i)CLOSE[- ]?UP', 'MEDIUM SHOT', frame_prompt)
-
-            physical = character_traits.get("physical_features", "")
-            prompt_parts = ["WIDE MEDIUM SHOT showing full character from knees up, camera 5 meters away, plenty of headroom above the head.", frame_prompt]
-            # Team overalls from DB are ground truth — always prefer over LLM-generated appearance
-            if scene.character and hasattr(scene.character, 'team_id') and scene.character.team_id:
-                from app.models.team import Team
-                team_obj = await db.get(Team, scene.character.team_id)
-                if team_obj and team_obj.overalls_description:
-                    episode_appearance = team_obj.overalls_description
-
-            # Clothing depends on character role
-            _char_type_id = getattr(scene.character, 'character_type_id', 1) if scene.character else 1
-            if _char_type_id == 3:
-                # Pundit / commentator
-                _clothing_rule = (
-                    "The character is a TV BROADCASTER/COMMENTATOR. "
-                    "They MUST wear a POLO SHIRT with broadcaster branding (e.g. Sky Sports navy blue polo). "
-                    "They should have a headset with microphone. "
-                    "NOT a racing suit, NOT overalls. "
-                )
-            elif _char_type_id == 2:
-                # Team principal
-                _clothing_rule = (
-                    "The character is a TEAM PRINCIPAL. "
-                    "They MUST wear a TEAM POLO SHIRT or team jacket with team colours. "
-                    "NOT a racing suit, NOT formal business wear. "
-                )
-            else:
-                # Driver
-                if episode_appearance:
-                    _clothing_rule = (
-                        f"MANDATORY CLOTHING: The character MUST wear {episode_appearance}. "
-                        f"This is a Formula 1 driver — they ALWAYS wear their team race suit, "
-                        f"NEVER a business suit, casual clothes, or any other outfit. "
-                    )
-                else:
-                    _clothing_rule = (
-                        "The character MUST wear RACING OVERALLS with team colours and sponsor logos. "
-                        "NOT a business suit or formal wear. "
-                    )
-
-            if episode_appearance and _char_type_id == 1:
-                pass  # Already handled above
-            elif physical:
-                prompt_parts.append(f"Character physical traits: {physical}")
-
-            prompt_parts.append(
-                "Satirical caricature style with oversized head, "
-                "photorealistic skin with visible pores. Dramatic lighting with deep shadows. "
-                "CRITICAL FRAMING: The character must be shown from the knees or waist up. "
-                "Full head, all hair, and both shoulders MUST be visible with clear space above the head. "
-                "NEVER crop the top of the head. Camera is far back, NOT close to the face. "
-                + _clothing_rule +
-                "No text, no words, no letters, no logos, no watermarks on clothing or background."
-            )
-            full_prompt = " ".join(prompt_parts)
+        # Load episode-level character appearances for clothing consistency
+        episode_appearances = None
+        if ep and hasattr(ep, "character_appearances"):
+            episode_appearances = ep.character_appearances
 
         storage = StorageService()
 
         try:
-            started_at = datetime.utcnow()
-            scene.status = SceneStatus.GENERATING
-            scene.generation_started_at = started_at
-            # Reset costs for this regeneration — old costs are sunk
-            scene.image_cost_usd = Decimal(0)
-            await db.flush()
-
-            # Upload face reference to fal CDN — only for character scenes
-            face_ref_url = None
-            if scene.character and use_face_reference:
-                face_local = await storage.download_face_reference(scene.character.name)
-                if face_local:
-                    import fal_client
-                    logger.info(f"[API:fal-image] Uploading face reference: {face_local}")
-                    _t0_face = time.monotonic()
-                    face_ref_url = fal_client.upload_file(face_local)
-                    _elapsed_face = int((time.monotonic() - _t0_face) * 1000)
-                    logger.info(f"[API:fal-image] Face reference uploaded in {_elapsed_face}ms: {face_ref_url[:80]}...")
-
-                    # Track which face reference was used
-                    scene.face_reference_url = face_ref_url
-
-                    # Link to the CharacterImage record (primary image for this character)
-                    from app.models.character import CharacterImage
-                    ci_stmt = (
-                        select(CharacterImage)
-                        .where(CharacterImage.character_id == scene.character_id)
-                        .order_by(CharacterImage.is_primary.desc(), CharacterImage.id)
-                        .limit(1)
-                    )
-                    ci_result = await db.execute(ci_stmt)
-                    ci = ci_result.scalar_one_or_none()
-                    if ci:
-                        scene.character_image_id = ci.id
-                        logger.debug(f"Scene {scene_number}: Linked to CharacterImage {ci.id}")
-
-            # Choose image backend
-            from app.services.runtime_settings import get_image_generator
-            image_backend = get_image_generator()
-
-            if not use_face_reference:
-                # No face visible — flux-lora (LoRA style only, no face reference)
-                image_backend = "flux-lora"
-                logger.info(f"Scene {scene_number}: Using flux-lora (face_visible={getattr(scene, 'face_visible', True)}, no character face)")
-            elif face_ref_url:
-                # Face visible + character assigned + face ref available — instant-character
-                image_backend = "instant-character"
-                logger.info(f"Scene {scene_number}: Using instant-character (face_visible=True, face ref available)")
-            else:
-                # Face visible but no face ref file — fall back to flux-lora
-                image_backend = "flux-lora"
-                logger.info(f"Scene {scene_number}: Using flux-lora (face_visible=True but no face ref file)")
-
-            if image_backend == "instant-character" and face_ref_url:
-                # --- Instant Character via fal_client.subscribe (faster than HTTP queue) ---
-                import fal_client as _fal
-
-                # Generate taller (4:3) to give headroom, then crop to 16:9.
-                # Instant-character inherently zooms into the face reference,
-                # so we give it extra vertical space and crop the excess.
-                _ic_args = {
-                        "prompt": full_prompt,
-                        "image_url": face_ref_url,
-                        "negative_prompt": (
-                            "cropped head, cut off head, cut off hair, top of head missing, "
-                            "forehead cropped, extreme close-up, tight crop, face filling frame, "
-                            "zoomed in, macro, portrait crop, chin to forehead only, "
-                            "shoulder-up only, passport photo, mugshot, headshot, face only"
-                        ),
-                        "image_size": {"width": 1280, "height": 1280},
-                        "num_inference_steps": 28,
-                        "guidance_scale": 3.5,
-                        "scale": 0.3,
-                        "output_format": "png",
-                        "loras": [{"path": LORA_URL, "scale": 1.0, "trigger_word": "ANTKF1STYLE"}],
-                    }
-                _t0_ic = time.monotonic()
-                log_api_request(logger, "fal-image", "fal-ai/instant-character", _ic_args)
-                logger.info(f"[API:fal-image] PROMPT: {full_prompt}")
-
-                _ic_result = _fal.subscribe(
-                    "fal-ai/instant-character",
-                    arguments=_ic_args,
-                    with_logs=True,
-                )
-                _elapsed_ic = int((time.monotonic() - _t0_ic) * 1000)
-                log_api_response(logger, "fal-image", "fal-ai/instant-character", "ok", _ic_result, _elapsed_ic)
-
-                _ic_images = _ic_result.get("images", [])
-                if not _ic_images:
-                    raise RuntimeError("fal.ai instant-character returned no images")
-
-                _ic_url = _ic_images[0]["url"]
-                logger.info(f"Scene {scene_number}: instant-character done, downloading...")
-
-                async with httpx.AsyncClient(timeout=120) as _dl:
-                    _img_resp = await _dl.get(_ic_url)
-                    _img_resp.raise_for_status()
-
-                tmp_path = os.path.join(tempfile.gettempdir(), f"f1_scene_{episode_id}_{scene_number:02d}_{frame_type}.png")
-
-                # Crop from 1280x960 (4:3) to 1280x720 (16:9)
-                # Take the top 720px to preserve head/hair, trim excess below waist
-                from PIL import Image as _PILImage
-                import io as _io
-                _img_full = _PILImage.open(_io.BytesIO(_img_resp.content))
-                if _img_full.height > 720:
-                    _img_cropped = _img_full.crop((0, 0, _img_full.width, 720))
-                    _img_cropped.save(tmp_path, "PNG")
-                    logger.info(f"Scene {scene_number}: Cropped {_img_full.width}x{_img_full.height} -> {_img_cropped.width}x{_img_cropped.height}")
-                else:
-                    with open(tmp_path, "wb") as f:
-                        f.write(_img_resp.content)
-
-                logger.info(f"Scene {scene_number}: Image downloaded ({len(_img_resp.content) / 1024:.0f} KB)")
-
-                # Upload to MinIO
-                image_storage_path = await storage.upload_scene_image(
-                    race_id=_race_id,
-                    episode_id=episode_id,
-                    scene_number=scene_number,
-                    file_path=tmp_path,
-                    suffix=frame_type,
-                )
-
-                generation_time_ms = int(
-                    (datetime.utcnow() - started_at).total_seconds() * 1000
-                )
-
-                if frame_type == "start":
-                    scene.start_frame_path = image_storage_path
-                    scene.source_image_path = image_storage_path
-                else:
-                    scene.end_frame_path = image_storage_path
-
-                scene.status = SceneStatus.COMPLETED if set_completed else SceneStatus.GENERATING
-                scene.generation_completed_at = datetime.utcnow()
-                scene.generation_time_ms = generation_time_ms
-                scene.image_cost_usd = (scene.image_cost_usd or Decimal(0)) + Decimal("0.04")
-                scene.image_backend = "instant-character"
-                scene.instant_character_used = True
-                scene.lora_used = True
-                scene.regeneration_count = (scene.regeneration_count or 0) + 1
-                scene.last_error = None
-
-                await db.commit()
-                # Verify the path was persisted
-                await db.refresh(scene)
-                if frame_type == "start" and not scene.start_frame_path:
-                    raise RuntimeError(
-                        f"Scene {scene_number}: start_frame_path NULL after commit — storage may have failed"
-                    )
-                # Log image generation cost
-                await _log_api_cost(
-                    db, episode_id, scene.id,
-                    provider="fal-image",
-                    endpoint="fal-ai/instant-character",
-                    cost_usd=0.04,
-                    response_time_ms=generation_time_ms,
-                )
-                await _update_episode_costs(db, episode_id)
-
-                logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via instant-character")
-                return f"Scene {scene_number} {frame_type} frame generated (instant-character)"
-
-            if not (image_backend == "instant-character" and face_ref_url):
-                # --- Flux LoRA: style-only, no face reference (default) ---
-                endpoint = "fal-ai/flux-lora"
-                logger.info(f"Scene {scene_number}: Submitting to {endpoint}...")
-
-                fal_payload = {
-                    "prompt": full_prompt,
-                    "negative_prompt": (
-                        "car facing camera, front wing visible, nose cone visible, "
-                        "front of car, car approaching camera, head-on view, "
-                        "closed cockpit, roof, canopy, windshield, enclosed cabin, "
-                        "Le Mans car, GT car, road car, covered wheels"
-                    ),
-                    "image_size": {"width": 1280, "height": 720},
-                    "num_images": 1,
-                    "num_inference_steps": 28,
-                    "guidance_scale": 3.5,
-                    "loras": [{"path": LORA_URL, "scale": 1.0}],
-                    "output_format": "png",
-                }
-
-            # Submit to fal.ai
-            _t0_flux = time.monotonic()
-            log_api_request(logger, "fal-image", "fal-ai/flux-lora", fal_payload)
-            logger.info(f"[API:fal-image] PROMPT: {full_prompt}")
-            async with httpx.AsyncClient(timeout=300) as client:
-                # Submit request
-                submit_resp = await client.post(
-                    f"https://queue.fal.run/{endpoint}",
-                    headers={"Authorization": f"Key {FAL_KEY}", "Content-Type": "application/json"},
-                    json=fal_payload,
-                )
-                submit_resp.raise_for_status()
-                submit_data = submit_resp.json()
-                request_id = submit_data.get("request_id")
-                status_url = submit_data.get("status_url", f"https://queue.fal.run/{endpoint}/requests/{request_id}/status")
-                response_url = submit_data.get("response_url", f"https://queue.fal.run/{endpoint}/requests/{request_id}")
-
-                logger.info(f"Scene {scene_number}: fal.ai request {request_id} submitted")
-
-                # Poll for completion (max 5 minutes)
-                import asyncio
-                for i in range(60):
-                    await asyncio.sleep(5)
-                    status_resp = await client.get(
-                        status_url,
-                        headers={"Authorization": f"Key {FAL_KEY}"},
-                    )
-                    status_data = status_resp.json()
-                    status = status_data.get("status", "")
-
-                    if status == "COMPLETED":
-                        break
-                    elif status in ("FAILED", "CANCELLED"):
-                        error_msg = status_data.get("error", "fal.ai generation failed")
-                        raise RuntimeError(f"fal.ai: {error_msg}")
-
-                    if (i + 1) % 6 == 0:
-                        logger.info(f"Scene {scene_number}: Waiting for fal.ai... {(i+1)*5}s")
-                else:
-                    raise RuntimeError("fal.ai generation timed out after 5 minutes")
-
-                # Get result
-                result_resp = await client.get(
-                    response_url,
-                    headers={"Authorization": f"Key {FAL_KEY}"},
-                )
-                result_resp.raise_for_status()
-                result_data = result_resp.json()
-                _elapsed_flux = int((time.monotonic() - _t0_flux) * 1000)
-                log_api_response(logger, "fal-image", "fal-ai/flux-lora", "ok", result_data, _elapsed_flux)
-
-                images = result_data.get("images", [])
-                if not images:
-                    raise RuntimeError("fal.ai returned no images")
-
-                image_url = images[0]["url"]
-
-                # Download the generated image
-                img_resp = await client.get(image_url)
-                img_resp.raise_for_status()
-
-                tmp_path = os.path.join(tempfile.gettempdir(), f"f1_scene_{episode_id}_{scene_number:02d}_{frame_type}.png")
-                with open(tmp_path, "wb") as f:
-                    f.write(img_resp.content)
-
-                logger.info(f"Scene {scene_number}: Image downloaded ({len(img_resp.content) / 1024:.0f} KB)")
-
-            # Upload to MinIO
-            image_storage_path = await storage.upload_scene_image(
-                race_id=_race_id,
-                episode_id=episode_id,
-                scene_number=scene_number,
-                file_path=tmp_path,
-                suffix=frame_type,
+            await generate_scene_image(
+                db, scene, episode_id, race_id, storage,
+                frame_type=frame_type,
+                episode_character_appearances=episode_appearances,
             )
 
-            generation_time_ms = int(
-                (datetime.utcnow() - started_at).total_seconds() * 1000
-            )
+            if set_completed:
+                scene.status = SceneStatus.COMPLETED
 
-            # Update scene record
-            if frame_type == "start":
-                scene.start_frame_path = image_storage_path
-                scene.source_image_path = image_storage_path
-            else:
-                scene.end_frame_path = image_storage_path
-
-            scene.status = SceneStatus.COMPLETED if set_completed else SceneStatus.GENERATING
-            scene.generation_completed_at = datetime.utcnow()
-            scene.generation_time_ms = generation_time_ms
-            scene.last_error = None
-            scene.image_cost_usd = (scene.image_cost_usd or Decimal(0)) + Decimal("0.035")
-            scene.image_backend = "flux-lora"
-            scene.lora_used = True
-            scene.regeneration_count = (scene.regeneration_count or 0) + 1
-
-            await db.commit()
-            # Verify the path was persisted
-            await db.refresh(scene)
-            if frame_type == "start" and not scene.start_frame_path:
-                raise RuntimeError(
-                    f"Scene {scene_number}: start_frame_path NULL after commit — storage may have failed"
-                )
-            # Log image generation cost
-            await _log_api_cost(
-                db, episode_id, scene.id,
-                provider="fal-image",
-                endpoint="fal-ai/flux-lora",
-                cost_usd=0.035,
-                response_time_ms=generation_time_ms,
-            )
             await _update_episode_costs(db, episode_id)
+            await db.commit()
 
-            logger.info(f"Scene {scene_number}: {frame_type} frame generated in {generation_time_ms}ms via fal.ai")
+            logger.info(f"Scene {scene_number}: {frame_type} frame generated via shared service")
             return f"Scene {scene_number} {frame_type} frame generated"
 
         except Exception as e:
             logger.error(f"Scene {scene_number}: Image generation failed: {e}")
             scene.status = SceneStatus.FAILED
-            scene.last_error = str(e)[:500]
-            scene.retry_count += 1
+            scene.last_error = str(e)
+            scene.retry_count = (scene.retry_count or 0) + 1
             await db.commit()
             raise
+
 
 
 def _run_scene_all(episode_id: int, scene_number: int) -> str:
@@ -1171,317 +474,70 @@ MAX_VIDEO_RETRIES = 1
 
 
 # Use shared prompt adaptation from scene_validator
-from app.services.scene_validator import adapt_prompt_for_validation_failure as _adapt_prompt_for_failure
 
 async def _async_scene_all(episode_id: int, scene_number: int) -> str:
-    """Async worker: generate image then video with inline validation.
-
-    Validation loop:
-      1. Generate start frame image
-      2. Validate image (direction, composition, text, style, character)
-      3. If fail -> adapt prompt, regenerate (up to MAX_IMAGE_RETRIES)
-      4. Generate video
-      5. Check motion (free, no API cost)
-      6. Validate video via Claude Vision (5-frame check)
-      7. If fail -> adapt prompt, regenerate image + video (up to MAX_VIDEO_RETRIES)
-    """
-    from app.database import async_session_maker
-    from app.models.scene import Scene as SceneModel
-    from app.services.scene_validator import SceneValidator
-    from app.services.storage import StorageService
+    """Async worker: generate image + video with validation. Delegates to shared orchestrator."""
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
 
-    logger.info(f"Scene {scene_number}: Starting full regeneration (image + video + validation)")
+    from app.database import async_session_maker
+    from app.models.episode import Episode as _Ep
+    from app.models.scene import Scene
+    from app.services.scene_orchestrator import process_scene
+    from app.services.storage import StorageService
 
-    # --- Step 1: Generate and validate start frame ---
-    for image_attempt in range(MAX_IMAGE_RETRIES + 1):
-        await _async_scene_image(episode_id, scene_number, frame_type="start", set_completed=False)
-        logger.info(f"Scene {scene_number}: Start image done (attempt {image_attempt + 1})")
+    logger.info(f"Scene {scene_number}: Starting full scene generation (shared orchestrator)")
 
-        # Validate the image
-        try:
-            validator = SceneValidator()
-            storage = StorageService()
-            async with async_session_maker() as db:
-                scene = (await db.execute(
-                    select(SceneModel).where(
-                        SceneModel.episode_id == episode_id,
-                        SceneModel.scene_number == scene_number,
-                    )
-                )).scalar_one_or_none()
+    async with async_session_maker() as db:
+        stmt = (
+            select(Scene)
+            .options(selectinload(Scene.character), selectinload(Scene.voiceover_character))
+            .where(Scene.episode_id == episode_id, Scene.scene_number == scene_number)
+        )
+        result = await db.execute(stmt)
+        scene = result.scalar_one_or_none()
 
-                if scene and scene.start_frame_path:
-                    # Download image for validation
-                    bucket, obj = scene.start_frame_path.split("/", 1)
-                    local_img = f"/tmp/val_{episode_id}_{scene_number}_start.png"
-                    await storage.download_file(bucket, obj, local_img)
+        if not scene:
+            raise ValueError(f"Scene {scene_number} not found for episode {episode_id}")
 
-                    # Download face reference if character scene
-                    ref_path = None
-                    if scene.character_id and scene.face_visible:
-                        from app.models import Character
-                        char = await db.get(Character, scene.character_id)
-                        if char:
-                            ref_path = await storage.download_face_reference(char.name)
+        ep = await db.get(_Ep, episode_id)
+        race_id = ep.race_id if ep and ep.race_id else 0
 
-                    # Build team context for validation
-                    team_context = None
-                    if scene.character_id:
-                        from app.models.team import Team
-                        from sqlalchemy.orm import selectinload
-                        char_with_team = await db.get(Character, scene.character_id)
-                        if char_with_team and hasattr(char_with_team, 'team_id') and char_with_team.team_id:
-                            team_obj = await db.get(Team, char_with_team.team_id)
-                            if team_obj:
-                                team_context = {
-                                    "team_name": team_obj.name,
-                                    "car_description": team_obj.car_description,
-                                    "primary_colour": team_obj.primary_colour,
-                                    "secondary_colour": team_obj.secondary_colour,
-                                }
+        episode_appearances = None
+        if ep and hasattr(ep, "character_appearances"):
+            episode_appearances = ep.character_appearances
 
-                    img_val = await validator.validate_image(
-                        image_path=local_img,
-                        scene_number=scene_number,
-                        scene_type=scene.scene_type,
-                        face_visible=scene.face_visible,
-                        reference_image_path=ref_path,
-                        prompt_text=scene.start_frame_prompt,
-                        team_context=team_context,
-                    )
+        # Count total scenes for FLF eligibility
+        from sqlalchemy import func
+        total_count = await db.scalar(
+            select(func.count()).where(Scene.episode_id == episode_id)
+        )
 
-                    if img_val.passed:
-                        logger.info(f"Scene {scene_number}: Image validation PASSED")
-                        break
-                    else:
-                        failed_checks = [c.name for c in img_val.checks if not c.passed]
-                        logger.warning(f"Scene {scene_number}: Image validation FAILED: {failed_checks}")
-                        if image_attempt < MAX_IMAGE_RETRIES:
-                            adapted = _adapt_prompt_for_failure(scene, img_val)
-                            if adapted:
-                                await db.commit()
-                                logger.info(f"Scene {scene_number}: Retrying image with adapted prompt")
-                                continue
-                        failed_names = [c.name for c in img_val.checks if not c.passed]
-                        # Only BLOCK video gen for critical failures
-                        CRITICAL_CHECKS = {"car_count", "direction", "clothing", "anatomy"}
-                        critical_fails = [n for n in failed_names if n in CRITICAL_CHECKS]
+        storage = StorageService()
 
-                        if critical_fails:
-                            logger.error(
-                                f"Scene {scene_number}: CRITICAL image validation failures "
-                                f"{critical_fails} — BLOCKING video generation"
-                            )
-                            async with async_session_maker() as db_fail:
-                                s_fail = (await db_fail.execute(
-                                    select(SceneModel).where(
-                                        SceneModel.episode_id == episode_id,
-                                        SceneModel.scene_number == scene_number,
-                                    )
-                                )).scalar_one_or_none()
-                                if s_fail:
-                                    s_fail.status = "failed"
-                                    s_fail.validation_status = "failed_critical"
-                                    import json as _json
-                                    s_fail.validation_issues = _json.dumps(failed_names)
-                                    await db_fail.commit()
-                            return f"Scene {scene_number}: Critical validation failures {critical_fails}"
-                        else:
-                            logger.warning(
-                                f"Scene {scene_number}: Minor image issues {failed_names} "
-                                "after max retries — proceeding to video generation"
-                            )
-                            # Record the minor issues but continue
-                            scene.validation_status = "failed_minor"
-                            import json as _json_minor
-                            scene.validation_issues = _json_minor.dumps(failed_names)
-                            await db.commit()
-                else:
-                    break  # No image to validate
-        except Exception as ve:
-            logger.warning(f"Scene {scene_number}: Image validation error: {ve}")
-            break
+        scene_result = await process_scene(
+            db=db,
+            scene=scene,
+            episode_id=episode_id,
+            race_id=race_id,
+            storage=storage,
+            scene_index=scene.scene_number - 1,  # 0-based
+            total_scenes=total_count or 26,
+            episode_character_appearances=episode_appearances,
+            skip_if_completed=False,
+        )
 
-    # --- Step 1b: Generate and validate end frame for ACTION_REPLAY (FLF) ---
-    try:
-        from app.services.runtime_settings import get_video_generator
-        from app.services.fal_video_generator import FalBackend, FAL_FLF_CAPABLE
-        from app.pipeline.flf_router import should_generate_end_frame
+        await _update_episode_costs(db, episode_id)
+        await db.commit()
 
-        backend_str = get_video_generator()
-        backend_enum = FalBackend(backend_str)
-        if backend_enum in FAL_FLF_CAPABLE:
-            async with async_session_maker() as db:
-                scene = (await db.execute(
-                    select(SceneModel).where(
-                        SceneModel.episode_id == episode_id,
-                        SceneModel.scene_number == scene_number,
-                    )
-                )).scalar_one_or_none()
-                from sqlalchemy import func
-                total = (await db.execute(
-                    select(func.count()).select_from(SceneModel).where(SceneModel.episode_id == episode_id)
-                )).scalar() or 0
+        if scene_result.status == "failed":
+            raise RuntimeError(
+                f"Scene {scene_number} failed: {scene_result.error}"
+            )
 
-                if scene and scene.end_frame_prompt and should_generate_end_frame(
-                    scene_type=scene.scene_type,
-                    scene_index=scene_number - 1,
-                    total_scenes=total,
-                    backend_supports_flf=True,
-                ):
-                    logger.info(f"Scene {scene_number}: Generating end frame for FLF (type={scene.scene_type})")
-                    await _async_scene_image(episode_id, scene_number, frame_type="end", set_completed=False)
+        logger.info(f"Scene {scene_number}: Full generation complete via shared orchestrator")
+        return f"Scene {scene_number} fully generated"
 
-                    # Validate end frame direction (critical for racing scenes)
-                    if scene.end_frame_path:
-                        try:
-                            bucket, obj = scene.end_frame_path.split("/", 1)
-                            local_end = f"/tmp/val_{episode_id}_{scene_number}_end.png"
-                            await storage.download_file(bucket, obj, local_end)
-                            end_val = await validator.validate_image(
-                                image_path=local_end,
-                                scene_number=scene_number,
-                                scene_type=scene.scene_type,
-                                face_visible=False,
-                                prompt_text=scene.end_frame_prompt,
-                                team_context=team_context if 'team_context' in dir() else None,
-                            )
-                            if end_val.passed:
-                                logger.info(f"Scene {scene_number}: End frame validation PASSED")
-                            else:
-                                failed = [c.name for c in end_val.checks if not c.passed]
-                                logger.warning(f"Scene {scene_number}: End frame validation FAILED: {failed}")
-                                # Adapt and retry end frame
-                                if _adapt_prompt_for_failure(scene, end_val):
-                                    scene.end_frame_path = None
-                                    await db.commit()
-                                    await _async_scene_image(episode_id, scene_number, frame_type="end", set_completed=False)
-                                    logger.info(f"Scene {scene_number}: End frame regenerated with adapted prompt")
-                        except Exception as efv:
-                            logger.warning(f"Scene {scene_number}: End frame validation error: {efv}")
-                else:
-                    logger.debug(f"Scene {scene_number}: FLF not applicable")
-    except Exception as flf_err:
-        logger.debug(f"Scene {scene_number}: FLF check skipped: {flf_err}")
-
-        # --- Step 2: Generate and validate video ---
-    for video_attempt in range(MAX_VIDEO_RETRIES + 1):
-        logger.info(f"Scene {scene_number}: Generating video (attempt {video_attempt + 1})")
-        result = await _async_scene_video(episode_id, scene_number)
-
-        # Validate the video
-        try:
-            validator = SceneValidator()
-            async with async_session_maker() as db:
-                scene = (await db.execute(
-                    select(SceneModel).where(
-                        SceneModel.episode_id == episode_id,
-                        SceneModel.scene_number == scene_number,
-                    )
-                )).scalar_one_or_none()
-
-                if scene and scene.video_clip_path:
-                    # Motion check (free, no API cost)
-                    bucket, obj = scene.video_clip_path.split("/", 1)
-                    local_vid = f"/tmp/val_{episode_id}_{scene_number}_video.mp4"
-                    await storage.download_file(bucket, obj, local_vid)
-
-                    has_motion = await validator.check_video_motion(local_vid)
-                    if not has_motion:
-                        logger.warning(f"Scene {scene_number}: Video FROZEN/STATIC")
-                        if video_attempt < MAX_VIDEO_RETRIES:
-                            async with async_session_maker() as db2:
-                                s = (await db2.execute(
-                                    select(SceneModel).where(
-                                        SceneModel.episode_id == episode_id,
-                                        SceneModel.scene_number == scene_number,
-                                    )
-                                )).scalar_one_or_none()
-                                if s:
-                                    s.video_prompt = (s.video_prompt or "") + (
-                                        " CRITICAL MOTION REQUIRED: Every second must show "
-                                        "visible continuous motion. Characters move, gesture, "
-                                        "blink, react. Cars accelerate and turn. NEVER static."
-                                    )
-                                    await db2.commit()
-                            continue
-
-                    # Check video first frame matches start image (catches LTX ignoring input)
-                    if scene.start_frame_path:
-                        start_local = f"/tmp/val_{episode_id}_{scene_number}_start.png"
-                        if not os.path.exists(start_local):
-                            try:
-                                s_bucket, s_obj = scene.start_frame_path.split("/", 1)
-                                await storage.download_file(s_bucket, s_obj, start_local)
-                            except Exception:
-                                pass
-                        if os.path.exists(start_local):
-                            matches_start = await validator.check_video_matches_start_frame(
-                                local_vid, start_local, scene_number
-                            )
-                            if not matches_start and video_attempt < MAX_VIDEO_RETRIES:
-                                logger.warning(
-                                    f"Scene {scene_number}: Video doesn't match start frame — retrying"
-                                )
-                                continue
-
-                    # Audio validation (free, ffmpeg-based)
-                    has_dialogue = bool(scene.dialogue and scene.dialogue.strip())
-                    audio_val = await validator.validate_audio(
-                        local_vid,
-                        has_dialogue=has_dialogue,
-                        audio_description=scene.audio_description,
-                    )
-                    if not audio_val.passed:
-                        logger.warning(
-                            f"Scene {scene_number}: Audio validation FAILED: "
-                            f"{audio_val.issues}"
-                        )
-                        # Log but don't block — audio issues flagged for review
-                        scene.validation_issues = scene.validation_issues or {}
-                        if isinstance(scene.validation_issues, str):
-                            import json as _json2
-                            try:
-                                scene.validation_issues = _json2.loads(scene.validation_issues)
-                            except Exception:
-                                scene.validation_issues = {}
-                        scene.validation_issues["audio"] = audio_val.issues
-
-                    # Full Claude Vision validation
-                    vid_val = await validator.validate_scene(scene)
-                    if vid_val.passed:
-                        logger.info(f"Scene {scene_number}: Video validation PASSED")
-                        scene.validation_status = "passed"
-                    else:
-                        failed = [c.name for c in vid_val.checks if not c.passed]
-                        logger.warning(f"Scene {scene_number}: Video validation FAILED: {failed}")
-                        scene.validation_status = "failed"
-                        import json as _json
-                        scene.validation_issues = _json.dumps(failed)
-                        if video_attempt < MAX_VIDEO_RETRIES:
-                            adapted = _adapt_prompt_for_failure(scene, vid_val)
-                            if adapted:
-                                scene.start_frame_path = None
-                                scene.video_clip_path = None
-                                await db.commit()
-                                # Regenerate image first, then video
-                                await _async_scene_image(episode_id, scene_number, frame_type="start", set_completed=False)
-                                continue
-                    await db.commit()
-                    break
-                else:
-                    break
-        except Exception as ve:
-            logger.warning(f"Scene {scene_number}: Video validation error: {ve}")
-            break
-
-    logger.info(f"Scene {scene_number}: Full regeneration complete (with validation)")
-    return result
-
-
-# ──────────────────────────────────────────────────────────────────
-# Stitch / Upload / Validate jobs
-# ──────────────────────────────────────────────────────────────────
 
 def enqueue_stitch(episode_id: int) -> str:
     """Enqueue a video stitching job for the given episode."""

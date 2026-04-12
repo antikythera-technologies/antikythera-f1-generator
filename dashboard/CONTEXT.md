@@ -23,6 +23,8 @@ Next.js 15 dashboard for monitoring and controlling the F1 video generation syst
 | `/gags` | Running Gags | CRUD, categories, usage tracking |
 | `/storylines` | Storylines | Narrative arcs, beat management |
 | `/storylines/[id]` | Storyline Detail | Beat progress, linked episodes |
+| `/teams` | Teams | F1 team listing with colours and drivers |
+| `/teams/[id]` | Team Detail | Team details, driver roster |
 | `/settings` | Settings | Video provider (Ovi/LTX), quality presets, TTS toggle, API keys |
 
 ## API Client (src/lib/api.ts)
@@ -79,4 +81,4 @@ npm run lint   # ESLint
 
 ## Current Development State
 
-Dashboard is functional. Settings page now has video provider selector (Ovi/LTX), quality presets, and TTS toggle with backend persistence. Scene viewer enables scene-by-scene review during testing.
+Dashboard is functional. Settings page has video provider selector (Ovi/LTX), quality presets, and TTS toggle. Teams pages added for F1 team management. Scene viewer enables scene-by-scene review. SceneDetailModal: end frame prompt/regen only shown for ACTION_REPLAY scenes (not all scene types).

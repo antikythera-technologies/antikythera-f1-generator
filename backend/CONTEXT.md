@@ -29,7 +29,7 @@ Core entities and their status fields:
 - **Scene**: PENDING -> GENERATING -> COMPLETED | FAILED (~26 per episode)
   - Has: start_frame_prompt, end_frame_prompt, video_prompt, camera_direction
   - Has: source_image_path, start_frame_path, end_frame_path, video_clip_path, audio_clip_path
-  - Has: video_generator, image_backend ("flux-lora" or "instant-character"), face_visible, instant_character_used
+  - Has: video_generator, image_backend ("flux-lora" or "instant-character"), face_visible, instant_character_used, end_frame_delta
   - Has: scene_type (TALKING_HEAD, ACTION_REPLAY, ESTABLISHING, TWO_SHOT, OVER_THE_SHOULDER, PODIUM)
   - Has: validation_status, validation_issues (JSON)
 - **Character**: name, team, role, active flag -> CharacterImage (reference/style images)
@@ -43,16 +43,16 @@ Core entities and their status fields:
 
 ## Job Queue (app/jobs.py)
 
-Redis + RQ on queue "f1-pipeline". Job types:
+Redis + RQ on queue "f1-pipeline". Thin RQ wrappers that delegate to shared services. Job types:
 - `enqueue_pipeline(episode_id)` -- full episode pipeline (2h timeout)
-- `enqueue_scene_image(episode_id, scene_number)` -- single scene image regen
-- `enqueue_scene_all(episode_id, scene_number)` -- image + video sequential
-- `enqueue_scene_video(episode_id, scene_number)` -- single scene video regen
+- `enqueue_scene_image(episode_id, scene_number)` -- calls `scene_image_service.generate_scene_image()`
+- `enqueue_scene_all(episode_id, scene_number)` -- calls `scene_orchestrator.process_scene()`
+- `enqueue_scene_video(episode_id, scene_number)` -- calls `scene_video_service.generate_scene_video()`
 - `enqueue_stitch(episode_id)` -- stitch all clips into final video
 - `enqueue_youtube_upload(episode_id)` -- upload to YouTube
 - `enqueue_validate(episode_id)` -- validate all scenes (Claude Vision)
 
-Scene image regen (`_async_scene_image`) has smart routing: flux-lora for landscape/action, instant-character for character faces. **Must stay in sync with pipeline's `_get_scene_image_fal`.**
+**No business logic in jobs.py.** All image routing, video generation, validation, and cost tracking live in the shared service layer. Pipeline and jobs call the same functions.
 
 ## Worker (app/worker.py)
 
@@ -60,17 +60,25 @@ RQ worker + scheduler poll loop (configurable interval). Polls for ScheduledJob 
 
 ## Services Layer (app/services/)
 
-- `script_generator.py` -- Anthropic Haiku for scene scripts + dialogue sanitisation (sentence case) + video prompt sanitisation (strip escalation)
-- `fal_video_generator.py` -- fal.ai video gen (8 backends) + `build_f1_video_prompt()` (LTX 2.3 optimized with camera directions)
-- `image_generator.py` -- ComfyUI image gen (legacy, for character caricatures)
-- `scene_validator.py` -- Image validation (8 checks, pre-video) + video validation (6 checks, post-video) + shared `adapt_prompt_for_validation_failure()`
-- `runtime_settings.py` -- Runtime pipeline settings (image_generator, video_generator)
+**Shared scene services** (called by both pipeline and jobs — single source of truth):
+- `scene_image_service.py` -- Image gen with routing (flux-lora vs instant-character), prompt building, fal.ai API
+- `scene_video_service.py` -- Video gen via fal.ai, prompt building via `build_f1_video_prompt()`, FLF end frames
+- `scene_orchestrator.py` -- Full scene lifecycle: image → validate → end frame → video → validate. Self-correcting retries.
+- `cost_tracker.py` -- Shared cost logging + episode cost aggregation
+- `image_utils.py` -- Portrait-to-landscape blur-pad conversion
+
+**External integrations** (one class per service):
+- `script_generator.py` -- Anthropic Haiku for scene scripts + dialogue sanitisation + session context injection
+- `fal_video_generator.py` -- fal.ai video gen (8 backends) + `build_f1_video_prompt()` + `calculate_scene_duration()`
+- `scene_validator.py` -- Image validation (8 checks) + video validation + FLF frame compatibility + `adapt_prompt_for_validation_failure()`
 - `tts_generator.py` -- Edge TTS speech generation + 42 character voice mappings
 - `audio_mixer.py` -- Mux TTS audio onto video clips via ffmpeg
 - `stitcher.py` -- ffmpeg video concatenation
-- `storage.py` -- MinIO object storage (4 buckets)
+- `storage.py` -- MinIO object storage (4 buckets) + face ref priority (caricature first, real photo fallback)
 - `youtube_uploader.py` -- YouTube Data API v3 upload
 - `personality.py` -- Character personality trait loader
+- `image_generator.py` -- ComfyUI image gen (legacy, for character caricatures only)
+- `runtime_settings.py` -- Runtime pipeline settings (image_generator, video_generator)
 - `scheduler.py` -- F1 calendar sync + job scheduling
 - `news_scraper.py` -- RSS/HTML news scraping
 - `race_results_scraper.py` -- Scrape actual race results for script accuracy
@@ -92,6 +100,3 @@ uv run ruff check app/                         # Lint
 uv run black app/ tests/                       # Format
 ```
 
-## Current Development State
-
-Pipeline image routing fixed (2026-03-23). LTX 2.3 video prompt enhancement deployed (2026-03-27) — camera_direction used, character animation from personality, ~70 word prompts. Image validation inline in pipeline with 8 checks (team_colours, f1_accuracy added). Dialogue sanitisation prevents TTS screaming. Stitching works. YouTube auto-upload disabled. Scheduler fires post-sprint + post-race only (FP2 removed).

@@ -446,8 +446,8 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     )}
                   </div>
 
-                  {/* End Frame Prompt */}
-                  <div>
+                  {/* End Frame Prompt — only show for ACTION_REPLAY or when data exists */}
+                  {(detail.scene_type === "ACTION_REPLAY" || detail.end_frame_path || endFramePrompt) && (<div>
                     <label className="mb-1 block text-xs font-medium text-white/40">End Frame Prompt</label>
                     <textarea
                       value={endFramePrompt}
@@ -481,7 +481,7 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                         )}
                       </div>
                     )}
-                  </div>
+                  </div>)}
 
                   {/* Video Prompt */}
                   <div>
@@ -539,6 +539,7 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     </svg>
                     Regenerate Start Frame
                   </Button>
+                  {(detail?.scene_type === "ACTION_REPLAY" || detail?.end_frame_path) && (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -550,6 +551,7 @@ export function SceneDetailModal({ scene, onClose }: SceneDetailModalProps) {
                     </svg>
                     Regenerate End Frame
                   </Button>
+                  )}
                   <Button
                     variant="secondary"
                     size="sm"

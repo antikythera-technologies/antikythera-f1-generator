@@ -246,14 +246,32 @@ class StorageService:
     async def download_face_reference(self, character_name: str) -> str | None:
         """Download a character's face reference from MinIO to a local temp file.
 
-        Tries common image extensions. Returns the local file path, or None
-        if no face reference exists for this character.
+        Priority: caricature first (better style consistency with LoRA),
+        then real photo as fallback.
+
+        Returns the local file path, or None if no reference exists.
         """
         import tempfile
 
         temp_dir = Path(tempfile.gettempdir()) / "f1-face-refs"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
+        # 1. Try caricature first — matches our art style, best for instant-character
+        caricature_path = f"{character_name}/caricature.png"
+        local_caricature = str(temp_dir / f"{character_name}_caricature.png")
+        try:
+            self.client.stat_object(settings.MINIO_BUCKET_CHARACTERS, caricature_path)
+            await self.download_file(
+                settings.MINIO_BUCKET_CHARACTERS,
+                caricature_path,
+                local_caricature,
+            )
+            logger.info(f"Face ref for {character_name}: using caricature")
+            return local_caricature
+        except S3Error:
+            pass
+
+        # 2. Fall back to real photo
         for ext in ("jpg", "jpeg", "png", "webp"):
             object_name = f"face-references/{character_name}.{ext}"
             local_path = str(temp_dir / f"{character_name}.{ext}")
@@ -264,6 +282,7 @@ class StorageService:
                     object_name,
                     local_path,
                 )
+                logger.info(f"Face ref for {character_name}: using real photo (no caricature found)")
                 return local_path
             except S3Error:
                 continue
